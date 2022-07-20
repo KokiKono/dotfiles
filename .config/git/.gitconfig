@@ -1,0 +1,21 @@
+[ghq]
+	root = ~/git_clone
+[user]
+	name = KokiKono
+	email = kono.koki.pg@gmail.com
+	signingKey = 159C4E019C1D162D
+[core]
+	excludesfile = ~/.gitignore_global
+[gpg]
+	program = gpg
+[commit]
+	gpgsign = true
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+[alias]
+	see = browse
+	st = status
+	f = fetch
+	c = checkout
+[diff]
+	external = difft
