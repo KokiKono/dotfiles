@@ -1,28 +1,30 @@
 {
-    "workbench.colorTheme": "Default Dark+",
-    "php-cs-fixer.onsave": true,
-    "[php]": {
-        "editor.defaultFormatter": "junstyle.php-cs-fixer",
-    },
-    "files.insertFinalNewline": true,
-    "php-cs-fixer.autoFixBySemicolon": true,
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true
-    },
-    "gitlens.hovers.currentLine.over": "line",
-    "ruby.intellisense": "rubyLocate",
-    "editor.unicodeHighlight.ambiguousCharacters": false,
-    "php-cs-fixer.executablePath": "${extensionPath}/php-cs-fixer.phar",
-    "php-cs-fixer.lastDownload": 1657694386955,
-    "typescript.updateImportsOnFileMove.enabled": "always",
-    "[jsonc]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-    },
-    "timeline.excludeSources": [
-        "timeline.localHistory"
-    ],
-    "[typescriptreact]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.fontFamily": "'UDEV Gothic 35'",
+  "workbench.colorTheme": "Default Dark+",
+  "php-cs-fixer.onsave": true,
+  "[php]": {
+    "editor.defaultFormatter": "junstyle.php-cs-fixer"
+  },
+  "files.insertFinalNewline": true,
+  "php-cs-fixer.autoFixBySemicolon": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "gitlens.hovers.currentLine.over": "line",
+  "ruby.intellisense": "rubyLocate",
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "php-cs-fixer.executablePath": "${extensionPath}/php-cs-fixer.phar",
+  "php-cs-fixer.lastDownload": 1696216536984,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "editor.fontFamily": "'UDEV Gothic 35'",
+  "editor.inlineSuggest.enabled": true,
+  "isort.path": [
+    "/Users/kokikono/.pyenv/shims/isort"
+  ],
+  "extensions.autoUpdate": false
 }

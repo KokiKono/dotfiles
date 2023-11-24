@@ -18,4 +18,4 @@
 	f = fetch
 	c = checkout
 [diff]
-	external = difft
+	algorithm = histogram

@@ -66,8 +66,8 @@ alias psql-run='postgres -D /usr/local/var/postgres'
 alias sed='gsed'
 alias branch-all-delete="git branch --merged|egrep -v '\*|develop|master'|xargs git branch -d"
 alias debug-chrome="/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=54888 --no-first-run --no-default-browser-check --user-data-dir=$(mktemp -d -t 'chrome-remote_data_dir')"
+alias ibrew='arch -x86_64 /usr/local/bin/brew'
 
-eval "$(nodenv init -)"
 alias nodenv-fetch='(cd ~/.nodenv/plugins/node-build; git pull)'
 export PATH="/usr/local/opt/mysql-client/bin:$PATH"
 export GREN_GITHUB_TOKEN=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
