@@ -102,6 +102,7 @@ export PATH="/usr/local/opt/openjdk/bin:$PATH"
   export PATH=${HOME}/.rbenv/bin:${PATH} && \
   eval "$(rbenv init -)"
 
+export GPG_TTY=$(tty)
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 export PATH="~/.rd/bin:$PATH"
