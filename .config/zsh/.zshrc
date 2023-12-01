@@ -107,3 +107,10 @@ export PATH="/usr/local/opt/openjdk/bin:$PATH"
 export PATH="~/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
 eval "$(nodenv init -)"
+
+[[ -d ~/.rbenv  ]] && \
+  export PATH=${HOME}/.rbenv/bin:${PATH} && \
+  eval "$(rbenv init -)"
+
+# Privateなシークレットが書かれたファイル
+source ${HOME}/.pzshrc
