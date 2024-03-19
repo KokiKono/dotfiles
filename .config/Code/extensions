@@ -3,7 +3,6 @@ arahata.linter-actionlint
 arcanis.vscode-zipfs
 bmewburn.vscode-intelephense-client
 bradlc.vscode-tailwindcss
-cssho.vscode-svgviewer
 dbaeumer.vscode-eslint
 dsznajder.es7-react-js-snippets
 eamodio.gitlens
@@ -14,6 +13,7 @@ formulahendry.auto-rename-tag
 foxundermoon.shell-format
 gimenete.github-linker
 GitHub.copilot
+GitHub.copilot-chat
 github.vscode-github-actions
 GitHub.vscode-pull-request-github
 golang.go

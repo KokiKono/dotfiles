@@ -115,3 +115,19 @@ eval "$(nodenv init -)"
 
 # Privateなシークレットが書かれたファイル
 source ${HOME}/.pzshrc
+export PATH="/Users/kokikono/.local/bin:$PATH"
+
+# grit
+export GRIT_INSTALL="$HOME/.grit"
+export PATH="$GRIT_INSTALL/bin:$PATH"
+
+# bun completions
+[ -s "/Users/kokikono/.bun/_bun" ] && source "/Users/kokikono/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
+
+export ES_JAVA_HOME=/opt/homebrew/Cellar/openjdk@11/11.0.22/libexec/openjdk.jdk/Contents/Home
+

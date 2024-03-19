@@ -7,13 +7,13 @@
   "files.insertFinalNewline": true,
   "php-cs-fixer.autoFixBySemicolon": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
+    "source.fixAll.eslint": "explicit"
   },
   "gitlens.hovers.currentLine.over": "line",
   "ruby.intellisense": "rubyLocate",
   "editor.unicodeHighlight.ambiguousCharacters": false,
   "php-cs-fixer.executablePath": "${extensionPath}/php-cs-fixer.phar",
-  "php-cs-fixer.lastDownload": 1696216536984,
+  "php-cs-fixer.lastDownload": 1705409210683,
   "typescript.updateImportsOnFileMove.enabled": "always",
   "[jsonc]": {
     "editor.defaultFormatter": "vscode.json-language-features"
@@ -26,5 +26,15 @@
   "isort.path": [
     "/Users/kokikono/.pyenv/shims/isort"
   ],
-  "extensions.autoUpdate": false
+  "terminal.integrated.fontFamily": "Monaco",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "git.autofetch": true,
+  "workbench.startupEditor": "none",
+  "githubPullRequests.terminalLinksHandler": "github",
+  "githubPullRequests.pullBranch": "never"
 }
