@@ -1,0 +1,55 @@
+{
+  "workbench.colorTheme": "Dark+",
+  "php-cs-fixer.onsave": true,
+  "files.insertFinalNewline": true,
+  "files.associations": {
+    "*.blade.php": "html"
+  },
+  "php-cs-fixer.autoFixBySemicolon": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "gitlens.hovers.currentLine.over": "line",
+  "ruby.intellisense": "rubyLocate",
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "php-cs-fixer.executablePath": "${extensionPath}/php-cs-fixer.phar",
+  "php-cs-fixer.lastDownload": 1784845837915,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "editor.fontFamily": "Baskervill",
+  "editor.inlineSuggest.enabled": true,
+  "isort.path": ["/Users/kokikono/.pyenv/shims/isort"],
+  "terminal.integrated.fontFamily": "Monaco",
+  "security.workspace.trust.untrustedFiles": "open",
+  "window.zoomLevel": -1,
+  "cSpell.languageSettings": [],
+  "git.openRepositoryInParentFolders": "never",
+  "github.copilot.editor.enableAutoCompletions": true,
+  "githubPullRequests.pullBranch": "never",
+  "githubPullRequests.fileListLayout": "flat",
+  "githubPullRequests.terminalLinksHandler": "github",
+  "window.nativeTabs": true,
+  "phpunit.command": "docker compose exec php sh -c",
+  "phpunit.php": "php",
+  "phpunit.phpunit": "vendor/bin/phpunit",
+  "phpunit.args": [
+    "-c",
+    "phpunit.xml"
+  ],
+  "phpunit.paths": {
+    // ${pwd} (current directory) is mounted to /app
+    "${workspaceFolder}": "/var/www/html",
+    // ${workspaceFolder} is mapped to /app
+  },
+  "cSpell.mergeCSpellSettings": false,
+  "chat.editing.alwaysSaveWithGeneratedChanges": true,
+  "claudeCode.preferredLocation": "panel",
+  "workbench.editor.empty.hint": "hidden",
+  "chat.useHooks": true,
+  "chat.hookFilesLocations": {
+    "~/.copilot/hooks": true
+  },
+  "gitlens.ai.model": "vscode",
+  "gitlens.ai.vscode.model": "copilot:gpt-4o-mini",
+  "scm.repositories.selectionMode": "single",
+  "git.enableSmartCommit": true
+}

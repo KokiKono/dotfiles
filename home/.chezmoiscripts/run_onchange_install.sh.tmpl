@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# chezmoi apply 時に install/ 配下のセットアップスクリプトを実行する。
+# 下のチェックサム行により、install スクリプトが変わったときだけ再実行される（run_onchange）。
+set -Eeuo pipefail
+
+{{ $installDir := joinPath .chezmoi.sourceDir ".." "install" -}}
+{{ range (glob (joinPath $installDir "**" "*.sh")) -}}
+# {{ . }}: {{ include . | sha256sum }}
+{{ end -}}
+
+INSTALL_DIR="{{ $installDir }}"
+
+echo "[chezmoi] running install scripts under ${INSTALL_DIR}/macos"
+bash "${INSTALL_DIR}/macos/brew.sh"
+bash "${INSTALL_DIR}/macos/ohmyzsh.sh"
+bash "${INSTALL_DIR}/macos/nodenv.sh"
+bash "${INSTALL_DIR}/macos/vscode.sh"

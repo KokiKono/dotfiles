@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 毎週金曜 00:00 UTC にフル E2E を実行（記事の運用を踏襲）
+    - cron: "0 0 * * 5"
+
+jobs:
+  test:
+    name: bats + apply (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi and bats-core
+        run: brew install chezmoi bats-core
+
+      - name: Run bats tests
+        run: bats -r tests/
+
+      - name: E2E - chezmoi apply into a throwaway HOME (scripts excluded)
+        run: |
+          set -Eeuo pipefail
+          TESTHOME="$(mktemp -d)"
+          mkdir -p "${TESTHOME}/.config/chezmoi"
+          chezmoi init \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --promptDefaults --no-tty
+          chezmoi apply \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --exclude scripts --force
+          test -f "${TESTHOME}/.zshrc"
+          test -f "${TESTHOME}/.gitconfig"
+
+      - name: Coverage with kcov (best-effort on macOS)
+        id: coverage
+        continue-on-error: true
+        run: |
+          set -Eeuo pipefail
+          brew install kcov
+          mkdir -p coverage
+          # bats を kcov 配下で実行してカバレッジを採取（macOS では不安定なため best-effort）
+          kcov --include-path="${GITHUB_WORKSPACE}/install" coverage "$(command -v bats)" -r tests/
+
+      - name: Upload coverage to Codecov
+        if: steps.coverage.outcome == 'success'
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          directory: coverage
+          fail_ci_if_error: false
+
+  e2e-full:
+    name: full setup E2E (macOS, scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      - name: chezmoi init --apply (runs install scripts end to end)
+        run: |
+          set -Eeuo pipefail
+          TESTHOME="$(mktemp -d)"
+          mkdir -p "${TESTHOME}/.config/chezmoi"
+          chezmoi init \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --promptDefaults --no-tty
+          HOME="${TESTHOME}" chezmoi apply \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --force
