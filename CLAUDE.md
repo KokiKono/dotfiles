@@ -19,6 +19,8 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_zshrc                      # → ~/.zshrc
 ├── dot_gitconfig.tmpl             # → ~/.gitconfig ({{ .name }}/{{ .email }} templated)
 ├── dot_gitignore_global           # → ~/.gitignore_global
+├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
+├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
@@ -76,6 +78,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `brew bundle dump --force`. `chezmoi` and `bats-core` are included.
 - **`install/macos/vscode-extensions.txt`** is the extension list. Update with
   `code --list-extensions > install/macos/vscode-extensions.txt`.
+- **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
+  `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`), `brm` (prune local branches merged
+  to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
+  preview). All need `fzf`; `wrm` needs `gh`. Worktree **create/switch** stays with `wtp`. The default
+  branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
 - The zshrc assumes `robbyrussell` oh-my-zsh theme, **`mise`** (single `eval "$(mise activate zsh)"`),
   bun, Rancher Desktop, and gcloud. It sources `~/.pzshrc` at the end for machine-private secrets.
 - **Version managers are consolidated to `mise`.** Pinned tools live in `home/dot_config/mise/config.toml`
