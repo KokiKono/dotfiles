@@ -81,7 +81,6 @@ brew "openapi-generator"
 brew "peco"
 brew "perl"
 brew "pnpm"
-brew "postgresql@13", restart_service: true
 brew "postgresql@14", restart_service: true
 brew "protobuf"
 brew "pwgen"
