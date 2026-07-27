@@ -30,7 +30,7 @@ tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
 ├── install/macos/*.bats           # unit tests for each install script
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
-.github/workflows/ci.yml           # macOS CI: bats + apply E2E + best-effort kcov/Codecov
+.github/workflows/ci.yml           # macOS CI: bats + apply E2E (weekly full setup)
 ```
 
 ## chezmoi model
@@ -73,7 +73,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ## Key details when editing
 
 - **`Brewfile`** is the source of truth for installed packages (~110 formulae/casks). Regenerate with
-  `brew bundle dump --force`. `chezmoi`, `bats-core`, `kcov` are included.
+  `brew bundle dump --force`. `chezmoi` and `bats-core` are included.
 - **`install/macos/vscode-extensions.txt`** is the extension list. Update with
   `code --list-extensions > install/macos/vscode-extensions.txt`.
 - The zshrc assumes `robbyrussell` oh-my-zsh theme, `anyenv` (nodenv/goenv/pyenv/rbenv/jenv), bun,

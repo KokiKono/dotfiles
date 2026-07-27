@@ -44,23 +44,9 @@ jobs:
           test -f "${TESTHOME}/.zshrc"
           test -f "${TESTHOME}/.gitconfig"
 
-      - name: Coverage with kcov (best-effort on macOS)
-        id: coverage
-        continue-on-error: true
-        run: |
-          set -Eeuo pipefail
-          brew install kcov
-          mkdir -p coverage
-          # bats を kcov 配下で実行してカバレッジを採取（macOS では不安定なため best-effort）
-          kcov --include-path="${GITHUB_WORKSPACE}/install" coverage "$(command -v bats)" -r tests/
-
-      - name: Upload coverage to Codecov
-        if: steps.coverage.outcome == 'success'
-        continue-on-error: true
-        uses: codecov/codecov-action@v4
-        with:
-          directory: coverage
-          fail_ci_if_error: false
+      # 注: kcov によるカバレッジ計測は macOS では ptrace 相当が使えず
+      # ハングするため採用していない。カバレッジを採りたい場合は Linux ランナーで
+      # 別ジョブを立てて `kcov ... bats -r tests/` を実行すること。
 
   e2e-full:
     name: full setup E2E (macOS, scheduled)
