@@ -51,16 +51,26 @@ setup() {
     grep -q 'java = "temurin-11"' "${TESTHOME}/.config/mise/config.toml"
 }
 
-@test "apply: git-worktree.zsh is deployed and sourced from zshrc" {
+@test "apply: zsh modules are deployed" {
+    [ -f "${TESTHOME}/.config/zsh/options.zsh" ]
+    [ -f "${TESTHOME}/.config/zsh/aliases.zsh" ]
+    [ -f "${TESTHOME}/.config/zsh/tools.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/git-worktree.zsh" ]
-    grep -q 'source ~/.config/zsh/git-worktree.zsh' "${TESTHOME}/.zshrc"
 }
 
-@test "apply: zshrc uses mise activate and drops legacy version managers" {
-    grep -q 'mise activate zsh' "${TESTHOME}/.zshrc"
-    run grep -E 'anyenv init|goenv init|pyenv init|jenv init' "${TESTHOME}/.zshrc"
+@test "apply: zshrc is a thin loader sourcing the modules" {
+    grep -q 'source $ZSH/oh-my-zsh.sh' "${TESTHOME}/.zshrc"
+    grep -q 'ZSH_CONF_DIR' "${TESTHOME}/.zshrc"
+    grep -q 'git-worktree.zsh' "${TESTHOME}/.zshrc"
+}
+
+@test "apply: mise activate lives in tools module (not inline in zshrc)" {
+    grep -q 'mise activate zsh' "${TESTHOME}/.config/zsh/tools.zsh"
+}
+
+@test "apply: no legacy version-manager init anywhere in zshrc + modules" {
+    # anyenv/goenv/pyenv/jenv の init や nodenv init が混入していないこと
+    run grep -rE 'anyenv init|goenv init|pyenv init|jenv init|nodenv init' \
+        "${TESTHOME}/.zshrc" "${TESTHOME}/.config/zsh"
     [ "$status" -ne 0 ]
-    # nodenv init が二重に残っていないこと（統合後は 0 回）
-    run grep -c 'nodenv init' "${TESTHOME}/.zshrc"
-    [ "$output" -eq 0 ]
 }
