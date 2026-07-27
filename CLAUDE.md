@@ -16,10 +16,11 @@ and GitHub Actions CI. Modeled on https://zenn.dev/shunk031/articles/testable-do
 .chezmoiroot                       # contains "home" — the chezmoi source dir
 home/                              # chezmoi source (rendered into $HOME)
 ├── .chezmoi.yaml.tmpl             # prompts for name/email on init → chezmoi config data
-├── dot_zshrc                      # → ~/.zshrc
+├── dot_zshrc                      # → ~/.zshrc (thin loader: oh-my-zsh + sources dot_config/zsh/*.zsh)
 ├── dot_gitconfig.tmpl             # → ~/.gitconfig ({{ .name }}/{{ .email }} templated)
 ├── dot_gitignore_global           # → ~/.gitignore_global
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
+├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
@@ -83,8 +84,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
   preview). All need `fzf`; `wrm` needs `gh`. Worktree **create/switch** stays with `wtp`. The default
   branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
+- **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
+  (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
+  `git-worktree.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
+  `tools.zsh`=env/PATH + mise + wtp + gcloud. **The Rancher Desktop managed block and the `~/.pzshrc`
+  source stay inline in `dot_zshrc`** (Rancher rewrites its block in `~/.zshrc` directly — keep it there
+  to avoid re-injection/drift). Add new shell config to the matching module, not to `dot_zshrc`.
 - The zshrc assumes `robbyrussell` oh-my-zsh theme, **`mise`** (single `eval "$(mise activate zsh)"`),
-  bun, Rancher Desktop, and gcloud. It sources `~/.pzshrc` at the end for machine-private secrets.
+  bun, Rancher Desktop, and gcloud. It sources `~/.pzshrc` for machine-private secrets.
 - **Version managers are consolidated to `mise`.** Pinned tools live in `home/dot_config/mise/config.toml`
   → `~/.config/mise/config.toml` (`node`/`python`/`java`); go uses Homebrew, ruby uses macOS system.
   `ES_JAVA_HOME` is derived from mise's `$JAVA_HOME`. The old `anyenv`/`nodenv`/`goenv`/`pyenv`/`rbenv`/`jenv`

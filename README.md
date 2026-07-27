@@ -44,10 +44,11 @@ chezmoi status                 # ソースと $HOME の差分状態
 ```
 .chezmoiroot                       # "home"（chezmoi のソースディレクトリ指定）
 home/                              # chezmoi ソース（$HOME に展開される）
-├── dot_zshrc                      # → ~/.zshrc
+├── dot_zshrc                      # → ~/.zshrc（薄いローダー: oh-my-zsh + zsh モジュール読込）
 ├── dot_gitconfig.tmpl             # → ~/.gitconfig（name/email をテンプレート化）
 ├── dot_gitignore_global           # → ~/.gitignore_global
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml（node/python/java 固定）
+├── dot_config/zsh/{options,aliases,tools}.zsh  # 分割した zshrc（挙動 / エイリアス / env+mise+wtp+gcloud）
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/...（wrm/brm/bd。dot_zshrc から source）
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # VS Code
 └── .chezmoiscripts/run_onchange_install.sh.tmpl  # apply 時に install/ を実行
@@ -97,6 +98,7 @@ bats -r tests/                   # 全テスト実行
 - `tests/install/macos/*.bats` … 各 install スクリプトの構文・関数定義・prereq 不在時の skip
 - `tests/files/apply.bats` … 使い捨て `$HOME` へ `chezmoi apply --exclude scripts` し、展開結果を検証
 - `tests/files/git-worktree.bats` … クリーンアップ関数の `zsh -n` 構文チェックと関数定義
+- `tests/files/zsh-modules.bats` … 分割した zsh モジュール（options/aliases/tools）の構文チェック
 
 install スクリプトを追加したら、対応する `tests/install/macos/<name>.bats` も追加する。
 `@test` のタイトルは **ASCII のみ**（bats が多バイト文字を壊すため。日本語はコメントに書く）。
