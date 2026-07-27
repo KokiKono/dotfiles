@@ -83,8 +83,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; `-f`/`--force` skips the
   confirmation prompt and passes `--force` to `git worktree remove`), `brm` (prune local branches merged
   to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
-  preview). All need `fzf`; `wrm` needs `gh`. Worktree **create/switch** stays with `wtp`. The default
-  branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
+  preview), `wgs` (**read-only** cross-repo search: scans all git repos under a root — default `~/git_clone`,
+  args override — and lists worktrees matching `wrm`'s condition; fast via early-skip of repos without extra
+  worktrees + one batched `gh pr list` per repo + parallel scan; tune with `WGS_MAX`/`WGS_LIMIT`; cleanup is
+  still per-repo `wrm`). All need `fzf` (except `wgs`); `wrm`/`wgs` need `gh`. Worktree **create/switch**
+  stays with `wtp`. The default branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,

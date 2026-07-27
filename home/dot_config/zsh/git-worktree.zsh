@@ -1,6 +1,7 @@
 # git worktree / branch のクリーンアップ関数（fzf + gh）。
 # 参考: https://www.playpark.co.jp/blog/git-worktree-fzf-branch-cleanup
-# 依存: git, fzf, gh(wrm のみ)。worktree の作成/移動は既存 wtp を使う。
+# 依存: git, fzf, gh(wrm/wgs)。worktree の作成/移動は既存 wtp を使う。
+# wgs = 複数リポジトリ横断で wrm 条件の worktree を検索（read-only）。
 
 # リポジトリのデフォルトブランチ推定（origin/HEAD → main/master）
 __gwt_main_branch() {
@@ -107,4 +108,97 @@ bd() {
       [[ "$ans" == [yY] ]] && git branch -D "$b" || echo "skip: $b"
     fi
   done <<< "$selected"
+}
+
+# __wgs_scan_repo: 1 リポジトリを走査し、wrm 条件（PR MERGED / PR 無し）の worktree を
+# `state \t repo \t branch \t path` で stdout に出す内部関数（read-only）。
+# 高速化: 追加 worktree が無ければ gh を叩かず即 return。gh は repo 毎に 1 回だけ。
+# NOTE: zsh の `path` は $PATH 連動の特殊配列。local 名に使わないこと（wtpath を使う）。
+__wgs_scan_repo() {
+  emulate -L zsh
+  local repo=$1 line wtpath branch main_wt porc
+  porc=$(git -C "$repo" worktree list --porcelain 2>/dev/null) || return 0
+  main_wt=$(print -r -- "$porc" | awk '/^worktree /{print $2; exit}')
+  local -a wpaths wbranches
+  wtpath="" branch=""
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *) wtpath="${line#worktree }" ;;
+      branch\ *)   branch="${line#branch refs/heads/}"
+        [[ "$wtpath" != "$main_wt" ]] && { wpaths+=("$wtpath"); wbranches+=("$branch"); } ;;
+      "") wtpath="" branch="" ;;
+    esac
+  done <<< "$porc"
+  (( ${#wbranches} )) || return 0   # 追加 worktree 無し → gh 不要（大半の repo をここで足切り）
+
+  # gh pr list を 1 回。branch→最優先 state（OPEN>MERGED>CLOSED）に集約。
+  typeset -A st; typeset -A rank=(OPEN 3 MERGED 2 CLOSED 1)
+  local br stt out rc
+  out=$(cd "$repo" && gh pr list --state all --limit "${WGS_LIMIT:-500}" \
+          --json headRefName,state --jq '.[]|[.headRefName,.state]|@tsv' 2>/dev/null)
+  rc=$?
+  if (( rc != 0 )); then
+    print -r -- "wgs: gh 失敗のためスキップ: $repo" >&2
+    return 0
+  fi
+  while IFS=$'\t' read -r br stt; do
+    [[ -z "$br" ]] && continue
+    (( ${rank[$stt]:-0} > ${rank[${st[$br]:-_}]:-0} )) && st[$br]=$stt
+  done <<< "$out"
+
+  local i
+  for (( i=1; i<=${#wbranches}; i++ )); do
+    br=${wbranches[i]}; stt=${st[$br]:-NO-PR}
+    [[ "$stt" == MERGED || "$stt" == NO-PR ]] && \
+      print -r -- "${stt}"$'\t'"${repo:t}"$'\t'"${br}"$'\t'"${wpaths[i]}"
+  done
+}
+
+# wgs (worktree garbage search): 複数リポジトリを横断し、wrm と同条件
+# （PR が MERGED / PR 無し）の worktree を検索して一覧表示する（read-only, 削除はしない）。
+#   使い方: wgs [root ...]   （既定 root: ~/git_clone）
+# 依存: git, gh, awk。掃除は各 repo に cd して wrm。
+wgs() {
+  emulate -L zsh
+  local -a roots; roots=("$@"); (( ${#roots} )) || roots=(~/git_clone)
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "gh 未認証のため中止。'gh auth login' を。" >&2; return 1
+  fi
+  local -a repos
+  repos=("${(@f)$(find "${roots[@]}" -maxdepth 6 -type d -name .git -prune 2>/dev/null)}")
+  repos=("${repos[@]:h}")   # .git → repo ディレクトリ
+  (( ${#repos} )) || { echo "リポジトリが見つかりません: ${roots[*]}"; return 0; }
+
+  # pass1（ローカル・高速）: 追加 worktree を持つ repo だけ抽出。gh を叩くのはこの少数のみ。
+  # こうして遅い gh repo だけを並列波に集約し、fast repo との混在によるバリア待ちを無くす。
+  local repo; local -a todo
+  for repo in "${repos[@]}"; do
+    (( $(git -C "$repo" worktree list --porcelain 2>/dev/null | grep -c '^worktree ') > 1 )) \
+      && todo+=("$repo")
+  done
+
+  local results=""
+  if (( ${#todo} )); then
+    # pass2: todo だけを max 並列でスキャン（チャンク境界で wait、出力は repo 毎に別ファイル）。
+    local tmp; tmp=$(mktemp -d) || return 1
+    local max=${WGS_MAX:-8} i=1 j
+    while (( i <= ${#todo} )); do
+      for (( j=i; j < i+max && j <= ${#todo}; j++ )); do
+        __wgs_scan_repo "${todo[j]}" > "$tmp/$j" &
+      done
+      wait
+      (( i += max ))
+    done
+    results=$(cat "$tmp"/* 2>/dev/null | sort)
+    rm -rf "$tmp"
+  fi
+  if [[ -z "$results" ]]; then
+    echo "garbage worktree はありません。(${#repos} repos を検索)"
+    return 0
+  fi
+  local n; n=$(print -r -- "$results" | grep -c .)
+  { print -r -- "STATE"$'\t'"REPO"$'\t'"BRANCH"$'\t'"PATH"; print -r -- "$results"; } \
+    | column -t -s $'\t'
+  echo "---"
+  echo "合計 ${n} 件 / 検索 ${#repos} repos（うち worktree 有り ${#todo} で gh 照会）。掃除は各 repo に cd して wrm。"
 }
