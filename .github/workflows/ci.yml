@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 毎週金曜 00:00 UTC にフル E2E を実行（記事の運用を踏襲）
+    - cron: "0 0 * * 5"
+
+jobs:
+  test:
+    name: bats + apply (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi and bats-core
+        run: brew install chezmoi bats-core
+
+      - name: Run bats tests
+        run: bats -r tests/
+
+      - name: E2E - chezmoi apply into a throwaway HOME (scripts excluded)
+        run: |
+          set -Eeuo pipefail
+          TESTHOME="$(mktemp -d)"
+          mkdir -p "${TESTHOME}/.config/chezmoi"
+          chezmoi init \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --promptDefaults --no-tty
+          chezmoi apply \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --exclude scripts --force
+          test -f "${TESTHOME}/.zshrc"
+          test -f "${TESTHOME}/.gitconfig"
+
+      # 注: kcov によるカバレッジ計測は macOS では ptrace 相当が使えず
+      # ハングするため採用していない。カバレッジを採りたい場合は Linux ランナーで
+      # 別ジョブを立てて `kcov ... bats -r tests/` を実行すること。
+
+  e2e-full:
+    name: full setup E2E (macOS, scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      - name: chezmoi init --apply (runs install scripts end to end)
+        run: |
+          set -Eeuo pipefail
+          TESTHOME="$(mktemp -d)"
+          mkdir -p "${TESTHOME}/.config/chezmoi"
+          chezmoi init \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --promptDefaults --no-tty
+          HOME="${TESTHOME}" chezmoi apply \
+            --source "${GITHUB_WORKSPACE}" \
+            --destination "${TESTHOME}" \
+            --config "${TESTHOME}/.config/chezmoi/chezmoi.yaml" \
+            --persistent-state "${TESTHOME}/state.boltdb" \
+            --cache "${TESTHOME}/.cache" \
+            --force

@@ -1,0 +1,34 @@
+[ghq]
+	root = ~/git_clone
+[user]
+	name = {{ .name }}
+	email = {{ .email }}
+	signingKey = C84E50F83C8B8E39
+[core]
+	excludesfile = {{ .chezmoi.homeDir }}/.gitignore_global
+	pager = cat
+[gpg]
+	program = gpg
+[commit]
+	gpgsign = true
+	template = {{ .chezmoi.homeDir }}/.stCommitMsg
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+[alias]
+	see = browse
+	st = status
+	f = fetch
+	c = checkout
+	pf = push --force-with-lease
+[diff]
+	algorithm = histogram
+[difftool "sourcetree"]
+	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
+	path =
+[mergetool "sourcetree"]
+	cmd = /private/var/folders/yf/d_cm0kt9781b95_7nhq0thnc0000gn/T/AppTranslocation/5A3249A1-C2A2-47BE-B57D-0F64665A051E/d/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
+	trustExitCode = true
+[push]
+	autoSetupRemote = true
+[init]
+	defaultBranch = main

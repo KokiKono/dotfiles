@@ -49,5 +49,47 @@
         "key": "shift+cmd+[",
         "command": "-workbench.action.terminal.focusPrevious",
         "when": "terminalFocus && terminalHasBeenCreated && !terminalEditorFocus || terminalFocus && terminalProcessSupported && !terminalEditorFocus"
+    },
+    {
+        "key": "ctrl+shift+tab",
+        "command": "workbench.action.switchWindow"
+    },
+    {
+        "key": "ctrl+w",
+        "command": "-workbench.action.switchWindow"
+    },
+    {
+        "key": "ctrl+shift+tab",
+        "command": "-workbench.action.quickOpenLeastRecentlyUsedEditorInGroup",
+        "when": "!activeEditorGroupEmpty"
+    },
+    {
+        "key": "ctrl+shift+tab",
+        "command": "-workbench.action.quickOpenNavigatePreviousInEditorPicker",
+        "when": "inEditorsPicker && inQuickOpen"
+    },
+    {
+        "key": "shift+cmd+r",
+        "command": "-reactSnippets.search",
+        "when": "editorTextFocus"
+    },
+    {
+        "key": "shift+cmd+r",
+        "command": "-workbench.action.browser.hardReload",
+        "when": "browserFocused && activeEditor == 'workbench.editor.browser'"
+    },
+    {
+        "key": "shift+cmd+r",
+        "command": "-rerunSearchEditorSearch",
+        "when": "inSearchEditor"
+    },
+    {
+        "key": "shift+cmd+r",
+        "command": "-workbench.action.issueReporter.toggleRecording",
+        "when": "issueReporterOpen"
+    },
+    {
+        "key": "shift+cmd+r",
+        "command": "git-worktree-manager-list.focus"
     }
 ]
