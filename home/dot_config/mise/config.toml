@@ -1,0 +1,11 @@
+# mise グローバル設定（旧 nodenv/goenv/pyenv/rbenv/jenv/anyenv を統合）
+# 実際に固定運用しているツールのみ管理する。go は Homebrew、ruby は macOS system を利用。
+[tools]
+node = "22.16.0"
+python = "3.11.6"
+java = "temurin-11"
+
+[settings]
+# 旧い prebuilt CPython(3.11.6) には GitHub attestation が無く検証に失敗するため無効化。
+# チェックサム検証は引き続き行われる。
+python.github_attestations = false

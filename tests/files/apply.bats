@@ -43,3 +43,19 @@ setup() {
     [ -f "${TESTHOME}/Library/Application Support/Code/User/settings.json" ]
     [ -f "${TESTHOME}/Library/Application Support/Code/User/keybindings.json" ]
 }
+
+@test "apply: mise config.toml is deployed with pinned tools" {
+    [ -f "${TESTHOME}/.config/mise/config.toml" ]
+    grep -q 'node = "22.16.0"' "${TESTHOME}/.config/mise/config.toml"
+    grep -q 'python = "3.11.6"' "${TESTHOME}/.config/mise/config.toml"
+    grep -q 'java = "temurin-11"' "${TESTHOME}/.config/mise/config.toml"
+}
+
+@test "apply: zshrc uses mise activate and drops legacy version managers" {
+    grep -q 'mise activate zsh' "${TESTHOME}/.zshrc"
+    run grep -E 'anyenv init|goenv init|pyenv init|jenv init' "${TESTHOME}/.zshrc"
+    [ "$status" -ne 0 ]
+    # nodenv init が二重に残っていないこと（統合後は 0 回）
+    run grep -c 'nodenv init' "${TESTHOME}/.zshrc"
+    [ "$output" -eq 0 ]
+}

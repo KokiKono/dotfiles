@@ -69,14 +69,6 @@ alias debug-chrome="/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chro
 alias ibrew='arch -x86_64 /usr/local/bin/brew'
 alias dc='docker-compose'
 
-alias nodenv-fetch='(cd ~/.nodenv/plugins/node-build; git pull)'
-export PATH="$HOME/.nodenv/bin:$PATH"
-eval "$(nodenv init -)"
-export PATH="/usr/local/opt/mysql-client/bin:$PATH"
-export VOLTA_HOME="$HOME/.volta"
-export PATH="$VOLTA_HOME/bin:$PATH"
-export PATH="/usr/local/opt/openjdk/bin:$PATH"
-export CPPFLAGS="-I/usr/local/opt/openjdk/include"
 export AWS_PROFILE=grit
 
 # Added by serverless binary installer
@@ -84,35 +76,16 @@ export PATH="$HOME/.serverless/bin:$PATH"
 export GPG_TTY=$(tty)
 
 set -o vi
-# goenv 設定
-export GOENV_ROOT="$HOME/.goenv"
-export PATH="$GOENV_ROOT/bin:$PATH"
-eval "$(goenv init -)"
-export PATH="$GOROOT/bin:$PATH"
-export PATH="$PATH:$GOPATH/bin"
 
-# Python
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-
-export PATH="$HOME/.anyenv/bin:$PATH"
-eval "$(anyenv init -)"
-export PATH="/usr/local/opt/openjdk/bin:$PATH"
-
-[[ -d ~/.rbenv  ]] && \
-  export PATH=${HOME}/.rbenv/bin:${PATH} && \
-  eval "$(rbenv init -)"
-
+# バージョンマネージャは mise に統合（node/python/java は ~/.config/mise/config.toml）
+# go は Homebrew、ruby は macOS system を利用。旧 nodenv/goenv/pyenv/rbenv/jenv/anyenv は温存だが未初期化。
+eval "$(mise activate zsh)"
+# mise の JAVA_HOME は precmd フックで遅延設定されるため、ここでは mise where で確定的に解決する。
+export ES_JAVA_HOME="$(mise where java 2>/dev/null)"   # mise の java(temurin-11) を Elasticsearch へ
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 export PATH="~/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
-eval "$(nodenv init -)"
-
-[[ -d ~/.rbenv  ]] && \
-  export PATH=${HOME}/.rbenv/bin:${PATH} && \
-  eval "$(rbenv init -)"
 
 # Privateなシークレットが書かれたファイル
 source ${HOME}/.pzshrc
@@ -123,8 +96,6 @@ export PATH="/Users/kokikono/.local/bin:$PATH"
 export GRIT_INSTALL="$HOME/.grit"
 export PATH="$GRIT_INSTALL/bin:$PATH"
 
-export PATH="$HOME/.jenv/bin:$PATH"
-eval "$(jenv init -)"
 export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
 
 # bun completions
@@ -133,9 +104,6 @@ export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
-export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
-
-export ES_JAVA_HOME=/opt/homebrew/Cellar/openjdk@11/11.0.22/libexec/openjdk.jdk/Contents/Home
 
 ############
 # Claude
