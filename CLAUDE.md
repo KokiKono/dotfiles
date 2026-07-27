@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A personal **macOS** dotfiles repository managed with [chezmoi](https://chezmoi.io). Config files
 (zsh, git, VS Code) live under `home/` as a chezmoi source and are rendered into `$HOME` by
-`chezmoi apply`. Machine setup (Homebrew, oh-my-zsh, nodenv, VS Code extensions) is done by plain,
+`chezmoi apply`. Machine setup (Homebrew, mise, oh-my-zsh, nodenv, VS Code extensions) is done by plain,
 individually testable shell scripts under `install/`, exercised by [Bats](https://github.com/bats-core/bats-core)
 and GitHub Actions CI. Modeled on https://zenn.dev/shunk031/articles/testable-dotfiles-management-with-chezmoi.
 
@@ -24,7 +24,7 @@ home/                              # chezmoi source (rendered into $HOME)
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,ohmyzsh,nodenv,vscode}.sh
+└── macos/{brew,mise,ohmyzsh,nodenv,vscode}.sh
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
@@ -67,8 +67,8 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,ohmyzsh,nodenv,vscode}.sh`
-(Homebrew + `brew bundle` from `Brewfile`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,mise,ohmyzsh,nodenv,vscode}.sh`
+(Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
 
@@ -76,10 +76,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `brew bundle dump --force`. `chezmoi` and `bats-core` are included.
 - **`install/macos/vscode-extensions.txt`** is the extension list. Update with
   `code --list-extensions > install/macos/vscode-extensions.txt`.
-- The zshrc assumes `robbyrussell` oh-my-zsh theme, `anyenv` (nodenv/goenv/pyenv/rbenv/jenv), bun,
-  Rancher Desktop, and gcloud. It sources `~/.pzshrc` at the end for machine-private secrets.
-- `dot_zshrc` is currently carried over verbatim from the old config; it still contains duplicate
-  version-manager init lines. A future cleanup (dedup / consolidate to `mise`) is a separate task.
+- The zshrc assumes `robbyrussell` oh-my-zsh theme, **`mise`** (single `eval "$(mise activate zsh)"`),
+  bun, Rancher Desktop, and gcloud. It sources `~/.pzshrc` at the end for machine-private secrets.
+- **Version managers are consolidated to `mise`.** Pinned tools live in `home/dot_config/mise/config.toml`
+  → `~/.config/mise/config.toml` (`node`/`python`/`java`); go uses Homebrew, ruby uses macOS system.
+  `ES_JAVA_HOME` is derived from mise's `$JAVA_HOME`. The old `anyenv`/`nodenv`/`goenv`/`pyenv`/`rbenv`/`jenv`
+  init lines and dead Intel-Homebrew (`/usr/local/opt/...`) / Volta paths were removed; those managers
+  remain installed on disk (Brewfile) but are no longer initialized, so the switch is reversible.
 
 ## Secrets
 
