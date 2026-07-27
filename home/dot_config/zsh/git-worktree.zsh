@@ -20,19 +20,21 @@ wrm() {
     echo "gh 未認証のため中止（OPEN な PR の誤削除防止）。'gh auth login' を。" >&2; return 1
   fi
   git worktree prune
-  local current main_wt line path branch state; local -a candidates
+  # NOTE: zsh では `path` は $PATH に連動する特殊配列。local 変数名に使うと関数内で
+  # PATH が空になり git/awk が command not found になるため、必ず別名（wtpath）を使う。
+  local current main_wt line wtpath branch state; local -a candidates
   current=$(git rev-parse --show-toplevel 2>/dev/null)
   main_wt=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
   while IFS= read -r line; do
     case "$line" in
-      worktree\ *) path="${line#worktree }" ;;
+      worktree\ *) wtpath="${line#worktree }" ;;
       branch\ *)   branch="${line#branch refs/heads/}"
-        if [[ "$path" != "$current" && "$path" != "$main_wt" ]]; then
+        if [[ "$wtpath" != "$current" && "$wtpath" != "$main_wt" ]]; then
           state=$(gh pr view "$branch" --json state -q .state 2>/dev/null)
           [[ "$state" == "MERGED" || -z "$state" ]] && \
-            candidates+=("$path"$'\t'"$branch"$'\t'"${state:-NO-PR}")
+            candidates+=("$wtpath"$'\t'"$branch"$'\t'"${state:-NO-PR}")
         fi ;;
-      "") path=""; branch="" ;;
+      "") wtpath=""; branch="" ;;
     esac
   done < <(git worktree list --porcelain)
   (( ${#candidates[@]} == 0 )) && { echo "削除対象の worktree はありません。"; return 0; }
@@ -41,8 +43,8 @@ wrm() {
   echo -n "続行しますか？ [y/N] "; local ans; read -r ans
   [[ "$ans" == [yY] ]] || { echo "中止。"; return 1; }
   local c; for c in "${candidates[@]}"; do
-    path="${c%%$'\t'*}"; branch="${${c#*$'\t'}%%$'\t'*}"
-    git worktree remove "$path" && echo "Removed: $branch ($path)"
+    wtpath="${c%%$'\t'*}"; branch="${${c#*$'\t'}%%$'\t'*}"
+    git worktree remove "$wtpath" && echo "Removed: $branch ($wtpath)"
   done
 }
 
