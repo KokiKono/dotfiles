@@ -111,6 +111,9 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 alias claudecode="AWS_PROFILE=claude claude"
 alias cw='~/git_clone/github.com/progrit/work-log/scripts/claudework.sh'
 
+# git worktree / branch クリーンアップ関数（wrm/brm/bd）
+[ -f ~/.config/zsh/git-worktree.zsh ] && source ~/.config/zsh/git-worktree.zsh
+
 #compdef wtp
 compdef _wtp wtp
 

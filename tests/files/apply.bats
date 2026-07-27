@@ -51,6 +51,11 @@ setup() {
     grep -q 'java = "temurin-11"' "${TESTHOME}/.config/mise/config.toml"
 }
 
+@test "apply: git-worktree.zsh is deployed and sourced from zshrc" {
+    [ -f "${TESTHOME}/.config/zsh/git-worktree.zsh" ]
+    grep -q 'source ~/.config/zsh/git-worktree.zsh' "${TESTHOME}/.zshrc"
+}
+
 @test "apply: zshrc uses mise activate and drops legacy version managers" {
     grep -q 'mise activate zsh' "${TESTHOME}/.zshrc"
     run grep -E 'anyenv init|goenv init|pyenv init|jenv init' "${TESTHOME}/.zshrc"
