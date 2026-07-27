@@ -10,9 +10,10 @@ SCRIPT="install/macos/brew.sh"
 }
 
 @test "brew.sh: sourcing defines functions without side effects" {
-    run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F install_homebrew brew_bundle main"
+    run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F install_homebrew trust_taps brew_bundle main"
     [ "$status" -eq 0 ]
     [[ "$output" == *"install_homebrew"* ]]
+    [[ "$output" == *"trust_taps"* ]]
     [[ "$output" == *"brew_bundle"* ]]
     [[ "$output" == *"main"* ]]
 }
