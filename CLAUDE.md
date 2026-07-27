@@ -92,6 +92,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   to avoid re-injection/drift). Add new shell config to the matching module, not to `dot_zshrc`.
 - The zshrc assumes `robbyrussell` oh-my-zsh theme, **`mise`** (single `eval "$(mise activate zsh)"`),
   bun, Rancher Desktop, and gcloud. It sources `~/.pzshrc` for machine-private secrets.
+- **gcloud** is the Homebrew cask `gcloud-cli` (in `Brewfile`). `tools.zsh` sources
+  `/opt/homebrew/share/google-cloud-sdk/{path,completion}.zsh.inc`. Update it with `gcloud components
+  update` (the cask supports the native component manager). Auth/config lives in `~/.config/gcloud`
+  independent of the SDK. (Old manual install under `~/googlecloud/google-cloud-sdk` is superseded.)
 - **Version managers are consolidated to `mise`.** Pinned tools live in `home/dot_config/mise/config.toml`
   → `~/.config/mise/config.toml` (`node`/`python`/`java`); go uses Homebrew, ruby uses macOS system.
   `ES_JAVA_HOME` is derived from mise's `$JAVA_HOME`. The old `anyenv`/`nodenv`/`goenv`/`pyenv`/`rbenv`/`jenv`
