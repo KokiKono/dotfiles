@@ -16,9 +16,11 @@ install_extensions() {
         return 0
     fi
     log "VS Code 拡張を導入します。"
+    # 1 拡張が marketplace から消える/リネームされても全体を止めない（graceful skip）。
     while IFS= read -r ext; do
         [[ -z "${ext}" ]] && continue
-        code --install-extension "${ext}" --force
+        code --install-extension "${ext}" --force \
+            || log "拡張の導入に失敗（スキップ）: ${ext}"
     done < "${EXTENSIONS_FILE}"
 }
 

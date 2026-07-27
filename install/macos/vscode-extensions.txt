@@ -6,7 +6,6 @@ arcanis.vscode-zipfs
 bmewburn.vscode-intelephense-client
 bradlc.vscode-tailwindcss
 charliermarsh.ruff
-dheovani.svg-viewer
 dvirtz.parquet-viewer
 esbenp.prettier-vscode
 fnando.linter
