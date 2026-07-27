@@ -14,7 +14,17 @@ __gwt_main_branch() {
 }
 
 # wrm: PR が MERGED（または PR 無し）の worktree を一括削除
+#   -f, --force : 確認プロンプトを省略し、git worktree remove も --force で実行
+#                 （変更/未追跡ファイルを含む worktree も削除）
 wrm() {
+  local force=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      -f|--force) force=1 ;;
+      -h|--help)  echo "usage: wrm [-f|--force]"; return 0 ;;
+      *) echo "wrm: 不明な引数: $arg" >&2; return 2 ;;
+    esac
+  done
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "not a git repo"; return 1; }
   if ! gh auth status >/dev/null 2>&1; then
     echo "gh 未認証のため中止（OPEN な PR の誤削除防止）。'gh auth login' を。" >&2; return 1
@@ -40,11 +50,16 @@ wrm() {
   (( ${#candidates[@]} == 0 )) && { echo "削除対象の worktree はありません。"; return 0; }
   echo "以下の worktree を削除します (path / branch / state):"
   printf '  %s\n' "${candidates[@]}"
-  echo -n "続行しますか？ [y/N] "; local ans; read -r ans
-  [[ "$ans" == [yY] ]] || { echo "中止。"; return 1; }
-  local c; for c in "${candidates[@]}"; do
+  if (( force )); then
+    echo "--force: 確認を省略して削除します。"
+  else
+    echo -n "続行しますか？ [y/N] "; local ans; read -r ans
+    [[ "$ans" == [yY] ]] || { echo "中止。"; return 1; }
+  fi
+  local c; local -a rm_opts; (( force )) && rm_opts=(--force)
+  for c in "${candidates[@]}"; do
     wtpath="${c%%$'\t'*}"; branch="${${c#*$'\t'}%%$'\t'*}"
-    git worktree remove "$wtpath" && echo "Removed: $branch ($wtpath)"
+    git worktree remove "${rm_opts[@]}" "$wtpath" && echo "Removed: $branch ($wtpath)"
   done
 }
 

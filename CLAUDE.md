@@ -80,7 +80,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 - **`install/macos/vscode-extensions.txt`** is the extension list. Update with
   `code --list-extensions > install/macos/vscode-extensions.txt`.
 - **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
-  `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`), `brm` (prune local branches merged
+  `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; `-f`/`--force` skips the
+  confirmation prompt and passes `--force` to `git worktree remove`), `brm` (prune local branches merged
   to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
   preview). All need `fzf`; `wrm` needs `gh`. Worktree **create/switch** stays with `wtp`. The default
   branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
