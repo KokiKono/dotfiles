@@ -1,18 +1,5 @@
 # env / PATH と各種ツール初期化。dot_zshrc から source（options の compinit 後に読む）。
 
-# --- PATH の土台を保証（非ログインシェル対策） ---
-# VS Code 端末 / tmux / 手動起動の zsh などの非ログインシェルでは ~/.zprofile が走らず、
-# Homebrew と macOS 標準の bin が PATH から抜けて git/awk 等が command not found になる。
-# ログインシェルでは既に載っているため何もしない（冪等）。欠けているときだけ補う。
-if [[ -x /opt/homebrew/bin/brew && ":$PATH:" != *":/opt/homebrew/bin:"* ]]; then
-  eval "$(/opt/homebrew/bin/brew shellenv)"   # /opt/homebrew/{bin,sbin} を前置
-fi
-# macOS 標準ディレクトリ（awk 等）。ツールの上書きを避けるため末尾に、無い場合のみ追加。
-for _d in /usr/bin /bin /usr/sbin /sbin; do
-  [[ ":$PATH:" != *":$_d:"* ]] && export PATH="$PATH:$_d"
-done
-unset _d
-
 export AWS_PROFILE=grit
 
 # Added by serverless binary installer
