@@ -14,15 +14,36 @@ __gwt_main_branch() {
   echo main
 }
 
-# wrm: PR が MERGED（または PR 無し）の worktree を一括削除
-#   -f, --force : 確認プロンプトを省略し、git worktree remove も --force で実行
-#                 （変更/未追跡ファイルを含む worktree も削除）
+# __gwt_pr_states <repo>: そのリポジトリの PR を 1 回の `gh pr list` でまとめて取得し、
+# `branch \t state` を stdout に出す。同一ブランチに複数 PR がある場合は
+# OPEN > MERGED > CLOSED の優先度で 1 つに集約する（OPEN を取りこぼすと誤削除になるため）。
+# gh 失敗時は非 0 を返す（呼び出し側が「PR 無し」と誤認しないように）。
+# 件数上限は GWT_PR_LIMIT（既存の WGS_LIMIT も後方互換で参照）。
+__gwt_pr_states() {
+  emulate -L zsh
+  local repo=$1 out br stt
+  out=$(cd "$repo" && gh pr list --state all --limit "${GWT_PR_LIMIT:-${WGS_LIMIT:-500}}" \
+          --json headRefName,state --jq '.[]|[.headRefName,.state]|@tsv' 2>/dev/null) || return 1
+  typeset -A st; typeset -A rank=(OPEN 3 MERGED 2 CLOSED 1)
+  while IFS=$'\t' read -r br stt; do
+    [[ -z "$br" ]] && continue
+    (( ${rank[$stt]:-0} > ${rank[${st[$br]:-_}]:-0} )) && st[$br]=$stt
+  done <<< "$out"
+  for br in ${(k)st}; do print -r -- "$br"$'\t'"${st[$br]}"; done
+}
+
+# wrm: PR が MERGED（または PR 無し）の worktree を fzf で選んで削除
+#   既定では候補を全選択済みの fzf に出す（Tab で選択切替 / Enter で確定 / Esc で中止）。
+#   -f, --force : git worktree remove を --force で実行（変更/未追跡ファイル込みで削除）
+#   -a, --all   : fzf を使わず全候補を対象にする（-f 無しなら y/N 確認あり）
 wrm() {
-  local force=0 arg
+  emulate -L zsh
+  local force=0 all=0 arg
   for arg in "$@"; do
     case "$arg" in
       -f|--force) force=1 ;;
-      -h|--help)  echo "usage: wrm [-f|--force]"; return 0 ;;
+      -a|--all)   all=1 ;;
+      -h|--help)  echo "usage: wrm [-f|--force] [-a|--all]"; return 0 ;;
       *) echo "wrm: 不明な引数: $arg" >&2; return 2 ;;
     esac
   done
@@ -33,33 +54,84 @@ wrm() {
   git worktree prune
   # NOTE: zsh では `path` は $PATH に連動する特殊配列。local 変数名に使うと関数内で
   # PATH が空になり git/awk が command not found になるため、必ず別名（wtpath）を使う。
-  local current main_wt line wtpath branch state; local -a candidates
+  local current main_wt line wtpath branch state; local -a candidates wpaths wbranches
   current=$(git rev-parse --show-toplevel 2>/dev/null)
   main_wt=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
   while IFS= read -r line; do
     case "$line" in
       worktree\ *) wtpath="${line#worktree }" ;;
       branch\ *)   branch="${line#branch refs/heads/}"
-        if [[ "$wtpath" != "$current" && "$wtpath" != "$main_wt" ]]; then
-          state=$(gh pr view "$branch" --json state -q .state 2>/dev/null)
-          [[ "$state" == "MERGED" || -z "$state" ]] && \
-            candidates+=("$wtpath"$'\t'"$branch"$'\t'"${state:-NO-PR}")
-        fi ;;
+        [[ "$wtpath" != "$current" && "$wtpath" != "$main_wt" ]] && \
+          { wpaths+=("$wtpath"); wbranches+=("$branch"); } ;;
       "") wtpath=""; branch="" ;;
     esac
   done < <(git worktree list --porcelain)
-  (( ${#candidates[@]} == 0 )) && { echo "削除対象の worktree はありません。"; return 0; }
-  echo "以下の worktree を削除します (path / branch / state):"
-  printf '  %s\n' "${candidates[@]}"
-  if (( force )); then
-    echo "--force: 確認を省略して削除します。"
-  else
-    echo -n "続行しますか？ [y/N] "; local ans; read -r ans
-    [[ "$ans" == [yY] ]] || { echo "中止。"; return 1; }
+  if (( ${#wbranches} )); then
+    # gh 呼び出しは repo 全体で 1 回（旧実装は worktree 毎に問い合わせて N 往復していた）。
+    local pr_out
+    pr_out=$(__gwt_pr_states "${current:-$PWD}") \
+      || { echo "wrm: gh pr list に失敗しました。中止。" >&2; return 1; }
+    # NOTE: ここの変数名は下の表組みで使う i/st/br/pt と重ねないこと。
+    # zsh は同一スコープで既存の local を `local` し直すと中身を stdout に出力する。
+    typeset -A prstate; local k pbr pst
+    while IFS=$'\t' read -r pbr pst; do
+      [[ -n "$pbr" ]] && prstate[$pbr]=$pst
+    done <<< "$pr_out"
+    for (( k=1; k<=${#wbranches}; k++ )); do
+      state=${prstate[${wbranches[k]}]:-NO-PR}
+      [[ "$state" == MERGED || "$state" == NO-PR ]] && \
+        candidates+=("${wpaths[k]}"$'\t'"${wbranches[k]}"$'\t'"$state")
+    done
   fi
-  local c; local -a rm_opts; (( force )) && rm_opts=(--force)
-  for c in "${candidates[@]}"; do
-    wtpath="${c%%$'\t'*}"; branch="${${c#*$'\t'}%%$'\t'*}"
+  (( ${#candidates[@]} == 0 )) && { echo "削除対象の worktree はありません。"; return 0; }
+
+  # 表示用テーブル（STATE / BRANCH / PATH を桁揃え）。
+  # 各行は `idx \t state \t branch \t path \t 整形済み文字列`。fzf には最後の列だけ見せ、
+  # 選択結果は idx で元データに引き当てる（path に空白があっても安全）。
+  local i st br pt w1=5 w2=6
+  for (( i=1; i<=${#candidates[@]}; i++ )); do
+    br="${${candidates[i]#*$'\t'}%%$'\t'*}"; st="${candidates[i]##*$'\t'}"
+    (( ${#st} > w1 )) && w1=${#st}
+    (( ${#br} > w2 )) && w2=${#br}
+  done
+  local hdr; hdr=$(printf '%-*s  %-*s  %s' $w1 STATE $w2 BRANCH PATH)
+  local -a rows disp
+  local row
+  for (( i=1; i<=${#candidates[@]}; i++ )); do
+    pt="${candidates[i]%%$'\t'*}"
+    br="${${candidates[i]#*$'\t'}%%$'\t'*}"; st="${candidates[i]##*$'\t'}"
+    row=$(printf '%-*s  %-*s  %s' $w1 "$st" $w2 "$br" "$pt")
+    disp+=("$row")
+    rows+=("$i"$'\t'"$st"$'\t'"$br"$'\t'"$pt"$'\t'"$row")
+  done
+
+  local -a picked
+  if (( ! all )) && command -v fzf >/dev/null 2>&1; then
+    local selected
+    selected=$(printf '%s\n' "${rows[@]}" | fzf --multi --ansi --delimiter=$'\t' --with-nth=5 \
+      --bind 'start:select-all' \
+      --header="$hdr"$'\n'"Tab:選択切替 / Ctrl-A:全選択 / Enter:削除実行 / Esc:中止" \
+      --bind 'ctrl-a:select-all' --bind 'ctrl-d:deselect-all' \
+      --preview-window=right:55% \
+      --preview 'git -C {4} status --short --branch 2>/dev/null; echo; git -C {4} log --oneline -20 --color=always {3} 2>/dev/null')
+    [[ -z "$selected" ]] && { echo "中止。"; return 1; }
+    picked=("${(@f)$(print -r -- "$selected" | cut -f1)}")
+  else
+    echo "以下の worktree を削除します:"
+    printf '  %s\n' "$hdr" "${disp[@]}"
+    if (( force )); then
+      echo "--force: 確認を省略して削除します。"
+    else
+      echo -n "続行しますか？ [y/N] "; local ans; read -r ans
+      [[ "$ans" == [yY] ]] || { echo "中止。"; return 1; }
+    fi
+    picked=({1..${#candidates[@]}})
+  fi
+
+  local -a rm_opts; (( force )) && rm_opts=(--force)
+  for i in "${picked[@]}"; do
+    [[ -z "$i" ]] && continue
+    wtpath="${candidates[i]%%$'\t'*}"; branch="${${candidates[i]#*$'\t'}%%$'\t'*}"
     git worktree remove "${rm_opts[@]}" "$wtpath" && echo "Removed: $branch ($wtpath)"
   done
 }
@@ -131,19 +203,14 @@ __wgs_scan_repo() {
   done <<< "$porc"
   (( ${#wbranches} )) || return 0   # 追加 worktree 無し → gh 不要（大半の repo をここで足切り）
 
-  # gh pr list を 1 回。branch→最優先 state（OPEN>MERGED>CLOSED）に集約。
-  typeset -A st; typeset -A rank=(OPEN 3 MERGED 2 CLOSED 1)
-  local br stt out rc
-  out=$(cd "$repo" && gh pr list --state all --limit "${WGS_LIMIT:-500}" \
-          --json headRefName,state --jq '.[]|[.headRefName,.state]|@tsv' 2>/dev/null)
-  rc=$?
-  if (( rc != 0 )); then
+  # gh は repo 毎に 1 回（wrm と共通の __gwt_pr_states）。
+  typeset -A st; local br stt out
+  out=$(__gwt_pr_states "$repo") || {
     print -r -- "wgs: gh 失敗のためスキップ: $repo" >&2
     return 0
-  fi
+  }
   while IFS=$'\t' read -r br stt; do
-    [[ -z "$br" ]] && continue
-    (( ${rank[$stt]:-0} > ${rank[${st[$br]:-_}]:-0} )) && st[$br]=$stt
+    [[ -n "$br" ]] && st[$br]=$stt
   done <<< "$out"
 
   local i

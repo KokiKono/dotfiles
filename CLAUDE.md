@@ -80,8 +80,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 - **`install/macos/vscode-extensions.txt`** is the extension list. Update with
   `code --list-extensions > install/macos/vscode-extensions.txt`.
 - **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
-  `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; `-f`/`--force` skips the
-  confirmation prompt and passes `--force` to `git worktree remove`), `brm` (prune local branches merged
+  `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; candidates are shown in an
+  aligned STATE/BRANCH/PATH table in `fzf --multi`, **all pre-selected** (`start:select-all`), so
+  Enter deletes the selection and Esc aborts; `-f`/`--force` passes `--force` to
+  `git worktree remove`, `-a`/`--all` skips fzf and falls back to the y/N prompt over all
+  candidates; PR states come from a single batched `gh pr list` per repo via the shared
+  `__gwt_pr_states` helper — same one `wgs` uses — so `wrm` is one `gh` round-trip regardless of
+  worktree count, and it aborts rather than treating everything as "no PR" if `gh` fails), `brm`
+  (prune local branches merged
   to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
   preview), `wgs` (**read-only** cross-repo search: scans all git repos under a root — default `~/git_clone`,
   args override — and lists worktrees matching `wrm`'s condition; fast via early-skip of repos without extra
