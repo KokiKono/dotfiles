@@ -86,7 +86,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `git worktree remove`, `-a`/`--all` skips fzf and falls back to the y/N prompt over all
   candidates; PR states come from a single batched `gh pr list` per repo via the shared
   `__gwt_pr_states` helper — same one `wgs` uses — so `wrm` is one `gh` round-trip regardless of
-  worktree count, and it aborts rather than treating everything as "no PR" if `gh` fails), `brm`
+  worktree count, and it aborts rather than treating everything as "no PR" if `gh` fails; during
+  deletion it prints a `[n/N] ✔/✘ branch (path)` line per worktree — failures show the git error
+  inline and do not stop the rest — followed by a `削除 x 件 / 失敗 y 件` summary; if anything
+  failed and `-f` wasn't given, the failed worktrees are re-offered in a second fzf/prompt pass
+  that retries them with `--force`. Returns non-zero if removals were still left failing/declined.
+  The delete loop itself is `__gwt_remove_worktrees <force> <path\tbranch>...` (leaves failures in
+  `__gwt_failed`) and the retry pass is `__gwt_retry_force`), `brm`
   (prune local branches merged
   to the default branch or whose upstream is `[gone]`), `bd` (fzf-pick branch delete with MERGED/UNMERGED
   preview), `wgs` (**read-only** cross-repo search: scans all git repos under a root — default `~/git_clone`,
