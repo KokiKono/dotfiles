@@ -34,6 +34,8 @@ __gwt_pr_states() {
 
 # wrm: PR が MERGED（または PR 無し）の worktree を fzf で選んで削除
 #   既定では候補を全選択済みの fzf に出す（Tab で選択切替 / Enter で確定 / Esc で中止）。
+#   削除は 1 件ごとに [n/N] の進捗行 + 末尾に集計。未コミット変更などで失敗した分は
+#   そのまま再選択 UI に出し、--force で削除し直せる。
 #   -f, --force : git worktree remove を --force で実行（変更/未追跡ファイル込みで削除）
 #   -a, --all   : fzf を使わず全候補を対象にする（-f 無しなら y/N 確認あり）
 wrm() {
@@ -128,12 +130,89 @@ wrm() {
     picked=({1..${#candidates[@]}})
   fi
 
-  local -a rm_opts; (( force )) && rm_opts=(--force)
+  # 削除実行。entry は `path \t branch`。
+  # NOTE: 変数名は上の表組み（i/st/br/pt/w1/w2）と重ねないこと。zsh は同一スコープで
+  # 既存の local を `local` し直すと中身を stdout に出力する。
+  local -a entries
   for i in "${picked[@]}"; do
     [[ -z "$i" ]] && continue
-    wtpath="${candidates[i]%%$'\t'*}"; branch="${${candidates[i]#*$'\t'}%%$'\t'*}"
-    git worktree remove "${rm_opts[@]}" "$wtpath" && echo "Removed: $branch ($wtpath)"
+    entries+=("${candidates[i]%%$'\t'*}"$'\t'"${${candidates[i]#*$'\t'}%%$'\t'*}")
   done
+  (( ${#entries[@]} == 0 )) && { echo "中止。"; return 1; }
+  __gwt_remove_worktrees $force "${entries[@]}" && return 0
+
+  # ここから失敗リカバリ。--force で実行済みなら再試行しても無駄なので抜ける。
+  local -a failed=("${__gwt_failed[@]}")
+  (( force )) && return 1
+  (( ${#failed[@]} == 0 )) && return 1
+  __gwt_retry_force $all "${failed[@]}"
+}
+
+# __gwt_remove_worktrees <force> <entry...>   entry = `path \t branch`
+# 1 件ごとに [n/N] の進捗行を出し、最後に集計を出す。途中で失敗しても止めず、
+# 失敗理由（git のエラー）を 1 行に畳んで添える。失敗した entry は配列
+# __gwt_failed に残す（呼び出し側の --force 再試行で使う）。全部成功なら 0。
+__gwt_remove_worktrees() {
+  emulate -L zsh
+  local force=$1; shift
+  local -a entries=("$@") rm_opts
+  (( force )) && rm_opts=(--force)
+  typeset -ga __gwt_failed; __gwt_failed=()
+  local total=${#entries[@]} n=0 ok=0 ng=0 bw=0 e wtpath branch rmerr
+  for e in "${entries[@]}"; do
+    branch="${e#*$'\t'}"; (( ${#branch} > bw )) && bw=${#branch}
+  done
+  for e in "${entries[@]}"; do
+    wtpath="${e%%$'\t'*}"; branch="${e#*$'\t'}"
+    (( ++n ))
+    if rmerr=$(git worktree remove "${rm_opts[@]}" "$wtpath" 2>&1); then
+      (( ++ok ))
+      printf '[%d/%d] ✔ %-*s (%s)\n' $n $total $bw "$branch" "${wtpath/#$HOME/~}"
+    else
+      (( ++ng )); __gwt_failed+=("$e")
+      printf '[%d/%d] ✘ %-*s (%s)\n' $n $total $bw "$branch" "${wtpath/#$HOME/~}"
+      [[ -n "$rmerr" ]] && print -r -- "      → ${rmerr//$'\n'/ }"
+    fi
+  done
+  printf -- '---\n削除 %d 件 / 失敗 %d 件 (計 %d 件)\n' $ok $ng $total
+  (( ng == 0 ))
+}
+
+# __gwt_retry_force <all> <entry...>: 失敗した worktree を再選択し --force で削除し直す。
+# fzf があれば全選択済みの fzf（Esc で中止）、all=1 や fzf 無し・非 tty なら y/N 確認。
+__gwt_retry_force() {
+  emulate -L zsh
+  local all=$1; shift
+  local -a failed=("$@") retry rrows
+  local fi fbr fpt fw=6 fsel fk
+  for fi in "${failed[@]}"; do
+    fbr="${fi#*$'\t'}"; (( ${#fbr} > fw )) && fw=${#fbr}
+  done
+  for (( fk=1; fk<=${#failed[@]}; fk++ )); do
+    fpt="${failed[fk]%%$'\t'*}"; fbr="${failed[fk]#*$'\t'}"
+    rrows+=("$fk"$'\t'"$fbr"$'\t'"$fpt"$'\t'"$(printf '%-*s  %s' $fw "$fbr" "${fpt/#$HOME/~}")")
+  done
+  echo
+  if (( ! all )) && command -v fzf >/dev/null 2>&1 && [[ -t 0 ]]; then
+    fsel=$(printf '%s\n' "${rrows[@]}" | fzf --multi --ansi --delimiter=$'\t' --with-nth=4 \
+      --bind 'start:select-all' --bind 'ctrl-a:select-all' --bind 'ctrl-d:deselect-all' \
+      --header="$(printf '%-*s  %s' $fw BRANCH PATH)"$'\n'"失敗分を --force で再削除 / Tab:選択切替 / Enter:実行 / Esc:中止" \
+      --preview-window=right:55% \
+      --preview 'git -C {3} status --short --branch 2>/dev/null; echo; git -C {3} status --porcelain 2>/dev/null')
+    [[ -z "$fsel" ]] && { echo "再試行を中止。"; return 1; }
+    for fk in "${(@f)$(print -r -- "$fsel" | cut -f1)}"; do
+      [[ -n "$fk" ]] && retry+=("${failed[fk]}")
+    done
+  else
+    echo "以下を --force で再削除します（未コミットの変更ごと消えます）:"
+    for fi in "${rrows[@]}"; do print -r -- "  ${fi##*$'\t'}"; done
+    echo -n "続行しますか？ [y/N] "; local fans; read -r fans
+    [[ "$fans" == [yY] ]] || { echo "再試行を中止。"; return 1; }
+    retry=("${failed[@]}")
+  fi
+  (( ${#retry[@]} == 0 )) && { echo "再試行を中止。"; return 1; }
+  echo "--force で再削除します:"
+  __gwt_remove_worktrees 1 "${retry[@]}"
 }
 
 # brm: マージ済み / リモート削除済み(gone) のローカルブランチを掃除
