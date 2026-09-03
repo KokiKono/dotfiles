@@ -74,3 +74,21 @@ setup() {
         "${TESTHOME}/.zshrc" "${TESTHOME}/.config/zsh"
     [ "$status" -ne 0 ]
 }
+
+@test "apply: my-voice skill is deployed with its references" {
+    SKILL="${TESTHOME}/.claude/skills/my-voice"
+    [ -f "${SKILL}/SKILL.md" ]
+    [ -f "${SKILL}/references/slack-voice.md" ]
+    [ -f "${SKILL}/references/formal-voice.md" ]
+    [ -f "${SKILL}/references/pr-voice.md" ]
+    # frontmatter があり、スキル一覧に載る description が入っていること
+    grep -q '^name: my-voice$' "${SKILL}/SKILL.md"
+    grep -q '^description: ' "${SKILL}/SKILL.md"
+}
+
+@test "apply: my-voice references contain no internal identifiers" {
+    # public リポジトリなので実データの固有名詞・社内 URL が混入していないこと
+    run grep -rniE 'gritinc|progrit|slack\.com/archives|app\.notion\.com|notion\.so|docs\.google\.com|drive\.google\.com' \
+        "${TESTHOME}/.claude/skills/my-voice"
+    [ "$status" -ne 0 ]
+}
