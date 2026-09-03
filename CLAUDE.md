@@ -22,6 +22,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
+├── dot_claude/skills/my-voice/    # → ~/.claude/skills/my-voice/ (SKILL.md + references/{slack,formal,pr}-voice.md)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
@@ -117,6 +118,15 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `ES_JAVA_HOME` is derived from mise's `$JAVA_HOME`. The old `anyenv`/`nodenv`/`goenv`/`pyenv`/`rbenv`/`jenv`
   init lines and dead Intel-Homebrew (`/usr/local/opt/...`) / Volta paths were removed; those managers
   remain installed on disk (Brewfile) but are no longer initialized, so the switch is reversible.
+- **`home/dot_claude/skills/my-voice/`** is the only `~/.claude` content under chezmoi (other local
+  skills — `optimize-prompt`, `pr-screenshot` — remain untracked). It teaches Claude to write in the
+  author's voice, with one reference per medium: `slack-voice.md` (です/ます + 「！」+ 文末絵文字),
+  `formal-voice.md` (Notion 社内文書、常体・数字と表・「今回は着手しないもの」),
+  `pr-voice.md` (PR 本文、レビュワー確認ポイントを重い順に). The references are **distilled from real
+  Slack / Notion / GitHub content, and this repo is PUBLIC** — every proper noun, URL and concrete
+  number must be anonymized to `○○` / `△△` / `（リンク）` before it lands here. Edits don't reach
+  `~/.claude/skills/my-voice/` until `chezmoi apply`. `tests/files/apply.bats` guards both the
+  deployment and the anonymization.
 
 ## Secrets
 
