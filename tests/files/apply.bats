@@ -133,14 +133,13 @@ setup() {
     [ -x "${TESTHOME}/.claude/skills/pr-screenshot/scripts/capture-3widths.sh" ]
 }
 
-@test "apply: shared skill symlinks resolve into .agents/skills" {
-    for s in agent-browser design-doc-mermaid grill-me humanizer-ja show-me; do
-        [ -L "${TESTHOME}/.claude/skills/${s}" ]
-        # symlink 先の SKILL.md まで到達できること
-        [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
-        [ -f "${TESTHOME}/.agents/skills/${s}/SKILL.md" ]
+@test "apply: external skills are left to skills-lock.json, not deployed" {
+    # 外部スキルは install/macos/skills.sh が `npx skills add` で入れるので
+    # chezmoi は本体も symlink も配置しないこと
+    [ ! -e "${TESTHOME}/.agents/skills" ]
+    for s in agent-browser design-doc-mermaid grill-me humanizer-ja show-me herdr; do
+        [ ! -e "${TESTHOME}/.claude/skills/${s}" ]
     done
-    [ -f "${TESTHOME}/.agents/skills/find-skills/SKILL.md" ]
 }
 
 @test "apply: app configs are deployed" {

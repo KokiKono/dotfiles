@@ -1,0 +1,88 @@
+{
+  "version": 3,
+  "skills": {
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel-labs/skills.git",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "skillFolderHash": "3013fdeb8a11b10b1eb795ec3ae8bfca38f7c26d",
+      "installedAt": "2026-06-09T00:43:04.088Z",
+      "updatedAt": "2026-06-09T00:43:04.088Z"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/mattpocock/skills.git",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "skillFolderHash": "8320e7b87f7b208f50ce165b1dd43d1e93c8e801",
+      "pluginName": "mattpocock-skills",
+      "installedAt": "2026-07-07T02:15:05.205Z",
+      "updatedAt": "2026-07-07T02:15:05.205Z"
+    },
+    "herdr": {
+      "source": "ogulcancelik/herdr",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/ogulcancelik/herdr.git",
+      "skillPath": "SKILL.md",
+      "skillFolderHash": "8d2af4e046c2a95dfc54aafd6f88da12389d76e8",
+      "installedAt": "2026-07-07T02:53:07.110Z",
+      "updatedAt": "2026-07-17T08:41:20.805Z"
+    },
+    "humanizer-ja": {
+      "source": "gonta223/humanizer-ja",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/gonta223/humanizer-ja.git",
+      "skillPath": "SKILL.md",
+      "skillFolderHash": "a1e343696e43aa50e7218891f3319ab22cde3464",
+      "installedAt": "2026-07-07T23:50:43.668Z",
+      "updatedAt": "2026-07-07T23:50:43.668Z"
+    },
+    "design-doc-mermaid": {
+      "source": "spillwavesolutions/design-doc-mermaid",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/spillwavesolutions/design-doc-mermaid.git",
+      "skillPath": "SKILL.md",
+      "skillFolderHash": "e13f987306d5cd7a34f541927a3228343dd90e45",
+      "installedAt": "2026-07-08T02:49:59.589Z",
+      "updatedAt": "2026-07-08T02:49:59.589Z"
+    },
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel-labs/agent-browser.git",
+      "skillPath": "skills/agent-browser/SKILL.md",
+      "skillFolderHash": "037e8078db4b20b4aa25c04f21c6de7d335ec449",
+      "installedAt": "2026-08-06T00:54:55.356Z",
+      "updatedAt": "2026-08-06T00:54:55.356Z"
+    },
+    "show-me": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/humanlayer/skills.git",
+      "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
+      "skillFolderHash": "0bdb821a21e793a4f6f82a7078c052154447e5cc",
+      "installedAt": "2026-08-17T02:20:59.458Z",
+      "updatedAt": "2026-08-17T02:20:59.458Z"
+    }
+  },
+  "dismissed": {
+    "findSkillsPrompt": true
+  },
+  "lastSelectedAgents": [
+    "amp",
+    "antigravity",
+    "antigravity-cli",
+    "cline",
+    "codex",
+    "cursor",
+    "deepagents",
+    "gemini-cli",
+    "github-copilot",
+    "kimi-code-cli",
+    "opencode",
+    "warp",
+    "zed",
+    "claude-code"
+  ]
+}
