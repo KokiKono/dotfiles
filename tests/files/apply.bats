@@ -92,3 +92,87 @@ setup() {
         "${TESTHOME}/.claude/skills/my-voice"
     [ "$status" -ne 0 ]
 }
+
+@test "apply: claude global settings are deployed as valid json" {
+    [ -f "${TESTHOME}/.claude/settings.json" ]
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${TESTHOME}/.claude/settings.json"
+    [ -f "${TESTHOME}/.claude/.mcp.json" ]
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${TESTHOME}/.claude/.mcp.json"
+    [ -x "${TESTHOME}/.claude/statusline-command.sh" ]
+}
+
+@test "apply: claude hooks and scripts are deployed executable" {
+    for h in review-before-pr.sh herdr-agent-state.sh cbm-code-discovery-gate \
+             cbm-session-reminder cbm-subagent-reminder; do
+        [ -x "${TESTHOME}/.claude/hooks/${h}" ]
+    done
+    # permissions マージ用スクリプトは python3 で構文が通ること
+    for s in merge-local-permissions.py merge-worktree-permissions.py; do
+        [ -f "${TESTHOME}/.claude/scripts/${s}" ]
+        python3 -m py_compile "${TESTHOME}/.claude/scripts/${s}"
+    done
+}
+
+@test "apply: settings.json hooks point at deployed files" {
+    # settings.json が参照するフック/スクリプトが実際に配置されていること
+    for f in .claude/hooks/review-before-pr.sh .claude/hooks/herdr-agent-state.sh \
+             .claude/hooks/cbm-code-discovery-gate .claude/hooks/cbm-session-reminder \
+             .claude/hooks/cbm-subagent-reminder .claude/scripts/merge-local-permissions.py \
+             .claude/scripts/merge-worktree-permissions.py .claude/statusline-command.sh; do
+        grep -qF "$(basename "$f")" "${TESTHOME}/.claude/settings.json"
+        [ -f "${TESTHOME}/${f}" ]
+    done
+}
+
+@test "apply: local claude skills are deployed with frontmatter" {
+    for s in my-voice optimize-prompt pr-screenshot codebase-memory; do
+        [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
+        grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
+        grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
+    done
+    [ -x "${TESTHOME}/.claude/skills/pr-screenshot/scripts/capture-3widths.sh" ]
+}
+
+@test "apply: shared skill symlinks resolve into .agents/skills" {
+    for s in agent-browser design-doc-mermaid grill-me humanizer-ja show-me; do
+        [ -L "${TESTHOME}/.claude/skills/${s}" ]
+        # symlink 先の SKILL.md まで到達できること
+        [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
+        [ -f "${TESTHOME}/.agents/skills/${s}/SKILL.md" ]
+    done
+    [ -f "${TESTHOME}/.agents/skills/find-skills/SKILL.md" ]
+}
+
+@test "apply: app configs are deployed" {
+    [ -f "${TESTHOME}/.config/karabiner/karabiner.json" ]
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${TESTHOME}/.config/karabiner/karabiner.json"
+    [ -f "${TESTHOME}/.config/wezterm/wezterm.lua" ]
+    [ -f "${TESTHOME}/.config/zed/settings.json" ]
+    [ -f "${TESTHOME}/.config/zed/AGENTS.md" ]
+    [ -f "${TESTHOME}/.config/herdr/config.toml" ]
+    [ -f "${TESTHOME}/.config/gh/config.yml" ]
+    [ -f "${TESTHOME}/.config/git/ignore" ]
+    [ -f "${TESTHOME}/.codex/config.toml" ]
+    [ -f "${TESTHOME}/.codex/AGENTS.md" ]
+    [ -f "${TESTHOME}/.gemini/settings.json" ]
+    [ -f "${TESTHOME}/.cursor/skills-cursor/create-skill/SKILL.md" ]
+}
+
+@test "apply: codex config carries no machine-local trust state" {
+    # [projects.*] / [hooks.state] は新マシンで無意味なので持ち込まないこと
+    run grep -E '^\[(projects\.|hooks\.state)' "${TESTHOME}/.codex/config.toml"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: zprofile and zshenv are deployed" {
+    [ -f "${TESTHOME}/.zprofile" ]
+    grep -q "brew shellenv" "${TESTHOME}/.zprofile"
+    [ -f "${TESTHOME}/.zshenv" ]
+}
+
+@test "source tree contains no credentials" {
+    # public リポジトリなのでトークン・秘密鍵が混入していないこと
+    run grep -rIniE '(gho_|ghp_|ghu_|ghs_|github_pat_|npm_[A-Za-z0-9]{30}|sk-[A-Za-z0-9]{20}|AKIA[0-9A-Z]{16}|xox[baprs]-|-----BEGIN [A-Z ]*PRIVATE KEY|AIza[0-9A-Za-z_-]{30})' \
+        "${REPO_ROOT}/home"
+    [ "$status" -ne 0 ]
+}

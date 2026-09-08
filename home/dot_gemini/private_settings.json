@@ -1,0 +1,73 @@
+{
+  "hooks": {
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/gemini-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "echo 'Reminder: prefer codebase-memory-mcp search_graph/trace_path/get_code_snippet over grep/file search for code discovery.' \u003e\u00262",
+            "type": "command"
+          }
+        ],
+        "matcher": "google_search|grep_search"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "echo \"Code discovery: prefer codebase-memory-mcp (search_graph, trace_path, get_code_snippet, query_graph, search_code) over grep/file-read; run index_repository first if the project is not indexed.\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      }
+    ]
+  },
+  "mcpServers": {
+    "codebase-memory-mcp": {
+      "command": "/Users/kokikono/.local/bin/codebase-memory-mcp"
+    }
+  }
+}

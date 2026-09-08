@@ -1,0 +1,101 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "echo \"Code discovery: prefer codebase-memory-mcp (search_graph, trace_path, get_code_snippet, query_graph, search_code) over grep/file-read; run index_repository first if the project is not indexed.\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/codex-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/codex-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

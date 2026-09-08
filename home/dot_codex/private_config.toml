@@ -1,0 +1,8 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+[features]
+codex_hooks = true
+
+[mcp_servers.codebase-memory-mcp]
+command = "/Users/kokikono/.local/bin/codebase-memory-mcp"
