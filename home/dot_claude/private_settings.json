@@ -1,0 +1,341 @@
+{
+  "awsAuthRefresh": "aws sso login --profile claude",
+  "effortLevel": "medium",
+  "enabledPlugins": {
+    "chrome-devtools-mcp@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "humanizer@humanizer": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true
+  },
+  "env": {
+    "AWS_PROFILE": "claude",
+    "AWS_REGION": "ap-northeast-1",
+    "CLAUDE_CODE_USE_BEDROCK": "0"
+  },
+  "extraKnownMarketplaces": {
+    "anthropic-agent-skills": {
+      "source": {
+        "repo": "anthropics/skills",
+        "source": "github"
+      }
+    },
+    "chrome-devtools-plugins": {
+      "source": {
+        "repo": "ChromeDevTools/chrome-devtools-mcp",
+        "source": "github"
+      }
+    },
+    "clonable-eden-plugins": {
+      "source": {
+        "repo": "clonable-eden/plugins",
+        "source": "github"
+      }
+    },
+    "humanizer": {
+      "source": {
+        "repo": "blader/humanizer",
+        "source": "github"
+      }
+    }
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.claude/hooks/review-before-pr.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-code-discovery-gate",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Grep|Glob"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash '/Users/kokikono/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-session-reminder",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-session-reminder",
+            "type": "command"
+          }
+        ],
+        "matcher": "resume"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-session-reminder",
+            "type": "command"
+          }
+        ],
+        "matcher": "clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-session-reminder",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "python3 ~/.claude/scripts/merge-local-permissions.py",
+            "statusMessage": "permissions を settings.json にマージ中...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/cbm-subagent-reminder",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "command": "python3 ~/.claude/scripts/merge-worktree-permissions.py",
+            "statusMessage": "permissions.allow をマージ中...",
+            "timeout": 15,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "opus[1m]",
+  "permissions": {
+    "allow": [
+      "Search(*)",
+      "Bash(npx rulesync init)",
+      "Bash(npx rulesync:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:developers.google.com)",
+      "WebFetch(domain:api.appstoreconnect.apple.com)",
+      "WebFetch(domain:appstoreconnect.apple.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.runway.team)",
+      "WebFetch(domain:devcenter.bitrise.io)",
+      "WebFetch(domain:docs.bitrise.io)",
+      "WebFetch(domain:api-docs.bitrise.io)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:sarunw.com)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "WebFetch(domain:swagger.io)",
+      "WebFetch(domain:npm.js.org)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:blog.bitrise.io)",
+      "WebFetch(domain:bitrise.io)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(cd:*)",
+      "Bash(pwd:*)",
+      "Bash(date:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(test:*)",
+      "Bash(export:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree:*)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:appsmith.io)",
+      "WebFetch(domain:n8n.io)",
+      "WebFetch(domain:zapier.com)",
+      "WebFetch(domain:rapidapi.com)",
+      "WebFetch(domain:npm.im)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:www.simpleisbetterthancomplex.com)",
+      "WebFetch(domain:www.hackingwithswift.com)",
+      "WebFetch(domain:fastlane.tools)"
+    ],
+    "defaultMode": "auto",
+    "deny": [
+      "Read(credentials/)"
+    ]
+  },
+  "sandbox": {
+    "enabled": false,
+    "excludedCommands": [
+      "gh"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "~/.gnupg"
+      ]
+    },
+    "network": {
+      "allowUnixSockets": [
+        "~/.gnupg/S.gpg-agent",
+        "~/.gnupg/S.keyboxd"
+      ]
+    }
+  },
+  "skipAutoPermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "statusLine": {
+    "command": "bash /Users/kokikono/.claude/statusline-command.sh",
+    "type": "command"
+  },
+  "tui": "fullscreen"
+}

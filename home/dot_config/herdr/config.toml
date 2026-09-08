@@ -1,0 +1,25 @@
+onboarding = false
+[ui]
+agent_panel_sort = "priority"
+
+show_agent_labels_on_pane_borders = true
+[ui.toast]
+delivery = "off"
+
+[experimental]
+pane_history = true
+
+# herdr-kanban: prefix(Ctrl+B) → Shift+K で Kanban ボードを開く。
+# インストール済みプラグイン(kokikono.herdr-kanban)の open アクションを呼ぶ。
+[[keys.command]]
+key = "prefix+shift+k"
+type = "plugin_action"
+command = "kokikono.herdr-kanban.open"
+description = "open kanban board"
+
+# herdr-file-viewer
+# https://github.com/smarzban/herdr-file-viewer
+[[keys.command]]
+key = "prefix+shift+f"
+type = "shell"
+command = "herdr plugin action invoke open-file-viewer-tab --plugin herdr-file-viewer"

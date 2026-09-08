@@ -22,7 +22,11 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
-├── dot_claude/skills/my-voice/    # → ~/.claude/skills/my-voice/ (SKILL.md + references/{slack,formal,pr}-voice.md)
+├── dot_claude/                    # → ~/.claude/ (settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
+├── dot_agents/skills/             # → ~/.agents/skills/ (共有スキル本体。dot_claude/skills の symlink 先)
+├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
+├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
+├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
@@ -76,10 +80,22 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages (~110 formulae/casks). Regenerate with
-  `brew bundle dump --force`. `chezmoi` and `bats-core` are included.
-- **`install/macos/vscode-extensions.txt`** is the extension list. Update with
-  `code --list-extensions > install/macos/vscode-extensions.txt`.
+- **`Brewfile`** is the source of truth for installed packages: 18 `tap`, 156 `brew`, 34 `cask`,
+  9 `mas` (Mac App Store — needs `brew "mas"`, which is in the file), 5 `npm`, 3 `go`, 54 `vscode`.
+  `chezmoi` and `bats-core` are included. Regenerate with:
+
+  ```
+  grep -E '^vscode ' Brewfile > /tmp/vscode-block.txt      # ← 先に退避
+  brew bundle dump --force --no-vscode
+  grep -v '^#' Brewfile | cat -s > /tmp/bf && mv /tmp/bf Brewfile   # describe コメントを落とす
+  printf '\n' >> Brewfile && cat /tmp/vscode-block.txt >> Brewfile
+  ```
+
+  **`--no-vscode` を必ず付けること。** `brew bundle dump` は `code --list-extensions` の結果で
+  `vscode` 行を上書きするので、拡張が入っていない環境（プロファイルが空、`code` CLI が無い等）で
+  素朴に dump すると 54 行の拡張リストが消える。同じ理由で `install/macos/vscode-extensions.txt`
+  も `code --list-extensions` が空でないことを確認してから更新する
+  (`code --list-extensions > install/macos/vscode-extensions.txt`)。
 - **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
   `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; candidates are shown in an
   aligned STATE/BRANCH/PATH table in `fzf --multi`, **all pre-selected** (`start:select-all`), so
@@ -118,8 +134,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `ES_JAVA_HOME` is derived from mise's `$JAVA_HOME`. The old `anyenv`/`nodenv`/`goenv`/`pyenv`/`rbenv`/`jenv`
   init lines and dead Intel-Homebrew (`/usr/local/opt/...`) / Volta paths were removed; those managers
   remain installed on disk (Brewfile) but are no longer initialized, so the switch is reversible.
-- **`home/dot_claude/skills/my-voice/`** is the only `~/.claude` content under chezmoi (other local
-  skills — `optimize-prompt`, `pr-screenshot` — remain untracked). It teaches Claude to write in the
+- **`home/dot_claude/skills/my-voice/`** teaches Claude to write in the
   author's voice, with one reference per medium: `slack-voice.md` (です/ます + 「！」+ 文末絵文字),
   `formal-voice.md` (Notion 社内文書、常体・数字と表・「今回は着手しないもの」),
   `pr-voice.md` (PR 本文、レビュワー確認ポイントを重い順に). The references are **distilled from real
@@ -127,6 +142,27 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   number must be anonymized to `○○` / `△△` / `（リンク）` before it lands here. Edits don't reach
   `~/.claude/skills/my-voice/` until `chezmoi apply`. `tests/files/apply.bats` guards both the
   deployment and the anonymization.
+- **Agent CLI config is tracked too.** `home/dot_claude/` carries `settings.json` (permissions /
+  hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`,
+  `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
+  (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Local skills
+  (`optimize-prompt`, `pr-screenshot`, `codebase-memory`) are real dirs; the shared ones
+  (`agent-browser`, `design-doc-mermaid`, `grill-me`, `humanizer-ja`, `show-me`) are chezmoi
+  `symlink_*` entries pointing into `home/dot_agents/skills/`, which holds the actual `SKILL.md`.
+  `~/.agents/skills/herdr` is **deliberately untracked** (36MB, brew-managed). If you add a hook or
+  script referenced from `settings.json`, add it to `home/dot_claude/` too — `apply.bats` asserts
+  every name mentioned in `settings.json` is actually deployed.
+- **These files are rewritten by the apps themselves**, so `chezmoi status` will show drift over
+  time: `.claude/settings.json` (Claude Code writes model/plugin/permission changes),
+  `.codex/config.toml`, `.gemini/settings.json`, `.config/zed/settings.json`. Resolve with
+  `chezmoi re-add <path>` (adopt the live version) rather than `chezmoi apply`. `dot_codex/config.toml`
+  intentionally drops codex's `[projects.*]` / `[hooks.state]` blocks — machine-local trust state
+  that is meaningless on a new machine (and would leak private repo paths into this PUBLIC repo);
+  `apply.bats` guards that.
+- **Not tracked on purpose** (needs manual backup before a machine reset): `~/.pzshrc`, `~/.npmrc`
+  (contains live tokens), `~/.ssh`, `~/.gnupg`, `~/.aws/config`, `~/.config/gh/hosts.yml`,
+  `~/.config/gcloud`, `~/.config/op`, and `~/Library/Preferences/com.googlecode.iterm2.plist`
+  (binary, rewritten on every iTerm2 quit).
 
 ## Secrets
 
