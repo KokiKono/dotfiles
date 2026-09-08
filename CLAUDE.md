@@ -23,7 +23,6 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_claude/                    # → ~/.claude/ (settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
-├── dot_agents/skills/             # → ~/.agents/skills/ (共有スキル本体。dot_claude/skills の symlink 先)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
@@ -32,8 +31,9 @@ home/                              # chezmoi source (rendered into $HOME)
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,mise,ohmyzsh,nodenv,vscode}.sh
+└── macos/{brew,mise,ohmyzsh,nodenv,vscode,skills}.sh
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
+install/macos/skills-lock.json      # `npx skills` の lock のコピー（skills.sh が復元に使う）
 tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
 ├── install/macos/*.bats           # unit tests for each install script
@@ -75,7 +75,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,mise,ohmyzsh,nodenv,vscode}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,mise,ohmyzsh,nodenv,vscode,skills}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -145,13 +145,30 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 - **Agent CLI config is tracked too.** `home/dot_claude/` carries `settings.json` (permissions /
   hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`,
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
-  (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Local skills
-  (`optimize-prompt`, `pr-screenshot`, `codebase-memory`) are real dirs; the shared ones
-  (`agent-browser`, `design-doc-mermaid`, `grill-me`, `humanizer-ja`, `show-me`) are chezmoi
-  `symlink_*` entries pointing into `home/dot_agents/skills/`, which holds the actual `SKILL.md`.
-  `~/.agents/skills/herdr` is **deliberately untracked** (36MB, brew-managed). If you add a hook or
-  script referenced from `settings.json`, add it to `home/dot_claude/` too — `apply.bats` asserts
-  every name mentioned in `settings.json` is actually deployed.
+  (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
+  **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
+  `codebase-memory`). If you add a hook or script referenced from `settings.json`, add it to
+  `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
+  deployed.
+- **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
+  `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
+  [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
+  コピーを **`install/macos/skills-lock.json`** に置き、`install/macos/skills.sh` が各エントリを
+  `npx -y skills@latest add <source> -g -s <name> -a claude-code -y` で復元する（導入済みは
+  スキップ、失敗しても他を止めない）。台帳の更新は:
+
+  ```
+  cp ~/.agents/.skill-lock.json install/macos/skills-lock.json
+  ```
+
+  `skills experimental_install` は **project スコープの `skills-lock.json` 用**でグローバル
+  (`~/.agents/.skill-lock.json`) は読まないので、復元はこのスクリプトが担う。なお現行 CLI
+  (1.5.24) は `~/.claude/skills/<name>/SKILL.md` に実ファイルを書く。この Mac に残っている
+  `~/.claude/skills/x -> ~/.agents/skills/x` の symlink 構成は**旧版の名残**なので、新マシンでは
+  再現されない（そのため chezmoi では symlink を追跡していない）。
+  **残るリスク:** upstream が消えるとスキルも失われる。`grill-me` / `humanizer-ja` などは個人
+  リポジトリなので、内容に依存しているものは自前スキルとして `home/dot_claude/skills/` に
+  取り込むほうが安全。
 - **These files are rewritten by the apps themselves**, so `chezmoi status` will show drift over
   time: `.claude/settings.json` (Claude Code writes model/plugin/permission changes),
   `.codex/config.toml`, `.gemini/settings.json`, `.config/zed/settings.json`. Resolve with
