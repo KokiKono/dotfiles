@@ -1,4 +1,3 @@
-tap "elastic/tap", trusted: true
 tap "getsentry/tools", trusted: true
 tap "grishka/grishka", trusted: true
 tap "gromgit/fuse", trusted: true
@@ -6,14 +5,11 @@ tap "hamed-elfayome/claude-usage"
 tap "hashicorp/tap"
 tap "hiro-o918/tap"
 tap "homebrew-ffmpeg/ffmpeg"
-tap "homebrew/bundle"
-tap "homebrew/services"
 tap "ngrok/ngrok"
 tap "nodenv/nodenv", trusted: true
 tap "rcmdnk/file", trusted: true
 tap "remotemobprogramming/brew"
 tap "satococoa/tap"
-tap "solaoi/tap"
 tap "stablyai/orca"
 tap "stripe/stripe-cli"
 brew "actionlint"
@@ -100,7 +96,6 @@ brew "libfido2"
 brew "libraw"
 brew "librist"
 brew "libvorbis"
-brew "mas"
 brew "mcp-toolbox"
 brew "mecab"
 brew "mecab-ipadic"
@@ -127,7 +122,6 @@ brew "pinact"
 brew "pinentry-mac"
 brew "pipx"
 brew "pnpm"
-brew "postgresql@13", restart_service: :changed
 brew "postgresql@14", restart_service: :changed
 brew "putty"
 brew "pwgen"
@@ -151,7 +145,6 @@ brew "strands-agents-sops"
 brew "swagger-codegen"
 brew "tesseract"
 brew "texi2html"
-brew "tflint"
 brew "theora"
 brew "tmux"
 brew "tree"
@@ -173,13 +166,10 @@ brew "nodenv/nodenv/node-build-update-defs"
 brew "rcmdnk/file/brew-file"
 brew "satococoa/tap/wtp", trusted: true
 cask "1password-cli"
-cask "adoptopenjdk"
 cask "alfred"
 cask "alt-tab"
-cask "authy"
 cask "aws-vault-binary"
 cask "barrier"
-cask "chromedriver"
 cask "claude-code"
 cask "hamed-elfayome/claude-usage/claude-usage-tracker", trusted: true
 cask "codex"
@@ -206,23 +196,11 @@ cask "timer"
 cask "visual-studio-code"
 cask "wezterm"
 cask "zoom"
-mas "keymapp", id: 6472865291
-mas "Keynote", id: 409183694
-mas "Kindle", id: 302584613
-mas "Numbers", id: 409203825
-mas "Pages", id: 409201541
-mas "Spark", id: 1176895641
-mas "Toggl Track", id: 1291898086
-mas "Windows App", id: 1295203466
-mas "Xcode", id: 497799835
 go "golang.org/x/tools/gopls"
-go "github.com/twitchtv/twirp-ruby/protoc-gen-twirp_ruby"
 go "honnef.co/go/tools/cmd/staticcheck"
 npm "@google/clasp"
 npm "@playwright/cli"
-npm "agent-browser"
 npm "chrome-devtools-mcp"
-npm "corepack"
 
 vscode "arahata.linter-actionlint"
 vscode "arcanis.vscode-zipfs"
