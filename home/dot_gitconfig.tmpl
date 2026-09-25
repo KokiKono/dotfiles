@@ -3,12 +3,15 @@
 [user]
 	name = {{ .name }}
 	email = {{ .email }}
-	signingKey = C84E50F83C8B8E39
 [core]
 	excludesfile = {{ .chezmoi.homeDir }}/.gitignore_global
 	pager = cat
 [gpg]
 	program = gpg
+; 署名鍵の ID はマシンごとに異なるので install/macos/gpg.sh が下の include 先に書き出す
+; （未作成なら git は黙って無視する）
+[include]
+	path = {{ .chezmoi.homeDir }}/.config/git/signing.conf
 [commit]
 	gpgsign = true
 	template = {{ .chezmoi.homeDir }}/.stCommitMsg

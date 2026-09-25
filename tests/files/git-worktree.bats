@@ -50,7 +50,7 @@ setup() {
 @test "git-worktree.zsh: __gwt_remove_worktrees reports progress and keeps failures for retry" {
     repo="${BATS_TEST_TMPDIR}/repo"
     git init -q "$repo"
-    git -C "$repo" -c user.email=a@b -c user.name=a commit -q --allow-empty -m init
+    git -C "$repo" -c user.email=a@b -c user.name=a -c commit.gpgsign=false commit -q --allow-empty -m init
     git -C "$repo" branch clean-wt
     git -C "$repo" branch dirty-wt
     git -C "$repo" worktree add -q "${BATS_TEST_TMPDIR}/wt-clean" clean-wt

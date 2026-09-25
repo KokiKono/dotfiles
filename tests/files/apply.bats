@@ -29,6 +29,12 @@ setup() {
     [ -f "${TESTHOME}/.gitconfig" ]
     grep -q "name = KokiKono" "${TESTHOME}/.gitconfig"
     grep -q "email = kono.koki.pg@gmail.com" "${TESTHOME}/.gitconfig"
+    # 署名鍵はマシン固有なので include に逃がしてあること（この repo は PUBLIC）
+    grep -q "config/git/signing.conf" "${TESTHOME}/.gitconfig"
+    run grep -qE "^[[:space:]]*signingKey" "${TESTHOME}/.gitconfig"
+    [ "$status" -ne 0 ]
+    run grep -q "C84E50F83C8B8E39" "${TESTHOME}/.gitconfig"
+    [ "$status" -ne 0 ]
     # no unrendered template syntax left
     run grep -F '{{' "${TESTHOME}/.gitconfig"
     [ "$status" -ne 0 ]
