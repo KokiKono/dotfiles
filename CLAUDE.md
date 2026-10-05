@@ -130,9 +130,24 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   worktrees + one batched `gh pr list` per repo + parallel scan; tune with `WGS_MAX`/`WGS_LIMIT`; cleanup is
   still per-repo `wrm`). All need `fzf` (except `wgs`); `wrm`/`wgs` need `gh`. Worktree **create/switch**
   stays with `wtp`. The default branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
+- **`hello-run`** (`home/dot_config/zsh/hello-run.zsh`, sourced by `dot_zshrc` after `git-worktree.zsh`)
+  builds a whole work environment from a GitHub issue: it resolves the issue, has haiku guess a slug,
+  creates one worktree per repo under `<root>/.sessions/issue-<N>/`, lays out a herdr tab with a pane
+  per repo, and launches `claude` in the main pane. Needs `herdr` (`HERDR_ENV=1`), `wt`, `gh`, `jq`.
+  Two things to know when editing:
+  - **The target org/repos are NOT in this repo** — it is PUBLIC. `HELLO_RUN_ROOT` /
+    `HELLO_RUN_ISSUE_REPO` / `HELLO_RUN_REPOS` default to empty and the real values live in
+    `~/.pzshrc` (untracked; `dot_zshrc` sources it *before* `hello-run.zsh`, so the `${VAR:-}`
+    defaults pick them up). `hello-run` errors out with a pointer to `~/.pzshrc` if they are unset,
+    and `apply.bats` asserts no org/repo name leaks into the deployed file.
+  - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
+    `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
+    therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
+    `__hr_default_branch` via `origin/HEAD` → main/master). Base and branch names differ, so the new
+    branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
-  `git-worktree.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
+  `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
   `tools.zsh`=env/PATH + mise + wtp + gcloud. **The Rancher Desktop managed block and the `~/.pzshrc`
   source stay inline in `dot_zshrc`** (Rancher rewrites its block in `~/.zshrc` directly — keep it there
   to avoid re-injection/drift). Add new shell config to the matching module, not to `dot_zshrc`.

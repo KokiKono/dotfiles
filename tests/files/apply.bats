@@ -62,12 +62,33 @@ setup() {
     [ -f "${TESTHOME}/.config/zsh/aliases.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/tools.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/git-worktree.zsh" ]
+    [ -f "${TESTHOME}/.config/zsh/hello-run.zsh" ]
 }
 
 @test "apply: zshrc is a thin loader sourcing the modules" {
     grep -q 'source $ZSH/oh-my-zsh.sh' "${TESTHOME}/.zshrc"
     grep -q 'ZSH_CONF_DIR' "${TESTHOME}/.zshrc"
     grep -q 'git-worktree.zsh' "${TESTHOME}/.zshrc"
+    grep -q 'hello-run.zsh' "${TESTHOME}/.zshrc"
+}
+
+@test "apply: hello-run has no hardcoded org or repo names" {
+    # public リポジトリなので勤務先の org/repo 名は既定値に持たず ~/.pzshrc から読むこと。
+    # 名前そのものをここに書くと本末転倒なので「既定値が空であること」を検査する。
+    HR="${TESTHOME}/.config/zsh/hello-run.zsh"
+    grep -q 'HELLO_RUN_ROOT="${HELLO_RUN_ROOT:-}"' "${HR}"
+    grep -q 'HELLO_RUN_ISSUE_REPO="${HELLO_RUN_ISSUE_REPO:-}"' "${HR}"
+    # HELLO_RUN_REPOS は typeset のみで、既定のリポジトリ名を代入していないこと
+    run grep -E '^HELLO_RUN_REPOS=\(' "${HR}"
+    [ "$status" -ne 0 ]
+    grep -q 'pzshrc' "${HR}"
+}
+
+@test "apply: hello-run creates worktrees from the fetched default branch" {
+    # wt は fetch せず base もローカルのデフォルトブランチなので、古い base から
+    # 枝が生えないよう fetch と --base origin/<default> が入っていること
+    grep -q 'fetch --prune origin' "${TESTHOME}/.config/zsh/hello-run.zsh"
+    grep -q -- '--base "origin/\$base"' "${TESTHOME}/.config/zsh/hello-run.zsh"
 }
 
 @test "apply: mise activate lives in tools module (not inline in zshrc)" {
