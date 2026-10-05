@@ -28,4 +28,7 @@ export PATH="~/.rd/bin:$PATH"
 
 # git worktree / branch クリーンアップ関数（wrm/brm/bd）
 [ -r "$ZSH_CONF_DIR/git-worktree.zsh" ] && source "$ZSH_CONF_DIR/git-worktree.zsh"
+
+# issue からタスク環境を立ち上げる（hello-run）。対象 org/repo は ~/.pzshrc で設定する
+[ -r "$ZSH_CONF_DIR/hello-run.zsh" ] && source "$ZSH_CONF_DIR/hello-run.zsh"
 unset _m
