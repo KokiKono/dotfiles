@@ -130,6 +130,27 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "skills-db: show truncates long notes and --full keeps them" {
+    bash "${DB_SCRIPT}" init
+    long="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"   # 60 chars
+    bash "${DB_SCRIPT}" upsert ruby topic junior "${long}" "PR #1" language
+    run bash "${DB_SCRIPT}" show ruby
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"${long}"* ]]
+    [[ "$output" == *"…"* ]]
+    run bash "${DB_SCRIPT}" show --full ruby
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"${long}"* ]]
+    # メモは一番右の列に置く（長くても他の列が崩れないように）
+    [[ "$output" =~ 出典[[:space:]]+メモ ]]
+}
+
+@test "skills-db: show rejects an unknown option" {
+    bash "${DB_SCRIPT}" init
+    run bash "${DB_SCRIPT}" show --nope
+    [ "$status" -ne 0 ]
+}
+
 @test "skills-db: show on an empty db does not fail" {
     bash "${DB_SCRIPT}" init
     run bash "${DB_SCRIPT}" show

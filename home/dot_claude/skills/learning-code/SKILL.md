@@ -31,8 +31,9 @@ scripts/skills-db.sh init    # 冪等。まず必ず走らせる
 ## 1. ダッシュボード
 
 ```bash
-scripts/skills-db.sh show            # 全体
-scripts/skills-db.sh show <領域>      # 1 領域の項目一覧
+scripts/skills-db.sh show                 # 全体
+scripts/skills-db.sh show <領域>           # 1 領域の項目一覧（メモは 40 字で切り詰め）
+scripts/skills-db.sh show --full <領域>    # 判定根拠を全文で見る
 ```
 
 出力をそのまま貼り、下に **3 行だけ**所見を足す: 弱い領域、放置が長い項目、次にやるとよいこと。

@@ -116,10 +116,20 @@ cmd_due() {
     ' --arg d "${1:-}" "${DB}"
 }
 
-# show [domain] — 領域一覧、または 1 領域の項目一覧
+# show [--full] [domain] — 領域一覧、または 1 領域の項目一覧
+# メモ（判定根拠）は長くなって表を崩すので既定では切り詰める。--full で全文。
+NOTE_MAX=40
 cmd_show() {
     require_db
-    local domain="${1:-}"
+    local full=0 domain=""
+    while (( $# )); do
+        case "$1" in
+            --full) full=1 ;;
+            -*) die "unknown option: $1" ;;
+            *) domain="$1" ;;
+        esac
+        shift
+    done
     if [[ -z "${domain}" ]]; then
         echo "## 習熟度サマリ"
         echo
@@ -158,16 +168,19 @@ cmd_show() {
         jq -r "${JQ_LIB}"'
           now as $now
           | .domains[$d] as $v
-          | (["項目","レベル","最終評価","経過日数","メモ","出典"] | @tsv),
+          | (["項目","レベル","最終評価","経過日数","出典","メモ"] | @tsv),
             (($v.items // [])
              | sort_by(.level|rank)
              | .[]
              | [.topic, (.level|ja), .last_tested,
                 (.last_tested | days_since($now) | tostring),
-                (if (.note // "") == "" then "-" else .note end),
-                (if (.source // "") == "" then "-" else .source end)]
+                (if (.source // "") == "" then "-" else .source end),
+                (.note // "" | if . == "" then "-"
+                 elif $full == 1 or length <= $max then .
+                 else .[0:($max - 1)] + "…" end)]
              | @tsv)
-        ' --arg d "${domain}" "${DB}" | column -t -s "$(printf '\t')"
+        ' --arg d "${domain}" --argjson full "${full}" --argjson max "${NOTE_MAX}" \
+          "${DB}" | column -t -s "$(printf '\t')"
     fi
 }
 
@@ -178,7 +191,7 @@ usage() {
 usage: skills-db.sh <command> [args]
 
   init                                             雛形から ~/.learning/skills.json を作る（冪等）
-  show [domain]                                    習熟度を表で出す
+  show [--full] [domain]                           習熟度を表で出す（--full で判定根拠を全文表示）
   upsert <domain> <topic> <level> [note] [source] [kind]
                                                    1 項目を記録する（level: beginner|junior|senior|professional）
   due [domain]                                     再出題対象を TSV で返す
