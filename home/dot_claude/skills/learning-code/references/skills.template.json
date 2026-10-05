@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "profile": {
+    "baseline": "基本情報技術者 / Web 業界 10 年",
+    "known_stack": ["react", "typescript", "laravel", "mysql"]
+  },
+  "updated_at": null,
+  "domains": {}
+}
