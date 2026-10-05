@@ -151,6 +151,35 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "skills-db: init creates the input_logs directory" {
+    bash "${DB_SCRIPT}" init
+    [ -d "${LEARNING_HOME}/input_logs" ]
+    run bash "${DB_SCRIPT}" logs-dir
+    [ "$status" -eq 0 ]
+    [ "$output" = "${LEARNING_HOME}/input_logs" ]
+}
+
+@test "skills-db: tested lists only items measured on the given day" {
+    bash "${DB_SCRIPT}" init
+    bash "${DB_SCRIPT}" upsert jq today_topic beginner "stuck here" "PR #24" language
+    bash "${DB_SCRIPT}" upsert jq old_topic senior "" "PR #1"
+    jq '(.domains.jq.items[] | select(.topic == "old_topic")).last_tested = "2020-01-01"' "${DB}" \
+        > "${BATS_TEST_TMPDIR}/t.json"
+    mv -f "${BATS_TEST_TMPDIR}/t.json" "${DB}"
+    # 既定は今日
+    run bash "${DB_SCRIPT}" tested
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"today_topic"* ]]
+    [[ "$output" != *"old_topic"* ]]
+    # 判定の根拠も返す（COB の振り返りで使う）
+    [[ "$output" == *"stuck here"* ]]
+    # 日付を指定できる
+    run bash "${DB_SCRIPT}" tested 2020-01-01
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"old_topic"* ]]
+    [[ "$output" != *"today_topic"* ]]
+}
+
 @test "skills-db: show on an empty db does not fail" {
     bash "${DB_SCRIPT}" init
     run bash "${DB_SCRIPT}" show

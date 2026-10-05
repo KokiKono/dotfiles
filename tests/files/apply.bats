@@ -142,7 +142,7 @@ setup() {
 @test "apply: learning-code skill is deployed with references and script" {
     SKILL="${TESTHOME}/.claude/skills/learning-code"
     for f in references/levels.md references/quiz.md references/schema.md \
-             references/skills.template.json; do
+             references/cob.md references/skills.template.json; do
         [ -f "${SKILL}/${f}" ]
     done
     [ -x "${SKILL}/scripts/skills-db.sh" ]

@@ -12,6 +12,7 @@ set -Eeuo pipefail
 
 LEARNING_HOME="${LEARNING_HOME:-${HOME}/.learning}"
 DB="${LEARNING_HOME}/skills.json"
+LOGS_DIR="${LEARNING_HOME}/input_logs"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="${SCRIPT_DIR}/../references/skills.template.json"
 
@@ -46,7 +47,7 @@ write_db() {
 }
 
 cmd_init() {
-    mkdir -p "${LEARNING_HOME}"
+    mkdir -p "${LEARNING_HOME}" "${LOGS_DIR}"
     if [[ -f "${DB}" ]]; then
         echo "exists: ${DB}"
         return 0
@@ -184,7 +185,23 @@ cmd_show() {
     fi
 }
 
+# tested [YYYY-MM-DD] — その日に出題した項目を TSV で返す（既定は今日）。COB の振り返りに使う
+cmd_tested() {
+    require_db
+    jq -r "${JQ_LIB}"'
+      .domains | to_entries[]
+      | .key as $dom
+      | (.value.items // [])[]
+      | select(.last_tested == $day)
+      | [$dom, .topic, .level, (.last_judged // .level), (.note // ""), (.source // "")]
+      | @tsv
+    ' --arg day "${1:-$(today)}" "${DB}"
+}
+
 cmd_path() { echo "${DB}"; }
+
+# logs-dir — 解説ログ（input_logs）の置き場を出す。無ければ作る
+cmd_logs_dir() { mkdir -p "${LOGS_DIR}"; echo "${LOGS_DIR}"; }
 
 usage() {
     cat <<'USAGE'
@@ -195,7 +212,9 @@ usage: skills-db.sh <command> [args]
   upsert <domain> <topic> <level> [note] [source] [kind]
                                                    1 項目を記録する（level: beginner|junior|senior|professional）
   due [domain]                                     再出題対象を TSV で返す
+  tested [YYYY-MM-DD]                              その日に出題した項目を TSV で返す（既定は今日）
   path                                             DB のパスを出す
+  logs-dir                                         解説ログ（input_logs）の置き場を出す
 
 環境変数 LEARNING_HOME でデータ置き場を差し替えられる（既定 ~/.learning）。
 USAGE
@@ -209,7 +228,9 @@ main() {
         show)   cmd_show "$@" ;;
         upsert) cmd_upsert "$@" ;;
         due)    cmd_due "$@" ;;
+        tested) cmd_tested "$@" ;;
         path)   cmd_path "$@" ;;
+        logs-dir) cmd_logs_dir "$@" ;;
         ""|-h|--help|help) usage ;;
         *) usage >&2; exit 1 ;;
     esac
