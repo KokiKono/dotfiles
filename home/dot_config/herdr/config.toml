@@ -9,17 +9,11 @@ delivery = "off"
 [experimental]
 pane_history = true
 
-# herdr-kanban: prefix(Ctrl+B) → Shift+K で Kanban ボードを開く。
-# インストール済みプラグイン(kokikono.herdr-kanban)の open アクションを呼ぶ。
+# hello-run: prefix(Ctrl+B) → Shift+H で issue ピッカーを popup で開く。
+# 自作プラグイン kokikono.hello-run の pane を開くだけ（keys に plugin_pane 型が無いので shell 経由）。
+# プラグインの登録は install/macos/herdr.sh が `herdr plugin link` で行う。
 [[keys.command]]
-key = "prefix+shift+k"
-type = "plugin_action"
-command = "kokikono.herdr-kanban.open"
-description = "open kanban board"
-
-# herdr-file-viewer
-# https://github.com/smarzban/herdr-file-viewer
-[[keys.command]]
-key = "prefix+shift+f"
+key = "prefix+shift+h"
 type = "shell"
-command = "herdr plugin action invoke open-file-viewer-tab --plugin herdr-file-viewer"
+command = "herdr plugin pane open --plugin kokikono.hello-run --entrypoint pick"
+description = "hello-run: issue を選んで作業環境を作る"

@@ -107,6 +107,50 @@ setup() {
     grep -q -- '--base "origin/\$base"' "${TESTHOME}/.config/zsh/hello-run.zsh"
 }
 
+@test "apply: hello-run herdr plugin is deployed and runnable" {
+    PLUGIN="${TESTHOME}/.config/herdr/plugins/hello-run"
+    [ -f "${PLUGIN}/herdr-plugin.toml" ]
+    [ -x "${PLUGIN}/pick.zsh" ]
+    run zsh -n "${PLUGIN}/pick.zsh"
+    [ "$status" -eq 0 ]
+    # マニフェストが起動するスクリプトが実在すること（argv の末尾がパス）
+    run python3 -c "
+import sys, tomllib
+m = tomllib.load(open(sys.argv[1], 'rb'))
+pane = m['panes'][0]
+print(m['id'], pane['command'][-1])
+" "${PLUGIN}/herdr-plugin.toml"
+    [ "$status" -eq 0 ]
+    [ -f "${PLUGIN}/$(echo "$output" | cut -d' ' -f2)" ]
+}
+
+@test "apply: herdr keybinding points at the hello-run plugin that ships here" {
+    # config.toml のキーバインドとマニフェストの id / entrypoint がずれていないこと
+    run python3 -c "
+import sys, tomllib
+m = tomllib.load(open(sys.argv[1], 'rb'))
+cfg = tomllib.load(open(sys.argv[2], 'rb'))
+want_ids = {m['id']}
+pane_ids = {p['id'] for p in m['panes']}
+cmds = [k.get('command', '') for k in cfg.get('keys', {}).get('command', [])]
+hit = [c for c in cmds if m['id'] in c]
+assert hit, f'no keybinding invokes {m[\"id\"]}: {cmds}'
+for c in hit:
+    ep = c.split('--entrypoint', 1)[1].split()[0]
+    assert ep in pane_ids, f'unknown entrypoint {ep} (have {pane_ids})'
+" "${TESTHOME}/.config/herdr/plugins/hello-run/herdr-plugin.toml" \
+  "${TESTHOME}/.config/herdr/config.toml"
+    [ "$status" -eq 0 ]
+}
+
+@test "apply: hello-run plugin has no hardcoded org or repo names" {
+    # hello-run 本体と同じ理由（public リポジトリ）。対象は ~/.pzshrc から読むこと
+    PICK="${TESTHOME}/.config/herdr/plugins/hello-run/pick.zsh"
+    grep -q 'pzshrc' "${PICK}"
+    run grep -E 'HELLO_RUN_(ROOT|ISSUE_REPO|REPOS)=[^"$]' "${PICK}"
+    [ "$status" -ne 0 ]
+}
+
 @test "apply: mise activate lives in tools module (not inline in zshrc)" {
     grep -q 'mise activate zsh' "${TESTHOME}/.config/zsh/tools.zsh"
 }

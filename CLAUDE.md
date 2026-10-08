@@ -24,14 +24,14 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
-├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
+├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 install/macos/skills-lock.json      # `npx skills` の lock のコピー（skills.sh が復元に使う）
 tests/
@@ -76,7 +76,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -145,6 +145,26 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
     `__hr_default_branch` via `origin/HEAD` → main/master). Base and branch names differ, so the new
     branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
+- **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
+  (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
+  issue を `fzf` で選ぶと `hello-run <N>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）と
+  `pick.zsh`（実装）だけ。知っておくこと:
+  - **placement は `popup`**。overlay / split は普通のペインなので閉じるときに元のペインへ
+    フォーカスを戻し、`hello-run` が最後に行う `herdr tab focus` と競合する。popup はペインでは
+    なくセッション単位のモーダルなのでこれが起きない。
+  - **起動は `["zsh", "-l", "pick.zsh"]`**。herdr はシェルを介さず argv を exec するので、
+    `~/.zprofile`（brew shellenv）を読ませて `gh`/`fzf`/`wt` を PATH に乗せるために `-l` が要る。
+    `-l` は `~/.zshrc` を読まないので、`pick.zsh` は `~/.pzshrc`（`HELLO_RUN_*`）と
+    `~/.config/zsh/hello-run.zsh`（関数本体）を自分で source する。
+  - **キーバインドは `type = "shell"`**。`keys.command` には `plugin_action` 型しか無く
+    plugin pane を直に開く型が無いので `herdr plugin pane open --plugin ... --entrypoint pick`
+    を叩く。`[keys.command]` 自体にも `type = "popup"` があるのでプラグインを介さずキーだけで
+    同じことはできるが、ログ (`herdr plugin log`) と config ディレクトリが付くプラグイン側を採った。
+  - 登録は `install/macos/herdr.sh` が `herdr plugin link ~/.config/herdr/plugins/<name>` で行う
+    （`install` ではなく `link` — 本体はこのリポジトリが持つので herdr 側にチェックアウトを
+    作らせない）。プラグインを足したらこのスクリプトの `HERDR_PLUGINS` にも足すこと。
+    `config.toml` を変えたら `herdr server reload-config`。
+  - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
