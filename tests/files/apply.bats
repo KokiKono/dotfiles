@@ -111,7 +111,11 @@ setup() {
     PLUGIN="${TESTHOME}/.config/herdr/plugins/hello-run"
     [ -f "${PLUGIN}/herdr-plugin.toml" ]
     [ -x "${PLUGIN}/pick.zsh" ]
+    # pick.zsh は fzf の reload バインドから issues.zsh を叩くので、両方揃って動く
+    [ -x "${PLUGIN}/issues.zsh" ]
     run zsh -n "${PLUGIN}/pick.zsh"
+    [ "$status" -eq 0 ]
+    run zsh -n "${PLUGIN}/issues.zsh"
     [ "$status" -eq 0 ]
     # マニフェストが起動するスクリプトが実在すること（argv の末尾がパス）
     run python3 -c "
@@ -145,9 +149,9 @@ for c in hit:
 
 @test "apply: hello-run plugin has no hardcoded org or repo names" {
     # hello-run 本体と同じ理由（public リポジトリ）。対象は ~/.pzshrc から読むこと
-    PICK="${TESTHOME}/.config/herdr/plugins/hello-run/pick.zsh"
-    grep -q 'pzshrc' "${PICK}"
-    run grep -E 'HELLO_RUN_(ROOT|ISSUE_REPO|REPOS)=[^"$]' "${PICK}"
+    PLUGIN="${TESTHOME}/.config/herdr/plugins/hello-run"
+    grep -q 'pzshrc' "${PLUGIN}/pick.zsh"
+    run grep -E 'HELLO_RUN_(ROOT|ISSUE_REPO|REPOS)=[^"$]' "${PLUGIN}/pick.zsh" "${PLUGIN}/issues.zsh"
     [ "$status" -ne 0 ]
 }
 

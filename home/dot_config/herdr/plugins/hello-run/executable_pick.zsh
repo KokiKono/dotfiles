@@ -36,24 +36,20 @@ done
 [[ -n ${HELLO_RUN_ISSUE_REPO:-} ]] \
   || die "HELLO_RUN_ISSUE_REPO が未設定です。$HELLO_RUN_PRIVATE_RC に書いてください"
 
-# issue 一覧を "番号<TAB>タイトル<TAB>担当" の TSV で吐くコマンド文字列。
-# fzf の reload バインドに埋め込むので、シェルが再解釈できる形で組み立てる。
-typeset -r jq_tsv='.[] | [(.number|tostring), .title, ((.assignees|map(.login)|join(",")) // "-")] | @tsv'
-issue_query() {
-  # $1 は gh へ足す絞り込み（このファイル内のリテラルのみ。外部入力は渡さない）
-  print -r -- "gh issue list --repo ${(q)HELLO_RUN_ISSUE_REPO} --state open --limit ${(q)HELLO_RUN_LIMIT} ${1-} --json number,title,assignees | jq -r ${(q)jq_tsv}"
-}
-typeset -r q_mine=$(issue_query '--assignee @me')
-typeset -r q_all=$(issue_query)
+# issue 一覧は issues.zsh が吐く。fzf の reload バインドからも同じものを呼ぶ
+# （--bind はコンマでバインドを区切るので、jq を直接埋めると壊れる。issues.zsh 冒頭参照）。
+typeset -r issues=${0:A:h}/issues.zsh
+[[ -x $issues ]] || die "issues.zsh が見つかりません: $issues"
+export HELLO_RUN_ISSUE_REPO HELLO_RUN_LIMIT
 
 # 自分の issue を先に見せる。0 件なら黙って全 open issue に切り替える
 # （空の fzf を出して ctrl-a を押させるより親切）。
 typeset initial scope
-initial=$(eval "$q_mine") || die "gh issue list に失敗しました"
+initial=$("$issues" mine) || die "gh issue list に失敗しました"
 if [[ -n $initial ]]; then
   scope="自分の issue"
 else
-  initial=$(eval "$q_all") || die "gh issue list に失敗しました"
+  initial=$("$issues" all) || die "gh issue list に失敗しました"
   scope="全 issue（自分にアサインされた open issue は無し）"
 fi
 [[ -n $initial ]] || die "open な issue がありません: $HELLO_RUN_ISSUE_REPO"
@@ -64,8 +60,8 @@ selected=$(
     --delimiter=$'\t' --with-nth=1,2,3 \
     --prompt='issue> ' \
     --header=$"${HELLO_RUN_ISSUE_REPO}  —  ${scope}  |  enter: 作業環境を作る / ctrl-a: 全 issue / ctrl-o: 自分の issue" \
-    --bind="ctrl-a:reload($q_all)" \
-    --bind="ctrl-o:reload($q_mine)" \
+    --bind="ctrl-a:reload(${(q)issues} all)" \
+    --bind="ctrl-o:reload(${(q)issues} mine)" \
     --preview="gh issue view {1} --repo ${(q)HELLO_RUN_ISSUE_REPO}" \
     --preview-window='right,55%,wrap'
 )

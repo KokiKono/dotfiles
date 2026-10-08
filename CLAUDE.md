@@ -147,8 +147,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
-  issue を `fzf` で選ぶと `hello-run <N>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）と
-  `pick.zsh`（実装）だけ。知っておくこと:
+  issue を `fzf` で選ぶと `hello-run <N>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
+  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）。知っておくこと:
+  - **`gh` のクエリを `pick.zsh` に inline せず `issues.zsh` に分けてあるのは、fzf の `--bind` が
+    コンマでバインドを区切るから。** jq のフィルタを `reload(...)` に直接埋めると中のコンマが
+    区切りとして食われ、fzf が起動時に `bind action not specified` で rc=2 即死する。popup が
+    一瞬開いて閉じる症状になり、`pick.zsh` 側は「選択なし」として 0 で終わるので気づきにくい。
+    `tests/herdr/hello-run-plugin.bats` が `reload()` の中のコンマを見張っている。
   - **placement は `popup`**。overlay / split は普通のペインなので閉じるときに元のペインへ
     フォーカスを戻し、`hello-run` が最後に行う `herdr tab focus` と競合する。popup はペインでは
     なくセッション単位のモーダルなのでこれが起きない。
