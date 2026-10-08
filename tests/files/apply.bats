@@ -152,7 +152,8 @@ setup() {
 }
 
 @test "apply: local claude skills are deployed with frontmatter" {
-    for s in my-voice optimize-prompt pr-screenshot codebase-memory learning-code; do
+    for s in my-voice optimize-prompt pr-screenshot codebase-memory learning-code \
+             ubiquitous-language; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -170,6 +171,24 @@ setup() {
     # 雛形は空の状態で配られること（個人の学習データは ~/.learning 側にしか置かない）
     python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['domains'] == {}" \
         "${SKILL}/references/skills.template.json"
+}
+
+@test "apply: ubiquitous-language skill is deployed with its references" {
+    SKILL="${TESTHOME}/.claude/skills/ubiquitous-language"
+    [ -f "${SKILL}/SKILL.md" ]
+    [ -f "${SKILL}/references/schema.md" ]
+    [ -f "${SKILL}/references/judgment.md" ]
+    grep -q '^name: ubiquitous-language$' "${SKILL}/SKILL.md"
+    grep -q '^description: ' "${SKILL}/SKILL.md"
+    # 追記先の設定は追跡外。chezmoi が配ってしまっていないこと
+    [ ! -e "${TESTHOME}/.claude/ubiquitous-language.local.json" ]
+}
+
+@test "apply: ubiquitous-language skill leaks no workspace identifiers" {
+    # public リポジトリなので、社内の固有名詞・Notion の ID/URL が混入していないこと
+    run grep -rniE 'gritinc|progrit|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}' \
+        "${TESTHOME}/.claude/skills/ubiquitous-language"
+    [ "$status" -ne 0 ]
 }
 
 @test "apply: external skills are left to skills-lock.json, not deployed" {
