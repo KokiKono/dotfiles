@@ -194,6 +194,15 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。
+- **`home/dot_claude/skills/dev-server/`** は herdr の `dev` label の tab を1つだけ持ち、アプリごとに
+  pane を分けて dev サーバーを起動・再利用・停止する運用スキル（`HERDR_ENV=1` 前提）。**追跡するのは
+  `SKILL.md` だけで、`references/` は追跡しない。** そこに置くのは「どのアプリをどのコマンドで、
+  どのポートで起動するか」という業務リポジトリ固有の表で、アプリ名・内部 URL・環境変数名が並ぶ —
+  このリポジトリは PUBLIC なので置けない。匿名化すると「推測せず表を引く」という表の役目自体が
+  成立しないため、`my-voice` のように `○○` へ置換する手も使えない。`chezmoi apply` は source に
+  無いファイルを消さないので、`~/.claude/skills/dev-server/references/*.md` は手で置いたまま残る
+  （マシン入れ替え前に手でバックアップすること）。表に何を書くかは `SKILL.md` に明記してあり、
+  `apply.bats` は `references/` が配られないことを検査する。
 - **Agent CLI config is tracked too.** `home/dot_claude/` carries the **global instructions**
   (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
   Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
@@ -202,7 +211,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `codebase-memory`, `learning-code`, `ubiquitous-language`). If you add a hook or script referenced from `settings.json`, add it to
+  `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -238,7 +247,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   (the learning-code skill's mastery data and explanation logs — personal, and this repo is PUBLIC;
   only the empty template ships; see the learning-code entry above),
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
-  search hints — workspace-specific, and this repo is PUBLIC), and `~/Library/Preferences/com.googlecode.iterm2.plist`
+  search hints — workspace-specific, and this repo is PUBLIC),
+  `~/.claude/skills/dev-server/references/` (per-repo start commands / ports / internal URLs — see
+  the dev-server entry below), and `~/Library/Preferences/com.googlecode.iterm2.plist`
   (binary, rewritten on every iTerm2 quit).
 
 ## Secrets

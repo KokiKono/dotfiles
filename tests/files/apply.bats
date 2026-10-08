@@ -181,12 +181,23 @@ setup() {
 
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot codebase-memory learning-code \
-             ubiquitous-language; do
+             ubiquitous-language dev-server; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
     done
     [ -x "${TESTHOME}/.claude/skills/pr-screenshot/scripts/capture-3widths.sh" ]
+}
+
+@test "apply: dev-server ships no repo-specific reference tables" {
+    SKILL="${TESTHOME}/.claude/skills/dev-server"
+    # リポジトリ固有の表（アプリ名・内部 URL・ポート）は public なここに置かない。
+    # 表の中身そのものを書くと本末転倒なので、references/ が配られないことを検査する
+    [ ! -d "${SKILL}/references" ]
+    # 表の置き場と、置くべき内容は SKILL.md 側に残っていること
+    grep -q 'references/' "${SKILL}/SKILL.md"
+    # herdr 前提のスキルなので、外で動かせないことを明示していること
+    grep -q 'HERDR_ENV' "${SKILL}/SKILL.md"
 }
 
 @test "apply: learning-code skill is deployed with references and script" {
