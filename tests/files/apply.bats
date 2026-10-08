@@ -40,6 +40,22 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "apply: gitconfig wires up delta as the pager" {
+    # delta (brew git-delta) をページャに使う。tty のときだけ効くので非対話実行には影響しない
+    grep -qE "^[[:space:]]*pager = delta$" "${TESTHOME}/.gitconfig"
+    grep -qE "^[[:space:]]*diffFilter = delta --color-only$" "${TESTHOME}/.gitconfig"
+    grep -qE "^[[:space:]]*conflictStyle = zdiff3$" "${TESTHOME}/.gitconfig"
+    # git が設定として読めること（セクション名の綴り間違いを拾う）
+    run git config --file "${TESTHOME}/.gitconfig" --get core.pager
+    [ "$status" -eq 0 ]
+    [ "$output" = "delta" ]
+    run git config --file "${TESTHOME}/.gitconfig" --get interactive.diffFilter
+    [ "$status" -eq 0 ]
+    [ "$output" = "delta --color-only" ]
+    # Brewfile に git-delta があること（無いと新マシンでページャが起動しない）
+    grep -qE '^brew "git-delta"' "${REPO_ROOT}/Brewfile"
+}
+
 @test "apply: ~/.gitignore_global is deployed" {
     [ -f "${TESTHOME}/.gitignore_global" ]
     grep -q ".DS_Store" "${TESTHOME}/.gitignore_global"
