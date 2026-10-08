@@ -22,7 +22,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
-├── dot_claude/                    # → ~/.claude/ (settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
+├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
@@ -183,14 +183,18 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   (`tests/claude/skills-db.bats`)。出題内容は著者の前提（基本情報技術者 / Web 10 年 /
   react・typescript・laravel・mysql は既知）を踏まえて未知の領域だけに絞る設計で、その前提は
   `references/levels.md` に書いてある。
-- **Agent CLI config is tracked too.** `home/dot_claude/` carries `settings.json` (permissions /
+- **Agent CLI config is tracked too.** `home/dot_claude/` carries the **global instructions**
+  (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
+  Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
+  `settings.json` (permissions /
   hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`,
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
   `codebase-memory`, `learning-code`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
-  deployed.
+  deployed. The global instructions are for **any** project, so keep employer/project-specific rules
+  out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
