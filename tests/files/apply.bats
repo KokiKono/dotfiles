@@ -128,6 +128,18 @@ setup() {
     [ -x "${TESTHOME}/.claude/statusline-command.sh" ]
 }
 
+@test "apply: claude global instructions are deployed" {
+    # CLAUDE.md は AGENTS.md を読み込むだけの薄いファイル（実体は AGENTS.md 側）
+    [ -f "${TESTHOME}/.claude/CLAUDE.md" ]
+    grep -qF '@AGENTS.md' "${TESTHOME}/.claude/CLAUDE.md"
+    [ -f "${TESTHOME}/.claude/AGENTS.md" ]
+    [ -s "${TESTHOME}/.claude/AGENTS.md" ]
+    # PUBLIC リポジトリなので社名・private な URL が漏れていないこと
+    run grep -rniE 'gritinc|progrit|slack\.com/archives|app\.notion\.com|notion\.so|docs\.google\.com|drive\.google\.com' \
+        "${TESTHOME}/.claude/CLAUDE.md" "${TESTHOME}/.claude/AGENTS.md"
+    [ "$status" -ne 0 ]
+}
+
 @test "apply: claude hooks and scripts are deployed executable" {
     for h in review-before-pr.sh herdr-agent-state.sh cbm-code-discovery-gate \
              cbm-session-reminder cbm-subagent-reminder; do

@@ -22,7 +22,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
-├── dot_claude/                    # → ~/.claude/ (settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
+├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
@@ -188,19 +188,24 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   なので、記録する / しないの線引き (`references/judgment.md`) がこのスキルの本体で、DB の
   プロパティと本文テンプレは `references/schema.md` にある。書き込みは Notion MCP 経由のみで
   `scripts/` は持たない。**追記先の Notion DB ID は追跡しない** — `~/.claude/ubiquitous-language.local.json`
-  （非追跡）に `database_id` / `glossary_search_hints` / `dry_run` を置き、スキルは起動時にそれを読む。
+  （非追跡）に `database_url` / `data_source_url` / `glossary_search_hints` / `dry_run` を置き、
+  スキルは起動時にそれを読む。
   設定が無ければ `setup` モードで DB を作るところから始まる。`dry_run: true` のあいだは Notion に
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。
-- **Agent CLI config is tracked too.** `home/dot_claude/` carries `settings.json` (permissions /
+- **Agent CLI config is tracked too.** `home/dot_claude/` carries the **global instructions**
+  (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
+  Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
+  `settings.json` (permissions /
   hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`,
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
   `codebase-memory`, `learning-code`, `ubiquitous-language`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
-  deployed.
+  deployed. The global instructions are for **any** project, so keep employer/project-specific rules
+  out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
