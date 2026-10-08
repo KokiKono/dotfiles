@@ -5,7 +5,8 @@
 	email = {{ .email }}
 [core]
 	excludesfile = {{ .chezmoi.homeDir }}/.gitignore_global
-	pager = cat
+	; delta は tty のときだけページャとして動く（非対話実行では素通りする）
+	pager = delta
 [gpg]
 	program = gpg
 ; 署名鍵の ID はマシンごとに異なるので install/macos/gpg.sh が下の include 先に書き出す
@@ -35,3 +36,11 @@
 	autoSetupRemote = true
 [init]
 	defaultBranch = main
+; git-delta（Brewfile 済み）。無い環境では git がページャの起動に失敗するだけで、
+; 設定自体は無害
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+[merge]
+	conflictStyle = zdiff3
