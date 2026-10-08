@@ -1,0 +1,66 @@
+#!/usr/bin/env bats
+
+load ../test_helper
+
+SRC="home/dot_config/zsh/hello-run.zsh"
+
+setup() {
+    command -v zsh >/dev/null 2>&1 || skip "zsh not installed"
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    HR="${REPO_ROOT}/${SRC}"
+    STUB="${BATS_TEST_TMPDIR}/bin"
+    mkdir -p "${STUB}"
+}
+
+# workspace w1 / w2 を持ち、w2 にだけ issue-42 のタブがある herdr を装う
+stub_herdr() {
+    cat >"${STUB}/herdr" <<'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "workspace list")
+    echo '{"result":{"workspaces":[{"workspace_id":"w1"},{"workspace_id":"w2"}]}}' ;;
+  "tab list")
+    if [[ "$*" == *"--workspace w2"* ]]; then
+      echo '{"result":{"tabs":[{"tab_id":"w2:tA","label":"issue-42"}]}}'
+    else
+      echo '{"result":{"tabs":[{"tab_id":"w1:tA","label":"something-else"}]}}'
+    fi ;;
+  *) echo '{}' ;;
+esac
+EOF
+    chmod +x "${STUB}/herdr"
+}
+
+run_fn() {
+    run env PATH="${STUB}:${PATH}" zsh -c "source '${HR}'; $1"
+}
+
+@test "hello-run.zsh: valid zsh syntax" {
+    run zsh -n "${HR}"
+    [ "$status" -eq 0 ]
+}
+
+@test "__hr_find_tab: finds a tab living in another workspace" {
+    # タブは作ったときの workspace に残るので、現在の workspace だけ見ると
+    # 既にあるタブを見落として二重に作ってしまう
+    stub_herdr
+    run_fn '__hr_find_tab issue-42'
+    [ "$status" -eq 0 ]
+    [[ "$output" == "w2"$'\t'"w2:tA" ]]
+}
+
+@test "__hr_find_tab: fails when no workspace has the label" {
+    stub_herdr
+    run_fn '__hr_find_tab issue-999'
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "hello-run: focuses the owning workspace before the tab" {
+    # 別 workspace のタブには tab focus だけでは移れない
+    grep -q 'herdr workspace focus "$tab_ws"' "${HR}"
+    grep -q '__hr_find_tab "$label"' "${HR}"
+    # 現在の workspace 固定の探索に戻っていないこと
+    run grep -- 'tab list --workspace "${HERDR_WORKSPACE_ID}"' "${HR}"
+    [ "$status" -ne 0 ]
+}

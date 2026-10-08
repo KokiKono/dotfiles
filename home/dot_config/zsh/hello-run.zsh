@@ -352,6 +352,25 @@ __hr_build_tab() {
 # `agent start` は「入力可能になるまで」待つので、claude が初回の信頼確認ダイアログ
 # （新しいディレクトリで出る）で止まると起動済みでも非 0 を返す。その場合は agent 検出で
 # 起動成功とみなす。ペインの shell 起動中（agent_pane_busy）は数回リトライ。
+# __hr_find_tab <label> → "<workspace_id><TAB><tab_id>"。無ければ 1 を返す。
+# 現在の workspace だけでなく全部を見る。issue のタブは、それを作ったときに居た
+# workspace に残るので、別の workspace から hello-run を叩くと現在の workspace には
+# 無い。そこで見つけ損なうと、既にあるのに同じラベルのタブをもう 1 つ作ってしまう。
+__hr_find_tab() {
+  emulate -L zsh
+  local label=$1 ws tab
+  for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
+    [[ -n $ws ]] || continue
+    tab=$(herdr tab list --workspace "$ws" 2>/dev/null \
+            | jq -r --arg l "$label" '.result.tabs[]? | select(.label==$l) | .tab_id' | head -1)
+    if [[ -n $tab ]]; then
+      print -r -- "$ws"$'\t'"$tab"
+      return 0
+    fi
+  done
+  return 1
+}
+
 __hr_start_agent() {
   emulate -L zsh
   local label=$1 main_pane=$2 plan=$3
@@ -442,9 +461,11 @@ hello-run() {
   fi
 
   # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）
-  local tab_id
-  tab_id=$(herdr tab list --workspace "${HERDR_WORKSPACE_ID}" 2>/dev/null \
-            | jq -r --arg l "$label" '.result.tabs[]? | select(.label==$l) | .tab_id' | head -1)
+  local tab_id="" tab_ws="" found
+  if found=$(__hr_find_tab "$label"); then
+    tab_ws=${found%%$'\t'*}
+    tab_id=${found##*$'\t'}
+  fi
   if [[ -n $tab_id && -d "$sdir/${HELLO_RUN_REPOS[1]}" ]]; then
     local cur_branch
     cur_branch=$(git -C "$sdir/${HELLO_RUN_REPOS[1]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -452,8 +473,13 @@ hello-run() {
     __hr_ui_box "$label" \
       branch  "${cur_branch:-?}" \
       session "${sdir/#$HOME/~}" \
-      tab     "$tab_id  ($panes)"
-    (( focus )) && herdr tab focus "$tab_id" >/dev/null
+      tab     "$tab_id  ($panes)${${tab_ws:#${HERDR_WORKSPACE_ID}}:+  @$tab_ws}"
+    if (( focus )); then
+      # tab focus だけでは別 workspace のタブに移れないので先に workspace を切り替える
+      [[ -n $tab_ws && $tab_ws != ${HERDR_WORKSPACE_ID} ]] \
+        && herdr workspace focus "$tab_ws" >/dev/null
+      herdr tab focus "$tab_id" >/dev/null
+    fi
     return 0
   fi
 

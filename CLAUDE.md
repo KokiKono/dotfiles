@@ -140,6 +140,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `~/.pzshrc` (untracked; `dot_zshrc` sources it *before* `hello-run.zsh`, so the `${VAR:-}`
     defaults pick them up). `hello-run` errors out with a pointer to `~/.pzshrc` if they are unset,
     and `apply.bats` asserts no org/repo name leaks into the deployed file.
+  - **既存タブの探索は全 workspace。** タブはそれを作ったときに居た workspace に残るので、
+    別の workspace から `hello-run` を叩くと現在の workspace には無い。`__hr_find_tab` が
+    `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
+    `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
+    これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
   - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
     `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
@@ -155,6 +160,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
     `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
     `--with-nth=2,3,4` で見せていない。
+  - **一覧の先頭に作業環境の有無を出す**（`●` タブまである / `○` worktree だけ / `・` なし）。
+    判定は hello-run が見るのと同じ `<root>/.sessions/issue-<N>` と `issue-<N>` ラベルのタブ。
+    **タブは全 workspace を走査する** — hello-run 側と揃えないと印と挙動がずれる。桁揃えは
+    fzf がやってくれないので `issues.zsh` が 1 列に組み立て、fzf には `--with-nth=2` で渡す。
   - **fzf は `--disabled` で絞り込みを切ってある。** 候補が十数件で検索が要らないのと、
     切ると ctrl 無しの素のキー（`r` = 再取得）をバインドできるため（`ctrl-r` は端末側の
     履歴検索と当たる）。打った文字が入力欄に残るのを `change:clear-query` で消している。

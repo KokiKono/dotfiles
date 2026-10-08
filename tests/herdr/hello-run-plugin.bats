@@ -49,21 +49,67 @@ setup() {
     [[ "$output" == *"HELLO_RUN_ISSUE_ORG"* ]]
 }
 
-@test "issues.zsh: emits url/repo/number/title TSV" {
+@test "issues.zsh: emits url in column 1 and one aligned display column" {
     command -v jq >/dev/null 2>&1 || skip "jq not installed"
     STUB="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "${STUB}"
     cat >"${STUB}/gh" <<'EOF'
 #!/usr/bin/env bash
-echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"a"},"number":12,"title":"hello"},
-       {"url":"https://github.com/org/b/issues/34","repository":{"name":"b"},"number":34,"title":"world"}]'
+echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"short"},"number":12,"title":"hello"},
+       {"url":"https://github.com/org/b/issues/3456","repository":{"name":"much-longer-name"},"number":3456,"title":"world"}]'
 EOF
     chmod +x "${STUB}/gh"
     run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
     [ "$status" -eq 0 ]
     # 1 列目は URL。番号はリポジトリ間で一意でないので hello-run には URL を渡す
-    [[ "$output" == *"https://github.com/org/a/issues/12	a	12	hello"* ]]
-    [[ "$output" == *"https://github.com/org/b/issues/34	b	34	world"* ]]
+    [[ "${lines[0]}" == "https://github.com/org/a/issues/12	"* ]]
+    [[ "${lines[1]}" == "https://github.com/org/b/issues/3456	"* ]]
+    # 2 列目は fzf にそのまま見せる桁揃え済みの 1 列。タイトルの開始位置が揃うこと
+    first="${lines[0]#*	}"; second="${lines[1]#*	}"
+    pre1="${first%%hello*}"; pre2="${second%%world*}"
+    [ "${pre1}" != "${first}" ]
+    [ "${#pre1}" -eq "${#pre2}" ]
+}
+
+@test "issues.zsh: marks what already exists (tab / worktree / nothing)" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    STUB="${BATS_TEST_TMPDIR}/bin"
+    ROOT="${BATS_TEST_TMPDIR}/root"
+    mkdir -p "${STUB}" "${ROOT}/.sessions/issue-12" "${ROOT}/.sessions/issue-34"
+    cat >"${STUB}/gh" <<'EOF'
+#!/usr/bin/env bash
+echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"a"},"number":12,"title":"tab もある"},
+       {"url":"https://github.com/org/a/issues/34","repository":{"name":"a"},"number":34,"title":"worktree だけ"},
+       {"url":"https://github.com/org/a/issues/56","repository":{"name":"a"},"number":56,"title":"まだ何も無い"}]'
+EOF
+    # issue-12 のタブだけが、しかも別の workspace にある
+    cat >"${STUB}/herdr" <<'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1"},{"workspace_id":"w2"}]}}' ;;
+  "tab list")
+    if [[ "$*" == *"--workspace w2"* ]]; then
+      echo '{"result":{"tabs":[{"tab_id":"w2:tA","label":"issue-12"}]}}'
+    else
+      echo '{"result":{"tabs":[]}}'
+    fi ;;
+  *) echo '{}' ;;
+esac
+EOF
+    chmod +x "${STUB}/gh" "${STUB}/herdr"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org HELLO_RUN_ROOT="${ROOT}"         zsh "${ISSUES}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"●"*"12"*"tab もある"* ]]
+    [[ "$output" == *"○"*"34"*"worktree だけ"* ]]
+    [[ "$output" == *"・"*"56"*"まだ何も無い"* ]]
+}
+
+@test "issues.zsh: looks for tabs in every workspace, not just the current one" {
+    # 印と hello-run の挙動を揃えるため。現在の workspace だけ見ると、別 workspace に
+    # あるタブを「無い」と表示してしまう
+    grep -q 'workspace list' "${ISSUES}"
+    run grep -- 'tab list --workspace "$HERDR_WORKSPACE_ID"' "${ISSUES}"
+    [ "$status" -ne 0 ]
 }
 
 @test "issues.zsh: searches the whole org for issues assigned to me" {

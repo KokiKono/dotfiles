@@ -43,7 +43,8 @@ HELLO_RUN_ISSUE_ORG="${HELLO_RUN_ISSUE_ORG:-${HELLO_RUN_ISSUE_REPO%%/*}}"
 # （--bind はコンマでバインドを区切るので、jq を直接埋めると壊れる。issues.zsh 冒頭参照）。
 typeset -r issues=${0:A:h}/issues.zsh
 [[ -x $issues ]] || die "issues.zsh が見つかりません: $issues"
-export HELLO_RUN_ISSUE_ORG HELLO_RUN_LIMIT
+# issues.zsh は印を付けるのに HELLO_RUN_ROOT（セッションの置き場）も見る
+export HELLO_RUN_ISSUE_ORG HELLO_RUN_LIMIT HELLO_RUN_ROOT
 
 # 一覧は自分にアサインされた open issue だけ。0 件なら作る対象が無いので終わる。
 typeset initial
@@ -51,7 +52,7 @@ initial=$("$issues") || die "gh search issues に失敗しました"
 [[ -n $initial ]] \
   || die "自分にアサインされた open issue がありません: $HELLO_RUN_ISSUE_ORG"
 
-# 1 列目の URL は hello-run に渡すためのもので、画面には出さない（--with-nth=2,3,4）。
+# 1 列目の URL は hello-run に渡すためのもので、画面には出さない（--with-nth=2）。
 #
 # --disabled で絞り込みを切ってある。候補は自分の issue だけで十数件なので検索が要らず、
 # 切ると ctrl 無しの素のキー（r）をバインドできる。ctrl-r は端末側の履歴検索と当たる。
@@ -59,9 +60,9 @@ initial=$("$issues") || die "gh search issues に失敗しました"
 typeset selected
 selected=$(
   print -r -- "$initial" | fzf \
-    --delimiter=$'\t' --with-nth=2,3,4 \
+    --delimiter=$'\t' --with-nth=2 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue  |  enter: 作業環境を作る / r: 再取得 / esc: 閉じる" \
+    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue   ● タブあり  ○ worktree のみ  ・なし\nenter: 開く / r: 再取得 / esc: 閉じる" \
     --disabled \
     --bind="r:reload(${(q)issues})" \
     --bind='change:clear-query' \
