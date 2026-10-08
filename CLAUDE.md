@@ -129,9 +129,44 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   worktrees + one batched `gh pr list` per repo + parallel scan; tune with `WGS_MAX`/`WGS_LIMIT`; cleanup is
   still per-repo `wrm`). All need `fzf` (except `wgs`); `wrm`/`wgs` need `gh`. Worktree **create/switch**
   stays with `wtp`. The default branch is auto-detected (`origin/HEAD` → main/master), so these work across repos.
+- **`hello-run` (task bootstrap)** lives in `home/dot_config/zsh/hello-run.zsh` (sourced by `dot_zshrc`
+  right after `git-worktree.zsh`). `hello-run <issue-url|番号> [--slug <slug>] [--prompt|--no-prompt] [--plan] [--no-focus]` が
+  ① issue タイトルを `gh` で取り、`claude -p --model claude-haiku-4-5-*` に kebab-case の slug を
+  推定させて `issue-<N>/<slug>` というブランチ名を決め（claude が無い/失敗なら `issue-<N>` に
+  フォールバック。slug 推定は**任意の便利機能**であって必須依存ではない。`--slug` を渡せば
+  推定を飛ばしてその値を使う — `__hr_sanitize_slug` が小文字化し英数字以外をハイフンに潰して
+  50 文字で切るので、`--slug 'SSR Modal Fix'` は `ssr-modal-fix` になる。英数字が 1 文字も
+  残らない場合（日本語だけ等）はエラーで止める）② `auto_reserve_front` と
+  `auto_reserve` の worktree を作り ③ herdr のタブ `issue-<N>` を「左 main / 右上 front / 右下 server」で
+  開き ④ main ペインで claude を起動する（`--plan` を付けると `claude --permission-mode plan`、
+  すなわち plan モードで起動する。claude 側の引数は `herdr agent start … -- <args>` で渡す）。
+  **worktree は wt のデフォルト（repo の兄弟 `<repo>.<branch>`）ではなく
+  `<root>/.sessions/issue-<N>/<repo>` にまとめる** — claude をその親で起動して全 worktree を横断
+  探索させるため。配置の変更は `command wt --config-set 'worktree-path="…"' switch --no-cd` で
+  **その呼び出しだけ**に効かせているので、手で叩く `wt switch` の既存配置（`hello-ai/<repo>.<branch>`）は
+  そのまま。`command wt` なのは worktrunk の zsh ラッパー（cd 誘導）を迂回するため。
+  既にブランチがあれば `--create` を外して再利用し、worktree/タブが既存なら作り直さず再利用する
+  （再開しても壊れない）。herdr は名前付きレイアウトを持たず二分木 split だけなので、
+  `pane split --direction right` → `--direction down` の 2 手でこの 3 ペイン構成を作る。
+  依存: `herdr`(要 `HERDR_ENV=1`)、`wt`、`gh`、`jq`、`git`。
+  上書き用の環境変数: `HELLO_RUN_ROOT`（既定 `~/git_clone/github.com/hello-ai`）、
+  `HELLO_RUN_REPOS`（配列）、`HELLO_RUN_ISSUE_REPO`、`HELLO_RUN_SLUG_MODEL`、
+  `HELLO_RUN_READY_TIMEOUT`（初期プロンプト送信前に claude の入力待ちを待つ ms、既定 120000）。
+  **進捗表示** は `__hr_ui_*` / `__hr_step` が担う。5 ステップのチェックリストを描き、実行中の行を
+  スピナーで回して ✔/✘ に書き換える。下請け（`wt` など）の出力は握り潰してログに退避し、
+  **失敗したときだけ**その行の下にインデントして展開する。カーソル移動は行数を数えた相対移動なので
+  **行が折り返すと崩れる** — `$COLUMNS` を見てラベルと補足を必ず 1 行に収める。`__hr_dwidth` は
+  日本語を 2 桁、ASCII と UI 記号（`__HR_NARROW`: スピナー・✔・罫線・…）を 1 桁として数える
+  （これらは East Asian Ambiguous で、ambiguous=narrow の端末を前提にしている）。
+  `[[ -t 1 ]]` でない、または `NO_COLOR` のときはエスケープを一切出さず素の行を追記するだけに
+  なる（`apply.bats` が制御文字の漏れを検査する）。`__hr_step` はコマンドをバックグラウンドで
+  走らせてスピナーを回す都合上、**戻り値はファイル経由で受け渡す**（サブシェルは親の変数を書けない）。
+  `--prompt` 無指定時の y/N 確認はチェックリストを描き始める前に済ませること（描画中に対話を挟むと
+  カーソル制御が破綻する）。
+  後片付けは各 repo で `wt remove` + `herdr tab close` + 空になった `.sessions/issue-<N>` の削除。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
-  `git-worktree.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
+  `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
   `tools.zsh`=env/PATH + mise + wtp + gcloud. **The Rancher Desktop managed block and the `~/.pzshrc`
   source stay inline in `dot_zshrc`** (Rancher rewrites its block in `~/.zshrc` directly — keep it there
   to avoid re-injection/drift). Add new shell config to the matching module, not to `dot_zshrc`.

@@ -62,12 +62,42 @@ setup() {
     [ -f "${TESTHOME}/.config/zsh/aliases.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/tools.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/git-worktree.zsh" ]
+    [ -f "${TESTHOME}/.config/zsh/hello-run.zsh" ]
 }
 
 @test "apply: zshrc is a thin loader sourcing the modules" {
     grep -q 'source $ZSH/oh-my-zsh.sh' "${TESTHOME}/.zshrc"
     grep -q 'ZSH_CONF_DIR' "${TESTHOME}/.zshrc"
     grep -q 'git-worktree.zsh' "${TESTHOME}/.zshrc"
+    grep -q 'hello-run.zsh' "${TESTHOME}/.zshrc"
+}
+
+@test "apply: hello-run module defines the hello-run function" {
+    grep -q '^hello-run()' "${TESTHOME}/.config/zsh/hello-run.zsh"
+}
+
+# --slug で渡した値はブランチ名に使える kebab-case に正規化される。
+@test "apply: hello-run normalizes an explicit slug" {
+    run zsh -c "source '${TESTHOME}/.config/zsh/hello-run.zsh'
+                __hr_sanitize_slug 'Feature/Issue 45183: Expo55'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "feature-issue-45183-expo55" ]
+
+    run zsh -c "source '${TESTHOME}/.config/zsh/hello-run.zsh'
+                __hr_sanitize_slug '---'"
+    [ "$status" -ne 0 ]
+}
+
+# 進捗表示は TTY のときだけ ANSI を使う。パイプや CI に制御文字が漏れないこと。
+@test "apply: hello-run emits no ANSI escapes when not a tty" {
+    run zsh -c "source '${TESTHOME}/.config/zsh/hello-run.zsh'
+                __hr_ui_init 'title' 'step one' 'step two'
+                __hr_ui_begin 1; __hr_ui_detail 'detail'; __hr_ui_done
+                __hr_ui_begin 2; __hr_ui_fail
+                __hr_ui_box box key value"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *$'\e'* ]]
+    [[ "$output" == *"[1/2] ok step one"* ]]
 }
 
 @test "apply: mise activate lives in tools module (not inline in zshrc)" {
