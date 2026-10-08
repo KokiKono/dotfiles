@@ -33,37 +33,43 @@ for c in gh fzf jq wt git herdr; do
 done
 (( ${#missing} )) && die "未インストール: ${missing[*]}"
 
-[[ -n ${HELLO_RUN_ISSUE_REPO:-} ]] \
-  || die "HELLO_RUN_ISSUE_REPO が未設定です。$HELLO_RUN_PRIVATE_RC に書いてください"
+# 検索は org 全体。org 名そのものは持たず、既定では ~/.pzshrc の
+# HELLO_RUN_ISSUE_REPO（<org>/<repo>）の所有者部分から取る。
+HELLO_RUN_ISSUE_ORG="${HELLO_RUN_ISSUE_ORG:-${HELLO_RUN_ISSUE_REPO%%/*}}"
+[[ -n $HELLO_RUN_ISSUE_ORG ]] \
+  || die "HELLO_RUN_ISSUE_ORG か HELLO_RUN_ISSUE_REPO を $HELLO_RUN_PRIVATE_RC に書いてください"
 
 # issue 一覧は issues.zsh が吐く。fzf の reload バインドからも同じものを呼ぶ
 # （--bind はコンマでバインドを区切るので、jq を直接埋めると壊れる。issues.zsh 冒頭参照）。
 typeset -r issues=${0:A:h}/issues.zsh
 [[ -x $issues ]] || die "issues.zsh が見つかりません: $issues"
-export HELLO_RUN_ISSUE_REPO HELLO_RUN_LIMIT
+export HELLO_RUN_ISSUE_ORG HELLO_RUN_LIMIT
 
 # 一覧は自分にアサインされた open issue だけ。0 件なら作る対象が無いので終わる。
 typeset initial
-initial=$("$issues") || die "gh issue list に失敗しました"
+initial=$("$issues") || die "gh search issues に失敗しました"
 [[ -n $initial ]] \
-  || die "自分にアサインされた open issue がありません: $HELLO_RUN_ISSUE_REPO"
+  || die "自分にアサインされた open issue がありません: $HELLO_RUN_ISSUE_ORG"
 
+# 1 列目の URL は hello-run に渡すためのもので、画面には出さない（--with-nth=2,3,4）。
 typeset selected
 selected=$(
   print -r -- "$initial" | fzf \
-    --delimiter=$'\t' --with-nth=1,2 \
+    --delimiter=$'\t' --with-nth=2,3,4 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_REPO}  —  自分の issue  |  enter: 作業環境を作る / ctrl-r: 再取得" \
+    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue  |  enter: 作業環境を作る / ctrl-r: 再取得" \
     --bind="ctrl-r:reload(${(q)issues})" \
-    --preview="gh issue view {1} --repo ${(q)HELLO_RUN_ISSUE_REPO}" \
+    --preview='gh issue view {1}' \
     --preview-window='right,55%,wrap'
 )
 # fzf を Esc で抜けた / 候補が無い。黙って popup を閉じる。
 [[ -n $selected ]] || exit 0
 
-typeset num=${selected%%$'\t'*}
-[[ $num == <-> ]] || die "issue 番号を取り出せませんでした: $selected"
+# issue 番号はリポジトリ間で一意でないので、番号ではなく URL を渡す。
+typeset url=${selected%%$'\t'*}
+[[ $url == https://github.com/*/issues/<->  ]] \
+  || die "issue の URL を取り出せませんでした: $selected"
 
 # 成功時はそのまま popup を閉じる。hello-run が最後に新しいタブへ focus するので、
 # ここで待つとユーザーは popup 越しにそのタブを見ることになる。
-hello-run "$num" || die "hello-run が失敗しました（終了コード $?）"
+hello-run "$url" || die "hello-run が失敗しました（終了コード $?）"

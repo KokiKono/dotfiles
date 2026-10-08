@@ -151,7 +151,7 @@ for c in hit:
     # hello-run 本体と同じ理由（public リポジトリ）。対象は ~/.pzshrc から読むこと
     PLUGIN="${TESTHOME}/.config/herdr/plugins/hello-run"
     grep -q 'pzshrc' "${PLUGIN}/pick.zsh"
-    run grep -E 'HELLO_RUN_(ROOT|ISSUE_REPO|REPOS)=[^"$]' "${PLUGIN}/pick.zsh" "${PLUGIN}/issues.zsh"
+    run grep -E 'HELLO_RUN_(ROOT|ISSUE_REPO|ISSUE_ORG|REPOS)=[^"$]' "${PLUGIN}/pick.zsh" "${PLUGIN}/issues.zsh"
     [ "$status" -ne 0 ]
 }
 

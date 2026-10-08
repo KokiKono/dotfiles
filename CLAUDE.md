@@ -147,8 +147,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
-  issue を `fzf` で選ぶと `hello-run <N>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
+  issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
   `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）。知っておくこと:
+  - **一覧は org 横断で、自分にアサインされた open issue だけ。** リポジトリ単位の
+    `gh issue list` ではなく `gh search issues --owner <org> --assignee @me` を使う。org 名は
+    持たず、`~/.pzshrc` の `HELLO_RUN_ISSUE_REPO`（`<org>/<repo>`）の所有者部分から取る
+    （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
+    `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
+    `--with-nth=2,3,4` で見せていない。
   - **`gh` のクエリを `pick.zsh` に inline せず `issues.zsh` に分けてあるのは、fzf の `--bind` が
     コンマでバインドを区切るから。** jq のフィルタを `reload(...)` に直接埋めると中のコンマが
     区切りとして食われ、fzf が起動時に `bind action not specified` で rc=2 即死する。popup が

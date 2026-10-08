@@ -43,29 +43,30 @@ setup() {
     grep -q 'issues.zsh' "${PICK}"
 }
 
-@test "issues.zsh: requires HELLO_RUN_ISSUE_REPO" {
-    run env -u HELLO_RUN_ISSUE_REPO zsh "${ISSUES}"
+@test "issues.zsh: requires HELLO_RUN_ISSUE_ORG" {
+    run env -u HELLO_RUN_ISSUE_ORG zsh "${ISSUES}"
     [ "$status" -eq 2 ]
-    [[ "$output" == *"HELLO_RUN_ISSUE_REPO"* ]]
+    [[ "$output" == *"HELLO_RUN_ISSUE_ORG"* ]]
 }
 
-@test "issues.zsh: turns gh json into number/title TSV" {
+@test "issues.zsh: emits url/repo/number/title TSV" {
     command -v jq >/dev/null 2>&1 || skip "jq not installed"
     STUB="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "${STUB}"
     cat >"${STUB}/gh" <<'EOF'
 #!/usr/bin/env bash
-echo '[{"number":12,"title":"hello"},{"number":34,"title":"world"}]'
+echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"a"},"number":12,"title":"hello"},
+       {"url":"https://github.com/org/b/issues/34","repository":{"name":"b"},"number":34,"title":"world"}]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"12	hello"* ]]
-    [[ "$output" == *"34	world"* ]]
+    # 1 列目は URL。番号はリポジトリ間で一意でないので hello-run には URL を渡す
+    [[ "$output" == *"https://github.com/org/a/issues/12	a	12	hello"* ]]
+    [[ "$output" == *"https://github.com/org/b/issues/34	b	34	world"* ]]
 }
 
-@test "issues.zsh: always filters to issues assigned to me" {
-    # 一覧に他人の issue を混ぜないこと（--assignee @me が外れていないか）
+@test "issues.zsh: searches the whole org for issues assigned to me" {
     STUB="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "${STUB}"
     cat >"${STUB}/gh" <<EOF
@@ -74,9 +75,14 @@ echo "\$*" >"${BATS_TEST_TMPDIR}/args"
 echo '[]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
     [ "$status" -eq 0 ]
+    # リポジトリ単位の issue list ではなく org 横断の search を使うこと
+    grep -q "^search issues " "${BATS_TEST_TMPDIR}/args"
+    grep -q -- "--owner org" "${BATS_TEST_TMPDIR}/args"
     grep -q -- "--assignee @me" "${BATS_TEST_TMPDIR}/args"
+    run grep -q -- "--repo" "${BATS_TEST_TMPDIR}/args"
+    [ "$status" -ne 0 ]
 }
 
 @test "pick.zsh: offers no escape hatch to everyone else's issues" {
@@ -84,4 +90,16 @@ EOF
     run grep -E -- '--bind=.*(ctrl-a|all)' "${PICK}"
     [ "$status" -ne 0 ]
     grep -q 'アサインされた open issue がありません' "${PICK}"
+}
+
+@test "pick.zsh: hands hello-run the url, not the bare number" {
+    # 番号はリポジトリ間で一意でないため
+    grep -q 'hello-run "$url"' "${PICK}"
+    run grep -- 'hello-run "$num"' "${PICK}"
+    [ "$status" -ne 0 ]
+}
+
+@test "pick.zsh: derives the org from HELLO_RUN_ISSUE_REPO, hardcoding none" {
+    # public リポジトリなので org 名は持たず ~/.pzshrc から取ること
+    grep -q 'HELLO_RUN_ISSUE_ORG:-${HELLO_RUN_ISSUE_REPO%%/\*}' "${PICK}"
 }
