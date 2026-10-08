@@ -42,26 +42,19 @@ typeset -r issues=${0:A:h}/issues.zsh
 [[ -x $issues ]] || die "issues.zsh が見つかりません: $issues"
 export HELLO_RUN_ISSUE_REPO HELLO_RUN_LIMIT
 
-# 自分の issue を先に見せる。0 件なら黙って全 open issue に切り替える
-# （空の fzf を出して ctrl-a を押させるより親切）。
-typeset initial scope
-initial=$("$issues" mine) || die "gh issue list に失敗しました"
-if [[ -n $initial ]]; then
-  scope="自分の issue"
-else
-  initial=$("$issues" all) || die "gh issue list に失敗しました"
-  scope="全 issue（自分にアサインされた open issue は無し）"
-fi
-[[ -n $initial ]] || die "open な issue がありません: $HELLO_RUN_ISSUE_REPO"
+# 一覧は自分にアサインされた open issue だけ。0 件なら作る対象が無いので終わる。
+typeset initial
+initial=$("$issues") || die "gh issue list に失敗しました"
+[[ -n $initial ]] \
+  || die "自分にアサインされた open issue がありません: $HELLO_RUN_ISSUE_REPO"
 
 typeset selected
 selected=$(
   print -r -- "$initial" | fzf \
-    --delimiter=$'\t' --with-nth=1,2,3 \
+    --delimiter=$'\t' --with-nth=1,2 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_REPO}  —  ${scope}  |  enter: 作業環境を作る / ctrl-a: 全 issue / ctrl-o: 自分の issue" \
-    --bind="ctrl-a:reload(${(q)issues} all)" \
-    --bind="ctrl-o:reload(${(q)issues} mine)" \
+    --header=$"${HELLO_RUN_ISSUE_REPO}  —  自分の issue  |  enter: 作業環境を作る / ctrl-r: 再取得" \
+    --bind="ctrl-r:reload(${(q)issues})" \
     --preview="gh issue view {1} --repo ${(q)HELLO_RUN_ISSUE_REPO}" \
     --preview-window='right,55%,wrap'
 )

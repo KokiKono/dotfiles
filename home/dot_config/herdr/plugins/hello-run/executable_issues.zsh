@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
-# issue 一覧を "番号<TAB>タイトル<TAB>担当" の TSV で吐く。pick.zsh から直接と、
-# fzf の reload バインドから呼ばれる。
+# 自分にアサインされた open issue を "番号<TAB>タイトル" の TSV で吐く。
+# pick.zsh から直接と、fzf の reload バインド（再取得）から呼ばれる。
 #
 # pick.zsh に inline せず別ファイルにしてあるのは、fzf の --bind が **コンマで
 # バインドを区切る**ため。jq のフィルタをそのまま reload() に埋めると、中のコンマが
@@ -9,18 +9,12 @@
 emulate -L zsh
 setopt pipe_fail
 
-case ${1-} in
-  mine) scope=(--assignee @me) ;;
-  all)  scope=() ;;
-  *)    print -ru2 -- "usage: issues.zsh <mine|all>"; exit 2 ;;
-esac
-
 [[ -n ${HELLO_RUN_ISSUE_REPO:-} ]] || { print -ru2 -- "HELLO_RUN_ISSUE_REPO が未設定"; exit 2 }
 
 gh issue list \
   --repo "$HELLO_RUN_ISSUE_REPO" \
   --state open \
   --limit "${HELLO_RUN_LIMIT:-100}" \
-  "${scope[@]}" \
-  --json number,title,assignees \
-  | jq -r '.[] | [(.number|tostring), .title, (.assignees|map(.login)|join(",")|if . == "" then "-" else . end)] | @tsv'
+  --assignee @me \
+  --json number,title \
+  | jq -r '.[] | [(.number|tostring), .title] | @tsv'

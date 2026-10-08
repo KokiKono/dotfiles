@@ -24,7 +24,7 @@ setup() {
     # fzf 自身に食わせて確かめるには tty が要り CI で落ちるため、ここでは文字列を見る。
     run grep -o -- '--bind="[^"]*"' "${PICK}"
     [ "$status" -eq 0 ]
-    [ "$(printf '%s\n' "$output" | grep -c .)" -ge 2 ]
+    [ "$(printf '%s\n' "$output" | grep -c .)" -ge 1 ]
     while read -r bind; do
         payload="${bind#*reload(}"
         [ "${payload}" = "${bind}" ] && continue   # reload() ではないバインド
@@ -43,38 +43,29 @@ setup() {
     grep -q 'issues.zsh' "${PICK}"
 }
 
-@test "issues.zsh: rejects a missing or unknown scope" {
-    run zsh "${ISSUES}"
-    [ "$status" -eq 2 ]
-    [[ "$output" == *"mine|all"* ]]
-    run zsh "${ISSUES}" bogus
-    [ "$status" -eq 2 ]
-}
-
 @test "issues.zsh: requires HELLO_RUN_ISSUE_REPO" {
-    run env -u HELLO_RUN_ISSUE_REPO zsh "${ISSUES}" all
+    run env -u HELLO_RUN_ISSUE_REPO zsh "${ISSUES}"
     [ "$status" -eq 2 ]
     [[ "$output" == *"HELLO_RUN_ISSUE_REPO"* ]]
 }
 
-@test "issues.zsh: turns gh json into number/title/assignee TSV" {
+@test "issues.zsh: turns gh json into number/title TSV" {
     command -v jq >/dev/null 2>&1 || skip "jq not installed"
     STUB="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "${STUB}"
     cat >"${STUB}/gh" <<'EOF'
 #!/usr/bin/env bash
-echo '[{"number":12,"title":"hello","assignees":[{"login":"someone"}]},
-       {"number":34,"title":"world","assignees":[]}]'
+echo '[{"number":12,"title":"hello"},{"number":34,"title":"world"}]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}" all
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"12	hello	someone"* ]]
-    # 担当が空のときは "-" で埋めて 3 列を保つこと（fzf の --with-nth=1,2,3 のため）
-    [[ "$output" == *"34	world	-"* ]]
+    [[ "$output" == *"12	hello"* ]]
+    [[ "$output" == *"34	world"* ]]
 }
 
-@test "issues.zsh: passes --assignee @me only for the mine scope" {
+@test "issues.zsh: always filters to issues assigned to me" {
+    # 一覧に他人の issue を混ぜないこと（--assignee @me が外れていないか）
     STUB="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "${STUB}"
     cat >"${STUB}/gh" <<EOF
@@ -83,11 +74,14 @@ echo "\$*" >"${BATS_TEST_TMPDIR}/args"
 echo '[]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}" mine
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}"
     [ "$status" -eq 0 ]
     grep -q -- "--assignee @me" "${BATS_TEST_TMPDIR}/args"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_REPO=org/repo zsh "${ISSUES}" all
-    [ "$status" -eq 0 ]
-    run grep -q -- "--assignee" "${BATS_TEST_TMPDIR}/args"
+}
+
+@test "pick.zsh: offers no escape hatch to everyone else's issues" {
+    # 「自分の issue だけ」が仕様。全件表示に戻す bind が復活していないこと
+    run grep -E -- '--bind=.*(ctrl-a|all)' "${PICK}"
     [ "$status" -ne 0 ]
+    grep -q 'アサインされた open issue がありません' "${PICK}"
 }
