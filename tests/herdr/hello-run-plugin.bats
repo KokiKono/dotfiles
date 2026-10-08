@@ -92,6 +92,17 @@ EOF
     grep -q 'アサインされた open issue がありません' "${PICK}"
 }
 
+@test "pick.zsh: reload is a plain key, not a ctrl chord" {
+    # ctrl-r は端末の履歴検索と当たるので素の r にしてある。
+    # 素のキーをバインドするには絞り込みを切る必要がある（--disabled）。
+    grep -q -- '--disabled' "${PICK}"
+    grep -q -- '--bind="r:reload(' "${PICK}"
+    run grep -- '--bind="ctrl-' "${PICK}"
+    [ "$status" -ne 0 ]
+    # 絞り込みが無いと打った文字が入力欄に残るので消していること
+    grep -q -- "--bind='change:clear-query'" "${PICK}"
+}
+
 @test "pick.zsh: hands hello-run the url, not the bare number" {
     # 番号はリポジトリ間で一意でないため
     grep -q 'hello-run "$url"' "${PICK}"

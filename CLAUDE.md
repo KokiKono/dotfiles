@@ -155,6 +155,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
     `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
     `--with-nth=2,3,4` で見せていない。
+  - **fzf は `--disabled` で絞り込みを切ってある。** 候補が十数件で検索が要らないのと、
+    切ると ctrl 無しの素のキー（`r` = 再取得）をバインドできるため（`ctrl-r` は端末側の
+    履歴検索と当たる）。打った文字が入力欄に残るのを `change:clear-query` で消している。
   - **`gh` のクエリを `pick.zsh` に inline せず `issues.zsh` に分けてあるのは、fzf の `--bind` が
     コンマでバインドを区切るから。** jq のフィルタを `reload(...)` に直接埋めると中のコンマが
     区切りとして食われ、fzf が起動時に `bind action not specified` で rc=2 即死する。popup が

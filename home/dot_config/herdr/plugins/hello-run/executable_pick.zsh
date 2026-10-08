@@ -52,13 +52,19 @@ initial=$("$issues") || die "gh search issues に失敗しました"
   || die "自分にアサインされた open issue がありません: $HELLO_RUN_ISSUE_ORG"
 
 # 1 列目の URL は hello-run に渡すためのもので、画面には出さない（--with-nth=2,3,4）。
+#
+# --disabled で絞り込みを切ってある。候補は自分の issue だけで十数件なので検索が要らず、
+# 切ると ctrl 無しの素のキー（r）をバインドできる。ctrl-r は端末側の履歴検索と当たる。
+# 絞り込みが無いと打った文字が入力欄に残るだけで紛らわしいので、change で消している。
 typeset selected
 selected=$(
   print -r -- "$initial" | fzf \
     --delimiter=$'\t' --with-nth=2,3,4 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue  |  enter: 作業環境を作る / ctrl-r: 再取得" \
-    --bind="ctrl-r:reload(${(q)issues})" \
+    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue  |  enter: 作業環境を作る / r: 再取得 / esc: 閉じる" \
+    --disabled \
+    --bind="r:reload(${(q)issues})" \
+    --bind='change:clear-query' \
     --preview='gh issue view {1}' \
     --preview-window='right,55%,wrap'
 )
