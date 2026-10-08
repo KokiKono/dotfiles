@@ -41,35 +41,61 @@
     }
   },
   "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
@@ -91,7 +117,7 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
@@ -107,6 +133,24 @@
           }
         ],
         "matcher": "Grep|Glob"
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -155,6 +199,14 @@
           }
         ],
         "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
+            "type": "command"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -171,8 +223,16 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
             "type": "command"
           }
         ]
@@ -182,8 +242,16 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
             "type": "command"
           }
         ]
@@ -193,7 +261,7 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
@@ -213,8 +281,16 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
             "type": "command"
           }
         ]
@@ -224,7 +300,7 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
             "type": "command"
           }
@@ -235,8 +311,16 @@
       {
         "hooks": [
           {
-            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] \u0026\u0026 [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2\u003e/dev/null || cat; } \u003e/dev/null 2\u003e\u00261 || :; fi",
+            "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "/Users/kokikono/.config/iterm2/cc-status",
             "type": "command"
           }
         ]
