@@ -110,3 +110,8 @@ wtp() {
 # PATH に追加し、completion.zsh.inc で補完を有効化する。
 if [ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]; then . "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"; fi
 if [ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]; then . "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"; fi
+
+# Worktrunk（wt）のシェル統合。wt が指示した worktree へ呼び出し元シェルを cd させる
+# ラッパー関数と補完を定義する。以前は ~/.zshrc に直接書かれていた（chezmoi 管理外の drift）
+# ので、こちらのモジュールに取り込んだ。
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
