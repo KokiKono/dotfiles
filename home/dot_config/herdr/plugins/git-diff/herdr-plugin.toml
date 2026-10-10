@@ -1,0 +1,23 @@
+# PR を作る直前の差分を GitHub の Files changed のように見るプラグイン。
+# 実装は pick.zsh（files.zsh の一覧 → fzf → show.zsh の delta プレビュー）で、
+# ここは起動方法の宣言だけ。
+#
+# placement = "popup" を選ぶ理由: overlay / split は普通のペインなので、開くと
+# フォーカスが移り、閉じたときの戻り先も herdr 任せになる。差分を見るだけの
+# 使い捨ての窓なので、ペインではなくセッション単位のモーダルである popup が合う。
+id = "kokikono.git-diff"
+name = "git-diff"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "PR を作る直前の差分を GitHub の Files changed のように見る"
+platforms = ["macos"]
+
+[[panes]]
+id = "files"
+title = "git diff"
+placement = "popup"
+width = "92%"
+height = "90%"
+# herdr はシェルを介さず argv をそのまま exec する。zsh -l にするのは ~/.zprofile
+# （brew shellenv）を読ませて git / fzf / delta を PATH に乗せるため。
+command = ["zsh", "-l", "pick.zsh"]

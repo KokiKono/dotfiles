@@ -195,6 +195,27 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     作らせない）。プラグインを足したらこのスクリプトの `HERDR_PLUGINS` にも足すこと。
     `config.toml` を変えたら `herdr server reload-config`。
   - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
+- **`home/dot_config/herdr/plugins/git-diff/`** は自作の herdr プラグイン
+  (`kokikono.git-diff`)。`prefix+Shift+D` でどのペインからでも popup が開き、PR を作る直前の
+  差分を GitHub の Files changed のように見る（左が変更ファイルの fzf 一覧、右が `delta` の
+  side-by-side）。中身は `herdr-plugin.toml`、`pick.zsh`（fzf）、`files.zsh`（一覧を TSV で
+  吐く）、`show.zsh`（1 ファイル分を delta で描く）、`lib.zsh`（共有部分）。知っておくこと:
+  - **見せるのは merge-base(origin/<default>, HEAD) からワーキングツリーまで** —
+    「PR に載る差分 + 未コミット + 未追跡」。PR を作る直前の確認が用途なのでコミット済みに
+    絞らず、未コミットを含むものに `●`、コミット済みのみに `○` を付けて区別する。
+  - **popup は元のペインの cwd を引き継がない。** 対象リポジトリは `herdr pane list` の
+    `focused` なペインの cwd から取る（popup 自体は pane list に出ず、popup が開いている間も
+    `focused` は元のペインを指す — これに依存している）。取れなければ `$PWD`。解決した結果は
+    `pick.zsh` が `GIT_DIFF_REPO` に入れて子プロセスへ渡す。一覧と preview は別プロセスなので、
+    ここで固定しないと preview が別のリポジトリを見にいく。
+  - **`-z` の出力をそのまま awk に渡さない。** macOS の awk は `RS="\0"` を扱えず最初の
+    レコードしか読まないので、一覧が 1 件に化ける。`files.zsh` は間に `tr '\0' '\n'` を挟む。
+  - **`path` という変数名を使わない。** zsh の `$path` は `PATH` と連動する特殊変数で、
+    ローカル変数に使うと以降の `tr` / `wc` が command not found になる。
+  - **rename は旧パスも `show.zsh` に渡す**（一覧の 3 列目）。片方だけだと git が rename と
+    判定せず、中身が変わっていないファイルが「全行追加」に見える。
+  - `fzf` の絞り込みは切らない（hello-run と違い候補が数十件になる）。`ctrl-r` で取り直し、
+    `enter` で全画面（delta のページャ）。登録と `config.toml` の扱いは hello-run と同じ。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,

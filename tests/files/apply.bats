@@ -147,6 +147,55 @@ for c in hit:
     [ "$status" -eq 0 ]
 }
 
+@test "apply: git-diff herdr plugin is deployed and runnable" {
+    PLUGIN="${TESTHOME}/.config/herdr/plugins/git-diff"
+    [ -f "${PLUGIN}/herdr-plugin.toml" ]
+    [ -x "${PLUGIN}/pick.zsh" ]
+    # pick.zsh は一覧を files.zsh、preview を show.zsh に任せるので 3 つ揃って動く
+    [ -x "${PLUGIN}/files.zsh" ]
+    [ -x "${PLUGIN}/show.zsh" ]
+    [ -f "${PLUGIN}/lib.zsh" ]
+    for f in pick files show lib; do
+        run zsh -n "${PLUGIN}/${f}.zsh"
+        [ "$status" -eq 0 ]
+    done
+    # マニフェストが起動するスクリプトが実在すること（argv の末尾がパス）
+    run python3 -c "
+import sys, tomllib
+m = tomllib.load(open(sys.argv[1], 'rb'))
+print(m['panes'][0]['command'][-1])
+" "${PLUGIN}/herdr-plugin.toml"
+    [ "$status" -eq 0 ]
+    [ -f "${PLUGIN}/${output}" ]
+}
+
+@test "apply: herdr keybindings match the plugins that ship here" {
+    # config.toml のキーバインドが、配られたマニフェストの id / entrypoint と
+    # ずれていないこと（プラグインを足すたびに両方直す必要がある）
+    run python3 -c "
+import glob, os, sys, tomllib
+cfg = tomllib.load(open(sys.argv[1], 'rb'))
+cmds = [k.get('command', '') for k in cfg.get('keys', {}).get('command', [])]
+for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
+    m = tomllib.load(open(manifest, 'rb'))
+    pane_ids = {p['id'] for p in m['panes']}
+    hit = [c for c in cmds if m['id'] in c]
+    assert hit, f'no keybinding invokes {m[\"id\"]}: {cmds}'
+    for c in hit:
+        ep = c.split('--entrypoint', 1)[1].split()[0]
+        assert ep in pane_ids, f'unknown entrypoint {ep} (have {pane_ids})'
+" "${TESTHOME}/.config/herdr/config.toml" "${TESTHOME}/.config/herdr/plugins"
+    [ "$status" -eq 0 ]
+}
+
+@test "apply: install/macos/herdr.sh links every plugin that ships here" {
+    # link 漏れがあるとキーを押しても何も開かない
+    for d in "${REPO_ROOT}"/home/dot_config/herdr/plugins/*/; do
+        name="$(basename "${d}")"
+        grep -q "\"${name}\"" "${REPO_ROOT}/install/macos/herdr.sh"
+    done
+}
+
 @test "apply: hello-run plugin has no hardcoded org or repo names" {
     # hello-run 本体と同じ理由（public リポジトリ）。対象は ~/.pzshrc から読むこと
     PLUGIN="${TESTHOME}/.config/herdr/plugins/hello-run"
