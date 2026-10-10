@@ -79,6 +79,9 @@ setup() {
     [ -f "${TESTHOME}/.config/zsh/tools.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/git-worktree.zsh" ]
     [ -f "${TESTHOME}/.config/zsh/hello-run.zsh" ]
+    [ -f "${TESTHOME}/.config/zsh/dev-server.zsh" ]
+    # herdr のタブ探索は hello-run と dev-server の共通部分。両方がこれを source する
+    [ -f "${TESTHOME}/.config/zsh/herdr-lib.zsh" ]
 }
 
 @test "apply: zshrc is a thin loader sourcing the modules" {
@@ -86,6 +89,7 @@ setup() {
     grep -q 'ZSH_CONF_DIR' "${TESTHOME}/.zshrc"
     grep -q 'git-worktree.zsh' "${TESTHOME}/.zshrc"
     grep -q 'hello-run.zsh' "${TESTHOME}/.zshrc"
+    grep -q 'dev-server.zsh' "${TESTHOME}/.zshrc"
 }
 
 @test "apply: hello-run has no hardcoded org or repo names" {
@@ -286,15 +290,34 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ -x "${TESTHOME}/.claude/skills/pr-screenshot/scripts/capture-3widths.sh" ]
 }
 
-@test "apply: dev-server ships no repo-specific reference tables" {
+@test "apply: dev-server ships no repo-specific app table" {
     SKILL="${TESTHOME}/.claude/skills/dev-server"
     # リポジトリ固有の表（アプリ名・内部 URL・ポート）は public なここに置かない。
-    # 表の中身そのものを書くと本末転倒なので、references/ が配られないことを検査する
+    # 表の中身そのものを書くと本末転倒なので、配られないことを検査する
     [ ! -d "${SKILL}/references" ]
-    # 表の置き場と、置くべき内容は SKILL.md 側に残っていること
-    grep -q 'references/' "${SKILL}/SKILL.md"
+    # 表の置き場（非追跡）と、置くべきキーは SKILL.md 側に残っていること
+    grep -q 'config/dev-server' "${SKILL}/SKILL.md"
+    grep -q '{{port}}' "${SKILL}/SKILL.md"
     # herdr 前提のスキルなので、外で動かせないことを明示していること
     grep -q 'HERDR_ENV' "${SKILL}/SKILL.md"
+    # 手順書ではなく CLI 呼び出しに委ねていること
+    grep -q 'dev-server --json' "${SKILL}/SKILL.md"
+}
+
+@test "apply: dev-server config example ships placeholders only" {
+    EXAMPLE="${TESTHOME}/.config/dev-server/apps.example.json"
+    [ -f "${EXAMPLE}" ]
+    jq -e . "${EXAMPLE}" >/dev/null
+    # 雛形なので {{port}} の使い方が分かること
+    grep -qF '{{port}}' "${EXAMPLE}"
+    # 実データ（アプリ名・実ポート）は非追跡の <repo>.json 側。雛形に漏らさない
+    run jq -r '.apps[].name' "${EXAMPLE}"
+    [ "$status" -eq 0 ]
+    for n in ${lines[@]}; do
+        [[ "$n" == "○○" || "$n" == "△△" ]] || false
+    done
+    run grep -nE '"base_port": (4000|8000|9000|3003|3004|3005|3040|6006|6007)' "${EXAMPLE}"
+    [ "$status" -ne 0 ]
 }
 
 @test "apply: learning-code skill is deployed with references and script" {

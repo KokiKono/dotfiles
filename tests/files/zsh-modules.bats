@@ -26,6 +26,16 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
+@test "herdr-lib.zsh: valid zsh syntax" {
+    run zsh -n "${REPO_ROOT}/${DIR}/herdr-lib.zsh"
+    [ "$status" -eq 0 ]
+}
+
+@test "dev-server.zsh: valid zsh syntax" {
+    run zsh -n "${REPO_ROOT}/${DIR}/dev-server.zsh"
+    [ "$status" -eq 0 ]
+}
+
 @test "aliases.zsh: sourcing defines representative aliases" {
     run zsh -c "source '${REPO_ROOT}/${DIR}/aliases.zsh'; alias g >/dev/null && alias gg >/dev/null && echo OK"
     [ "$status" -eq 0 ]

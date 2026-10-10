@@ -13,6 +13,9 @@
 # NOTE: zsh では `path` は $PATH に連動する特殊配列。local 変数名には使わない（wtpath 等にする）。
 #       また同一スコープで同じ名前を二度 local 宣言すると中身が stdout に出るので避ける。
 
+# herdr 周りの共通ヘルパー（__hz_*）。配備後は ~/.config/zsh/ に並ぶので同じ階層から引く。
+source "${0:A:h}/herdr-lib.zsh"
+
 # 対象の org / リポジトリはこのリポジトリが PUBLIC なので既定値を持たせない。
 # 実際の値は ~/.pzshrc（chezmoi 管理外。.zshrc がこのファイルより先に source する）に書く:
 #
@@ -352,60 +355,24 @@ __hr_build_tab() {
   print -r -- "$tab_id"$'\t'"$main_pane"
 }
 
+# herdr のタブ探索と workspace の解決は dev-server と共通なので herdr-lib.zsh にある。
+# 以下の 3 つは呼び出し名を変えないための薄いラッパ（中身は __hz_* を見ること）。
+
+__hr_workspace_id() { __hz_workspace_id "$@" }
+
+# __hr_find_tab <label> → "<workspace_id><TAB><tab_id>"。無ければ 1 を返す。
+# ラベルが一致しただけのタブを掴まないよう、issue のセッションディレクトリで絞る。
+__hr_find_tab() {
+  emulate -L zsh
+  __hz_find_tab "$1" "${HELLO_RUN_ROOT:+$HELLO_RUN_ROOT/.sessions/$1}"
+}
+
+__hr_tab_in_session() { __hz_tab_has_cwd_under "$@" }
+
 # __hr_start_agent <label> <pane> <plan:0|1>
 # `agent start` は「入力可能になるまで」待つので、claude が初回の信頼確認ダイアログ
 # （新しいディレクトリで出る）で止まると起動済みでも非 0 を返す。その場合は agent 検出で
 # 起動成功とみなす。ペインの shell 起動中（agent_pane_busy）は数回リトライ。
-# __hr_workspace_id → 今いる workspace の id。特定できなければ 1 を返す。
-# herdr はプラグインの pane に HERDR_WORKSPACE_ID を渡さない（代わりに
-# HERDR_PLUGIN_CONTEXT_JSON に入れてくる）ので、popup から呼ばれた hello-run が
-# 空の id を tab create に渡して workspace_not_found で落ちていた。
-__hr_workspace_id() {
-  emulate -L zsh
-  local ws=${HERDR_WORKSPACE_ID:-}
-  if [[ -z $ws && -n ${HERDR_PLUGIN_CONTEXT_JSON:-} ]]; then
-    ws=$(print -r -- "$HERDR_PLUGIN_CONTEXT_JSON" | jq -r '.workspace_id // empty' 2>/dev/null)
-  fi
-  if [[ -z $ws ]]; then
-    ws=$(herdr workspace list 2>/dev/null            | jq -r '[.result.workspaces[]? | select(.focused) | .workspace_id] | first // empty')
-  fi
-  [[ -n $ws ]] || return 1
-  print -r -- "$ws"
-}
-
-# __hr_find_tab <label> → "<workspace_id><TAB><tab_id>"。無ければ 1 を返す。
-# 現在の workspace だけでなく全部を見る。issue のタブは、それを作ったときに居た
-# workspace に残るので、別の workspace から hello-run を叩くと現在の workspace には
-# 無い。そこで見つけ損なうと、既にあるのに同じラベルのタブをもう 1 つ作ってしまう。
-__hr_find_tab() {
-  emulate -L zsh
-  local label=$1 ws tab
-  local sdir="${HELLO_RUN_ROOT:+$HELLO_RUN_ROOT/.sessions/$label}"
-  for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
-    [[ -n $ws ]] || continue
-    for tab in ${(f)"$(herdr tab list --workspace "$ws" 2>/dev/null \
-            | jq -r --arg l "$label" '.result.tabs[]? | select(.label==$l) | .tab_id')"}; do
-      [[ -n $tab ]] || continue
-      __hr_tab_in_session "$tab" "$sdir" || continue
-      print -r -- "$ws"$'\t'"$tab"
-      return 0
-    done
-  done
-  return 1
-}
-
-# __hr_tab_in_session <tab_id> <session-dir> : ペインが session-dir の下に居るか。
-# ラベルの一致だけでは、そのタブが本当にこの issue のものとは限らない。issue 番号は
-# リポジトリ間で一意ではなく、ラベルは後から付け替えられるので、ラベルだけを信じると
-# 別の issue のタブへ黙って切り替えてしまう。session-dir が空なら検証しない。
-__hr_tab_in_session() {
-  emulate -L zsh
-  local tab=$1 dir=$2
-  [[ -n $dir ]] || return 0
-  herdr pane list 2>/dev/null | jq -e --arg t "$tab" --arg d "$dir" \
-    '[.result.panes[]? | select(.tab_id == $t) | (.cwd // "")]
-       | any(. == $d or startswith($d + "/"))' >/dev/null 2>&1
-}
 
 __hr_start_agent() {
   emulate -L zsh
