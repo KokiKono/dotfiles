@@ -22,6 +22,9 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
+├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr のタブ探索/workspace 解決。hello-run と dev-server が source)
+├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
+├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
@@ -38,6 +41,7 @@ tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
 ├── install/macos/*.bats           # unit tests for each install script
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
+├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
 .github/workflows/ci.yml           # macOS CI: bats + apply E2E (weekly full setup)
 ```
@@ -284,15 +288,35 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。
-- **`home/dot_claude/skills/dev-server/`** は herdr の `dev` label の tab を1つだけ持ち、アプリごとに
-  pane を分けて dev サーバーを起動・再利用・停止する運用スキル（`HERDR_ENV=1` 前提）。**追跡するのは
-  `SKILL.md` だけで、`references/` は追跡しない。** そこに置くのは「どのアプリをどのコマンドで、
-  どのポートで起動するか」という業務リポジトリ固有の表で、アプリ名・内部 URL・環境変数名が並ぶ —
-  このリポジトリは PUBLIC なので置けない。匿名化すると「推測せず表を引く」という表の役目自体が
-  成立しないため、`my-voice` のように `○○` へ置換する手も使えない。`chezmoi apply` は source に
-  無いファイルを消さないので、`~/.claude/skills/dev-server/references/*.md` は手で置いたまま残る
-  （マシン入れ替え前に手でバックアップすること）。表に何を書くかは `SKILL.md` に明記してあり、
-  `apply.bats` は `references/` が配られないことを検査する。
+- **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
+  source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
+  アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
+  この CLI を `--json` で叩くだけの薄いスキルになっている。知っておくこと:
+  - **タブは worktree ごとに1つ**（label `dev-issue-<N>`。`<root>/.sessions/issue-<N>/<repo>` という
+    hello-run の配置からパスだけで決めるので `HELLO_RUN_ROOT` には依存しない。worktree でない
+    チェックアウトでは `dev-<repo>`）。タブの探索は `herdr-lib.zsh` 経由で**全 workspace**を見て、
+    ペインの cwd がその session dir 配下にあることまで確かめる。
+  - **ポートは base から空きまで +1 して、起動コマンドの `{{port}}` に注入する。** これで同じ
+    アプリを複数の worktree で同時に動かせる。設定に書くのは package.json の script 名ではなく
+    **展開済みのコマンド** — script 側に `--port 4000` / `-p 3040` が焼かれていて、
+    `bun run <script> -- --port N` では二重指定になるため。
+  - **自分の worktree が握っているポートでも、そのアプリ自身のものでなければ奪わない**（別の
+    アプリが使っている）。`port_fixed: true`（Metro・Storybook・プロキシ配下のようにポートを
+    動かせないもの）だけは別で、**他の worktree が持っていたら起動せず `conflict` を返す。**
+    kill も別ポート起動もしない。別ブランチの画面を本物だと思って確認するのがここで一番
+    避けたい失敗なので、持ち主の cwd を添えて人間に判断させる。
+  - **pane の label は `<app>:<port>`。これが唯一の索引。** 同じ worktree で既に動いていれば
+    その pane で Ctrl-C → ポート解放を待ってから同じ pane に流し直す（pane を作り直すと
+    レイアウトと label が失われる）。2つ目以降のアプリは `right` / `down` を交互に split。
+  - **`wait-output` のマッチは ready の証明にならない**（Expo は Web より先に Metro の行を出す）
+    ので、`url` があれば `curl` が応答するまで確かめてから返す。成功語と失敗語は1つの正規表現に
+    入れる（成功語だけ待つと、落ちたときタイムアウトまで無言になる）。
+  - **アプリ表は `~/.config/dev-server/<repo>.json`（非追跡）。** 業務リポジトリのアプリ名・
+    内部 URL・環境変数名が並ぶのでこの PUBLIC なリポジトリには置けない。匿名化すると
+    「推測せず表を引く」という表の役目自体が成立しないため `○○` 置換も使えない。追跡するのは
+    プレースホルダだけの雛形 `home/dot_config/dev-server/apps.example.json`。
+    `apply.bats` が雛形の配備と、実アプリ名・実ポートの非混入、スキル側に `references/` が
+    配られないことを検査する。
 - **Agent CLI config is tracked too.** `home/dot_claude/` carries the **global instructions**
   (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
   Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
@@ -338,8 +362,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   only the empty template ships; see the learning-code entry above),
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
   search hints — workspace-specific, and this repo is PUBLIC),
-  `~/.claude/skills/dev-server/references/` (per-repo start commands / ports / internal URLs — see
-  the dev-server entry below), and `~/Library/Preferences/com.googlecode.iterm2.plist`
+  `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
+  ports, internal URLs — see the dev-server entry above; only the placeholder
+  `apps.example.json` ships), and `~/Library/Preferences/com.googlecode.iterm2.plist`
   (binary, rewritten on every iTerm2 quit).
 
 ## Secrets

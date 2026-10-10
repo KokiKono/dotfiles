@@ -1,0 +1,28 @@
+{
+  "_readme": "dev-server の設定の雛形。<リポジトリ名>.json にコピーして使う（そちらは chezmoi 管理外）。cmd は package.json の script ではなく展開済みのコマンドを書き、ポートは {{port}} にする。",
+  "ready_timeout_ms": 180000,
+  "failure_regex": "eaddrinuse|address already in use|command not found|error:",
+  "apps": [
+    {
+      "name": "○○",
+      "cwd": ".",
+      "cmd": "<パッケージマネージャ> <アプリのパス> --port {{port}}",
+      "base_port": 3000,
+      "port_fixed": false,
+      "ready_regex": "ready in|waiting on",
+      "url": "http://localhost:{{port}}",
+      "check_http": true
+    },
+    {
+      "name": "△△",
+      "cwd": ".",
+      "env": { "○○_ENV": "development" },
+      "cmd": "<パッケージマネージャ> <アプリのパス> start",
+      "base_port": 8081,
+      "port_fixed": true,
+      "ready_regex": "waiting on",
+      "url": "",
+      "check_http": false
+    }
+  ]
+}
