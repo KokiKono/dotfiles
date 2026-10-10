@@ -1,0 +1,29 @@
+# hello-run を herdr のどのペインからでも呼べるようにするプラグイン。
+# 実装は pick.zsh（gh で issue 一覧 → fzf で選択 → hello-run）で、ここは起動方法の宣言だけ。
+#
+# placement = "popup" を選ぶ理由: overlay / split は普通のペインなので、閉じるときに
+# 元のペインへフォーカスを戻す。hello-run は最後に新しいタブへ focus するので、
+# ペイン方式だとその focus が巻き戻されうる。popup はペインではなくセッション単位の
+# モーダルで、フォーカス文脈を持たないためこの競合が起きない。
+id = "kokikono.hello-run"
+name = "hello-run"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "GitHub issue を選んで作業環境（worktree + タブ + claude）を一発で用意する"
+platforms = ["macos"]
+
+# セッション開始時に issue 一覧のキャッシュを温めておく（gh が 1.5 秒ほどかかるため、
+# 最初の 1 回目だけ popup が待たされるのを避ける）。失敗してもサーバーは止まらない。
+[[startup]]
+command = ["zsh", "-l", "issues.zsh", "--warm"]
+
+[[panes]]
+id = "pick"
+title = "hello-run"
+placement = "popup"
+width = "80%"
+height = "80%"
+# herdr はシェルを介さず argv をそのまま exec する。zsh -l にするのは ~/.zprofile
+# （brew shellenv）を読ませて gh / fzf / wt を PATH に乗せるため。-l は対話用の
+# ~/.zshrc を読まないので oh-my-zsh の起動コストもかからない。
+command = ["zsh", "-l", "pick.zsh"]

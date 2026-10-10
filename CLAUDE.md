@@ -24,14 +24,14 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
-├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定
+├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 install/macos/skills-lock.json      # `npx skills` の lock のコピー（skills.sh が復元に使う）
 tests/
@@ -76,7 +76,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -140,11 +140,61 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `~/.pzshrc` (untracked; `dot_zshrc` sources it *before* `hello-run.zsh`, so the `${VAR:-}`
     defaults pick them up). `hello-run` errors out with a pointer to `~/.pzshrc` if they are unset,
     and `apply.bats` asserts no org/repo name leaks into the deployed file.
+  - **既存タブの探索は全 workspace。** タブはそれを作ったときに居た workspace に残るので、
+    別の workspace から `hello-run` を叩くと現在の workspace には無い。`__hr_find_tab` が
+    `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
+    `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
+    これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
   - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
     `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
     `__hr_default_branch` via `origin/HEAD` → main/master). Base and branch names differ, so the new
     branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
+- **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
+  (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
+  issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
+  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）。知っておくこと:
+  - **一覧は org 横断で、自分にアサインされた open issue だけ。** リポジトリ単位の
+    `gh issue list` ではなく `gh search issues --owner <org> --assignee @me` を使う。org 名は
+    持たず、`~/.pzshrc` の `HELLO_RUN_ISSUE_REPO`（`<org>/<repo>`）の所有者部分から取る
+    （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
+    `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
+    `--with-nth=2,3,4` で見せていない。
+  - **`gh` の結果だけをキャッシュする。** 実測で `gh search issues` が 1.1〜1.5 秒、
+    タブの走査は 0.03 秒なので、遅いのは `gh` だけ。キャッシュ命中で 1.55 秒 → 0.04 秒。
+    置き場は `HERDR_PLUGIN_STATE_DIR`（herdr の外では `~/.cache/hello-run`）、TTL は
+    `HELLO_RUN_CACHE_TTL` で既定 600 秒。`issues.zsh --refresh` が fzf の `r`、
+    `--warm` はプラグインの `[[startup]]` から呼ばれて初回を温める。`gh` が落ちても
+    キャッシュがあればそれを見せる。**印はキャッシュに焼かない** — worktree やタブの
+    有無は刻々変わるので、毎回その場で付け直す。
+  - **一覧の先頭に作業環境の有無を出す**（`●` タブまである / `○` worktree だけ / `・` なし）。
+    判定は hello-run が見るのと同じ `<root>/.sessions/issue-<N>` と `issue-<N>` ラベルのタブ。
+    **タブは全 workspace を走査する** — hello-run 側と揃えないと印と挙動がずれる。桁揃えは
+    fzf がやってくれないので `issues.zsh` が 1 列に組み立て、fzf には `--with-nth=2` で渡す。
+  - **fzf は `--disabled` で絞り込みを切ってある。** 候補が十数件で検索が要らないのと、
+    切ると ctrl 無しの素のキー（`r` = 再取得）をバインドできるため（`ctrl-r` は端末側の
+    履歴検索と当たる）。打った文字が入力欄に残るのを `change:clear-query` で消している。
+  - **`gh` のクエリを `pick.zsh` に inline せず `issues.zsh` に分けてあるのは、fzf の `--bind` が
+    コンマでバインドを区切るから。** jq のフィルタを `reload(...)` に直接埋めると中のコンマが
+    区切りとして食われ、fzf が起動時に `bind action not specified` で rc=2 即死する。popup が
+    一瞬開いて閉じる症状になり、`pick.zsh` 側は「選択なし」として 0 で終わるので気づきにくい。
+    `tests/herdr/hello-run-plugin.bats` が `reload()` の中のコンマを見張っている。
+  - **placement は `popup`**。overlay / split は普通のペインなので閉じるときに元のペインへ
+    フォーカスを戻し、`hello-run` が最後に行う `herdr tab focus` と競合する。popup はペインでは
+    なくセッション単位のモーダルなのでこれが起きない。
+  - **起動は `["zsh", "-l", "pick.zsh"]`**。herdr はシェルを介さず argv を exec するので、
+    `~/.zprofile`（brew shellenv）を読ませて `gh`/`fzf`/`wt` を PATH に乗せるために `-l` が要る。
+    `-l` は `~/.zshrc` を読まないので、`pick.zsh` は `~/.pzshrc`（`HELLO_RUN_*`）と
+    `~/.config/zsh/hello-run.zsh`（関数本体）を自分で source する。
+  - **キーバインドは `type = "shell"`**。`keys.command` には `plugin_action` 型しか無く
+    plugin pane を直に開く型が無いので `herdr plugin pane open --plugin ... --entrypoint pick`
+    を叩く。`[keys.command]` 自体にも `type = "popup"` があるのでプラグインを介さずキーだけで
+    同じことはできるが、ログ (`herdr plugin log`) と config ディレクトリが付くプラグイン側を採った。
+  - 登録は `install/macos/herdr.sh` が `herdr plugin link ~/.config/herdr/plugins/<name>` で行う
+    （`install` ではなく `link` — 本体はこのリポジトリが持つので herdr 側にチェックアウトを
+    作らせない）。プラグインを足したらこのスクリプトの `HERDR_PLUGINS` にも足すこと。
+    `config.toml` を変えたら `herdr server reload-config`。
+  - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
