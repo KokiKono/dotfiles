@@ -57,12 +57,12 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     [ "$status" -eq 0 ]
     out="$(plain "$output")"
     # コミット済みだけのものは ○、未コミットを含むものは ●
-    [[ "$out" == *"○ added.txt"* ]]
-    [[ "$out" == *"● keep.txt"* ]]
+    [[ "$out" == *"○ added.txt"* ]] || false
+    [[ "$out" == *"● keep.txt"* ]] || false
     # 未追跡も PR に載る前提で並べる
-    [[ "$out" == *"● brand-new.txt"* ]]
+    [[ "$out" == *"● brand-new.txt"* ]] || false
     # 削除も出る
-    [[ "$out" == *"D"*"gone.txt"* ]]
+    [[ "$out" == *"D"*"gone.txt"* ]] || false
 }
 
 @test "files.zsh: emits path in column 1 and the rename source in column 3" {
@@ -83,7 +83,7 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     run zsh "${FILES}"
     out="$(plain "$output")"
     # base から見て keep.txt は 3 行足して 1 行消している（未コミット分を含む）
-    [[ "$(printf '%s\n' "$out" | grep '^keep.txt	')" == *"+3 -1"* ]]
+    [[ "$(printf '%s\n' "$out" | grep '^keep.txt	')" == *"+3 -1"* ]] || false
 }
 
 @test "files.zsh: aligns the path column" {
@@ -119,9 +119,9 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     run zsh "${SHOW}" renamed2.txt renamed.txt
     [ "$status" -eq 0 ]
     out="$(plain "$output")"
-    [[ "$out" == *"renamed"*"renamed.txt"*"renamed2.txt"* ]]
+    [[ "$out" == *"renamed"*"renamed.txt"*"renamed2.txt"* ]] || false
     # 旧パスを渡さないと中身が丸ごと追加されたように見える
-    [[ "$out" != *"old"* ]]
+    [[ "$out" != *"old"* ]] || false
 }
 
 @test "show.zsh: renders an untracked file against an empty file" {
@@ -130,8 +130,8 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     run zsh "${SHOW}" brand-new.txt
     [ "$status" -eq 0 ]
     out="$(plain "$output")"
-    [[ "$out" == *"untracked"* ]]
-    [[ "$out" == *"file"* ]]
+    [[ "$out" == *"untracked"* ]] || false
+    [[ "$out" == *"file"* ]] || false
 }
 
 @test "show.zsh: renders a deleted file instead of looking for it on disk" {
@@ -140,8 +140,8 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     run zsh "${SHOW}" gone.txt
     [ "$status" -eq 0 ]
     out="$(plain "$output")"
-    [[ "$out" == *"gone.txt"* ]]
-    [[ "$out" == *"x"* ]]
+    [[ "$out" == *"gone.txt"* ]] || false
+    [[ "$out" == *"x"* ]] || false
 }
 
 @test "show.zsh: side by side, and the width comes from fzf" {
@@ -153,7 +153,7 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     run env GIT_DIFF_REPO="${BATS_TEST_TMPDIR}" GD_FAIL_WAIT=0 \
         zsh -c "cd ${BATS_TEST_TMPDIR} && exec zsh ${FILES}"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"git リポジトリ"* ]]
+    [[ "$output" == *"git リポジトリ"* ]] || false
 }
 
 @test "pick.zsh: no --bind payload contains a comma" {
@@ -202,4 +202,26 @@ assert pane['command'][-1] == 'pick.zsh', pane['command']
 assert '-l' in pane['command'], pane['command']
 " "${REPO_ROOT}/${PLUGIN}/herdr-plugin.toml"
     [ "$status" -eq 0 ]
+}
+
+@test "lib.zsh: takes the repo from the plugin context json" {
+    # popup は元のペインの cwd を引き継がない。herdr が渡してくる context に
+    # 開いた時点のフォーカス中ペインの cwd が入っているので、まずそれを見る
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    make_repo
+    ctx="{\"focused_pane_cwd\":\"${REPO}\",\"workspace_cwd\":\"/nonexistent\"}"
+    run env -u GIT_DIFF_REPO HERDR_PLUGIN_CONTEXT_JSON="${ctx}" \
+        zsh -c "source '${LIB}'; gd_repo_dir"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cd "${REPO}" && pwd -P)" ]
+}
+
+@test "lib.zsh: skips context paths that are not git repositories" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    make_repo
+    ctx="{\"focused_pane_cwd\":\"${BATS_TEST_TMPDIR}\",\"workspace_cwd\":\"${REPO}\"}"
+    run env -u GIT_DIFF_REPO HERDR_PLUGIN_CONTEXT_JSON="${ctx}" \
+        zsh -c "source '${LIB}'; gd_repo_dir"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cd "${REPO}" && pwd -P)" ]
 }

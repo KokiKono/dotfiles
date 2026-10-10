@@ -43,14 +43,14 @@ STUB
     run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F ensure_gnupg_home configure_pinentry signing_key_id generate_key write_signing_conf main"
     [ "$status" -eq 0 ]
     for fn in ensure_gnupg_home configure_pinentry signing_key_id generate_key write_signing_conf main; do
-        [[ "$output" == *"${fn}"* ]]
+        [[ "$output" == *"${fn}"* ]] || false
     done
 }
 
 @test "gpg.sh: skips safely when gpg is absent (empty PATH)" {
     run env -i HOME="${HOME}" bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
 }
 
 @test "gpg.sh: is chained from the chezmoi install script" {
@@ -86,7 +86,7 @@ STUB
     run env PATH="${BIN}:/usr/bin:/bin" GNUPGHOME="${GNUPG}" GIT_SIGNING_CONF="${CONF}" \
         bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"最新です"* ]]
+    [[ "$output" == *"最新です"* ]] || false
     [ "$(cat "${GNUPG}/gpg-agent.conf" "${CONF}")" = "${before}" ]
 }
 
@@ -99,6 +99,6 @@ STUB
     run env PATH="${BIN}:/usr/bin:/bin" GNUPGHOME="${GNUPG}" GIT_SIGNING_CONF="${CONF}" CI=1 \
         bash "${REPO_ROOT}/${SCRIPT}" < /dev/null
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
     [ ! -f "${CONF}" ]
 }

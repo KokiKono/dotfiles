@@ -94,16 +94,33 @@ rows=("${(@f)$(<$cache)}")
 # 既にタブがあるものの一覧。herdr の外なら空のまま（印は worktree 止まり）。
 # hello-run が探すのに合わせて全 workspace を見る。タブはそれを作ったときに居た
 # workspace に残るので、現在の workspace だけ見ると印と実際の挙動がずれる。
+# ラベルの一致だけでは ● を付けない。hello-run が切り替え先を決めるときと同じく、
+# そのタブのペインが本当にその issue のセッションディレクトリに居ることまで確かめる。
+# 確かめないと、ラベルだけ同じ別物に ● が付き、enter でそこへ飛ばされる。
 typeset -A has_tab
 if command -v herdr >/dev/null 2>&1; then
-  local ws label
+  local ws label tab cwd root=${HELLO_RUN_ROOT:-}
+  typeset -A label_of
   for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
     [[ -n $ws ]] || continue
-    while IFS= read -r label; do
-      [[ -n $label ]] && has_tab[$label]=1
+    while IFS=$'\t' read -r tab label; do
+      [[ -n $tab && -n $label ]] && label_of[$tab]=$label
     done < <(herdr tab list --workspace "$ws" 2>/dev/null \
-              | jq -r '.result.tabs[]?.label // empty' 2>/dev/null)
+              | jq -r '.result.tabs[]? | select(.label != null) | "\(.tab_id)\t\(.label)"' 2>/dev/null)
   done
+  if [[ -z $root ]]; then
+    # 置き場を知らないと検証できないので、従来どおりラベルだけで判断する
+    for tab in ${(k)label_of}; do has_tab[${label_of[$tab]}]=1; done
+  else
+    # pane list は 1 回だけ。タブ数に関係なく herdr への往復は増やさない
+    while IFS=$'\t' read -r tab cwd; do
+      label=${label_of[$tab]:-}
+      [[ -n $label && -n $cwd ]] || continue
+      [[ $cwd == "$root/.sessions/$label" || $cwd == "$root/.sessions/$label/"* ]] \
+        && has_tab[$label]=1
+    done < <(herdr pane list 2>/dev/null \
+              | jq -r '.result.panes[]? | "\(.tab_id)\t\(.cwd // "")"' 2>/dev/null)
+  fi
 fi
 
 # リポジトリ名と番号の桁を揃える

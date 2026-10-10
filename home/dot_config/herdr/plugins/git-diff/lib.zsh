@@ -16,16 +16,25 @@ gd_die() {
   exit 1
 }
 
-# 作業中のリポジトリ。popup は元のペインとは別プロセスで cwd を引き継がないので、
-# herdr にフォーカス中のペインの cwd を訊き、それが git リポジトリでなければ $PWD に落とす。
+# 作業中のリポジトリ。popup は元のペインとは別プロセスで cwd を引き継がない。
+# herdr はプラグインの pane に HERDR_PLUGIN_CONTEXT_JSON を渡してきて、その中に
+# popup を開いた時点のフォーカス中ペインの cwd が入っているので、まずそれを見る。
+# 無ければ herdr に訊き（popup が開いていても focused は元のペインを指す）、
+# それでも駄目なら $PWD。git リポジトリでないものは順に読み飛ばす。
 gd_repo_dir() {
   local -a candidates
   [[ -n ${GIT_DIFF_REPO:-} ]] && candidates+=("$GIT_DIFF_REPO")
-  if [[ -z ${GIT_DIFF_REPO:-} ]] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    local listed
-    listed=$(herdr pane list 2>/dev/null) && candidates+=(${(f)"$(
-      print -r -- "$listed" | jq -r '[.result.panes[]? | select(.focused) | (.foreground_cwd // .cwd)] | .[]' 2>/dev/null
+  if [[ -z ${GIT_DIFF_REPO:-} ]] && command -v jq >/dev/null 2>&1; then
+    [[ -n ${HERDR_PLUGIN_CONTEXT_JSON:-} ]] && candidates+=(${(f)"$(
+      print -r -- "$HERDR_PLUGIN_CONTEXT_JSON" \
+        | jq -r '[.focused_pane_cwd, .workspace_cwd] | map(select(. != null and . != "")) | .[]' 2>/dev/null
     )"})
+    local listed
+    if command -v herdr >/dev/null 2>&1; then
+      listed=$(herdr pane list 2>/dev/null) && candidates+=(${(f)"$(
+        print -r -- "$listed" | jq -r '[.result.panes[]? | select(.focused) | (.foreground_cwd // .cwd)] | .[]' 2>/dev/null
+      )"})
+    fi
   fi
   candidates+=("$PWD")
 

@@ -43,14 +43,14 @@ run_script() {
 @test "herdr.sh: sourcing defines link_plugins / main without running" {
     run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F link_plugins main"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"link_plugins"* ]]
-    [[ "$output" == *"main"* ]]
+    [[ "$output" == *"link_plugins"* ]] || false
+    [[ "$output" == *"main"* ]] || false
 }
 
 @test "herdr.sh: skips safely when herdr is absent" {
     run env -i HOME="${HOME}" bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
 }
 
 @test "herdr.sh: links a deployed plugin" {
@@ -65,7 +65,7 @@ run_script() {
     run_script
     [ "$status" -eq 0 ]
     ! grep -qF "plugin link" "${LOG}"
-    [[ "$output" == *"既に link 済み"* ]]
+    [[ "$output" == *"既に link 済み"* ]] || false
 }
 
 @test "herdr.sh: skips a plugin that chezmoi has not deployed" {

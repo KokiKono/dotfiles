@@ -13,15 +13,15 @@ LOCK="install/macos/skills-lock.json"
 @test "skills.sh: sourcing defines install_skills / read_lock / main" {
     run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F install_skills read_lock main"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"install_skills"* ]]
-    [[ "$output" == *"read_lock"* ]]
-    [[ "$output" == *"main"* ]]
+    [[ "$output" == *"install_skills"* ]] || false
+    [[ "$output" == *"read_lock"* ]] || false
+    [[ "$output" == *"main"* ]] || false
 }
 
 @test "skills.sh: skips safely when npx is absent (empty PATH)" {
     run env -i HOME="${HOME}" bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
 }
 
 @test "skills.sh: lock file is valid json with a skills map" {
@@ -47,7 +47,7 @@ assert not bad, bad
     # lock の件数と出力行数が一致すること
     count=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))['skills']))" "${REPO_ROOT}/${LOCK}")
     [ "$(printf '%s\n' "$output" | grep -c .)" -eq "$count" ]
-    [[ "$output" == *"humanizer-ja"* ]]
+    [[ "$output" == *"humanizer-ja"* ]] || false
 }
 
 @test "skills.sh: is chained from the chezmoi install script" {
@@ -71,8 +71,8 @@ assert not bad, bad
     run env PATH="${BIN}:${PATH}" SKILLS_DEST="${BATS_TEST_TMPDIR}/dest" \
         bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"未導入"* ]]
-    [[ "$output" == *"humanizer-ja"* ]]
+    [[ "$output" == *"未導入"* ]] || false
+    [[ "$output" == *"humanizer-ja"* ]] || false
 }
 
 @test "skills.sh: skips skills already present in the destination" {
@@ -87,6 +87,6 @@ assert not bad, bad
     done < <(bash -c "source '${REPO_ROOT}/${SCRIPT}'; read_lock '${REPO_ROOT}/${LOCK}'")
     run env PATH="${BIN}:${PATH}" SKILLS_DEST="${DEST}" bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" != *"npx should not run"* ]]
-    [[ "$output" != *"未導入"* ]]
+    [[ "$output" != *"npx should not run"* ]] || false
+    [[ "$output" != *"未導入"* ]] || false
 }

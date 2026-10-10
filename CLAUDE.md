@@ -68,6 +68,10 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 - Run all tests: `bats -r tests/` (needs `brew install bats-core chezmoi`).
 - `tests/files/apply.bats` applies into `$BATS_TEST_TMPDIR` with `--exclude scripts` (no brew side effects).
 - Add a script → add `tests/install/macos/<name>.bats` alongside it.
+- **Assertions must not be a bare `[[ ... ]]` in the middle of a test.** macOS の bash では
+  errexit が `[[ ]]` の失敗で止まらないので、行末以外の `[[ ]]` は失敗しても ok になる
+  （`[ ... ]` は止まる）。`|| false` を付けること。これを知らずに書いた assertion が
+  90 箇所近くあり、付けて初めて 1 件が本当に落ちた。
 - **`@test` titles must be ASCII** — bats mangles multibyte (Japanese) test names. Keep Japanese in comments only.
 
 ## Bootstrapping a new machine
@@ -145,6 +149,19 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
     `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
     これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
+  - **ラベルが一致するだけでタブを「その issue のもの」と決めない。** `__hr_find_tab` は
+    `issue-<N>` ラベルで探したあと、`__hr_tab_in_session` でそのタブのペインが
+    `<root>/.sessions/issue-<N>` の下に居ることまで確かめる。issue 番号はリポジトリ間で
+    一意ではなく（ピッカーは org 横断で探す）、ラベルは後から付け替えられるので、
+    ラベルだけを信じると enter で別の issue のタブへ黙って飛ばされる。ピッカーの `●` も
+    `issues.zsh` が同じ条件で付ける（印と挙動がずれると、どちらが嘘か分からなくなる）。
+    `HELLO_RUN_ROOT` が無いときは検証しようがないのでラベルだけで判断する。
+  - **プラグインの pane には `HERDR_WORKSPACE_ID` が渡ってこない。** herdr が渡すのは
+    `HERDR_PLUGIN_CONTEXT_JSON`（`workspace_id` / `tab_id` / `focused_pane_id` /
+    `focused_pane_cwd` などが入っている）だけなので、環境変数をそのまま
+    `herdr tab create --workspace` に渡すと popup 経由のときだけ
+    `workspace_not_found` で落ちる。`__hr_workspace_id` が
+    環境変数 → context JSON → `workspace list` の `focused` の順に引き直す。
   - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
     `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
@@ -203,9 +220,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **見せるのは merge-base(origin/<default>, HEAD) からワーキングツリーまで** —
     「PR に載る差分 + 未コミット + 未追跡」。PR を作る直前の確認が用途なのでコミット済みに
     絞らず、未コミットを含むものに `●`、コミット済みのみに `○` を付けて区別する。
-  - **popup は元のペインの cwd を引き継がない。** 対象リポジトリは `herdr pane list` の
-    `focused` なペインの cwd から取る（popup 自体は pane list に出ず、popup が開いている間も
-    `focused` は元のペインを指す — これに依存している）。取れなければ `$PWD`。解決した結果は
+  - **popup は元のペインの cwd を引き継がない。** 対象リポジトリは
+    `HERDR_PLUGIN_CONTEXT_JSON` の `focused_pane_cwd`（herdr がプラグインの pane に渡す）から
+    取り、無ければ `herdr pane list` の `focused` なペインの cwd、それも駄目なら `$PWD`
+    （popup 自体は pane list に出ず、popup が開いている間も `focused` は元のペインを指す）。
+    git リポジトリでない候補は読み飛ばす。解決した結果は
     `pick.zsh` が `GIT_DIFF_REPO` に入れて子プロセスへ渡す。一覧と preview は別プロセスなので、
     ここで固定しないと preview が別のリポジトリを見にいく。
   - **`-z` の出力をそのまま awk に渡さない。** macOS の awk は `RS="\0"` を扱えず最初の

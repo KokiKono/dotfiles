@@ -12,8 +12,8 @@ SCRIPT="install/macos/vscode.sh"
 @test "vscode.sh: sourcing defines install_extensions / main" {
     run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F install_extensions main"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"install_extensions"* ]]
-    [[ "$output" == *"main"* ]]
+    [[ "$output" == *"install_extensions"* ]] || false
+    [[ "$output" == *"main"* ]] || false
 }
 
 @test "vscode.sh: extension list exists" {
@@ -23,5 +23,5 @@ SCRIPT="install/macos/vscode.sh"
 @test "vscode.sh: skips safely when code CLI is absent" {
     run env -i HOME="${HOME}" bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
 }
