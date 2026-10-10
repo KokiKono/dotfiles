@@ -64,3 +64,14 @@ run_fn() {
     run grep -- 'tab list --workspace "${HERDR_WORKSPACE_ID}"' "${HR}"
     [ "$status" -ne 0 ]
 }
+
+@test "hello-run: asks about the initial prompt only when creating" {
+    # 既存タブへ切り替えるだけの場面で訊くと、入力待ちで止まってフォーカスが遅れる。
+    # 確認は早期 return（既存タブ）より後、新規作成の進捗表示より前にあること。
+    switch_line="$(grep -n '既存のタブに切り替え' "${HR}" | head -1 | cut -d: -f1)"
+    ask_line="$(grep -n 'claude に初期プロンプトを送りますか' "${HR}" | head -1 | cut -d: -f1)"
+    draw_line="$(grep -n '"issue を取得" "ブランチ名を推定"' "${HR}" | head -1 | cut -d: -f1)"
+    [ -n "${switch_line}" ] && [ -n "${ask_line}" ] && [ -n "${draw_line}" ]
+    [ "${ask_line}" -gt "${switch_line}" ]
+    [ "${ask_line}" -lt "${draw_line}" ]
+}

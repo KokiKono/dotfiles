@@ -449,17 +449,6 @@ hello-run() {
   local label="issue-$num" sdir="$HELLO_RUN_ROOT/.sessions/issue-$num"
   local panes="main / ${(j: / :)HELLO_RUN_REPOS}"
 
-  # 対話確認は進捗表示を描き始める前に済ませる（描画中に挟むとカーソル制御が破綻する）
-  if [[ $prompt_mode == ask ]]; then
-    if [[ -t 0 ]]; then
-      local reply
-      read -q "reply?claude に初期プロンプトを送りますか? [y/N] " && prompt_mode=yes || prompt_mode=no
-      print
-    else
-      prompt_mode=no
-    fi
-  fi
-
   # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）
   local tab_id="" tab_ws="" found
   if found=$(__hr_find_tab "$label"); then
@@ -481,6 +470,20 @@ hello-run() {
       herdr tab focus "$tab_id" >/dev/null
     fi
     return 0
+  fi
+
+  # ここから先は新規作成。初期プロンプトの確認はこの経路でしか要らないので、
+  # 既存タブへの切り替えを済ませた後に訊く。先に訊くと、切り替えるだけの場面でも
+  # 入力待ちで止まってしまう。進捗表示を描き始める前であることは変えない
+  # （描画中に挟むとカーソル制御が破綻する）。
+  if [[ $prompt_mode == ask ]]; then
+    if [[ -t 0 ]]; then
+      local reply
+      read -q "reply?claude に初期プロンプトを送りますか? [y/N] " && prompt_mode=yes || prompt_mode=no
+      print
+    else
+      prompt_mode=no
+    fi
   fi
 
   __hr_ui_init "hello-run  ${repo}#${num}" \
