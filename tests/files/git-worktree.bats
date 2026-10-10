@@ -19,14 +19,14 @@ setup() {
 @test "git-worktree.zsh: sourcing defines wrm / brm / bd / helper" {
     run zsh -c "source '${REPO_ROOT}/${FILE}'; typeset -f wrm brm bd __gwt_main_branch __gwt_remove_worktrees __gwt_retry_force >/dev/null && echo OK"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"OK"* ]]
+    [[ "$output" == *"OK"* ]] || false
 }
 
 @test "git-worktree.zsh: wrm --help shows force and all flags" {
     run zsh -c "source '${REPO_ROOT}/${FILE}'; wrm --help"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"--force"* ]]
-    [[ "$output" == *"--all"* ]]
+    [[ "$output" == *"--force"* ]] || false
+    [[ "$output" == *"--all"* ]] || false
 }
 
 @test "git-worktree.zsh: wrm rejects unknown option" {
@@ -62,18 +62,18 @@ setup() {
           '${BATS_TEST_TMPDIR}/wt-clean'\$'\t'clean-wt \
           '${BATS_TEST_TMPDIR}/wt-dirty'\$'\t'dirty-wt
         echo \"rc=\$?\"; echo \"failed=\${#__gwt_failed[@]}\""
-    [[ "$output" == *"[1/2]"* ]]
-    [[ "$output" == *"[2/2]"* ]]
-    [[ "$output" == *"削除 1 件 / 失敗 1 件 (計 2 件)"* ]]
-    [[ "$output" == *"rc=1"* ]]
-    [[ "$output" == *"failed=1"* ]]
+    [[ "$output" == *"[1/2]"* ]] || false
+    [[ "$output" == *"[2/2]"* ]] || false
+    [[ "$output" == *"削除 1 件 / 失敗 1 件 (計 2 件)"* ]] || false
+    [[ "$output" == *"rc=1"* ]] || false
+    [[ "$output" == *"failed=1"* ]] || false
     [ ! -d "${BATS_TEST_TMPDIR}/wt-clean" ]
 
     # 失敗分を --force で削除し直せる
     run zsh -c "cd '$repo'; source '${REPO_ROOT}/${FILE}'
         __gwt_remove_worktrees 1 '${BATS_TEST_TMPDIR}/wt-dirty'\$'\t'dirty-wt; echo \"rc=\$?\""
-    [[ "$output" == *"削除 1 件 / 失敗 0 件 (計 1 件)"* ]]
-    [[ "$output" == *"rc=0"* ]]
+    [[ "$output" == *"削除 1 件 / 失敗 0 件 (計 1 件)"* ]] || false
+    [[ "$output" == *"rc=0"* ]] || false
     [ ! -d "${BATS_TEST_TMPDIR}/wt-dirty" ]
 }
 
@@ -86,9 +86,9 @@ setup() {
     run env PATH="$stub:$PATH" zsh -c \
         "source '${REPO_ROOT}/${FILE}'; __gwt_pr_states '${BATS_TEST_TMPDIR}' | sort"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"feat"$'\t'"OPEN"* ]]
-    [[ "$output" != *"feat"$'\t'"MERGED"* ]]
-    [[ "$output" == *"old"$'\t'"MERGED"* ]]
+    [[ "$output" == *"feat"$'\t'"OPEN"* ]] || false
+    [[ "$output" != *"feat"$'\t'"MERGED"* ]] || false
+    [[ "$output" == *"old"$'\t'"MERGED"* ]] || false
 }
 
 @test "git-worktree.zsh: __gwt_pr_states fails when gh fails" {

@@ -22,7 +22,7 @@ setup() {
 @test "skills-db: sourcing defines commands without running them" {
     run bash -c "source '${DB_SCRIPT}'; declare -f cmd_init cmd_show cmd_upsert cmd_due >/dev/null && echo OK"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"OK"* ]]
+    [[ "$output" == *"OK"* ]] || false
     [ ! -e "${DB}" ]
 }
 
@@ -105,8 +105,8 @@ setup() {
     mv -f "${BATS_TEST_TMPDIR}/t.json" "${DB}"
     run bash "${DB_SCRIPT}" due
     [ "$status" -eq 0 ]
-    [[ "$output" == *"stale"* ]]
-    [[ "$output" != *"fresh"* ]]
+    [[ "$output" == *"stale"* ]] || false
+    [[ "$output" != *"fresh"* ]] || false
     # 領域で絞れること
     run bash "${DB_SCRIPT}" due rspec
     [ "$status" -eq 0 ]
@@ -119,12 +119,12 @@ setup() {
     bash "${DB_SCRIPT}" upsert rspec "let and let bang" senior "" "PR #2" framework
     run bash "${DB_SCRIPT}" show
     [ "$status" -eq 0 ]
-    [[ "$output" == *"ruby"* ]]
-    [[ "$output" == *"rspec"* ]]
+    [[ "$output" == *"ruby"* ]] || false
+    [[ "$output" == *"rspec"* ]] || false
     run bash "${DB_SCRIPT}" show ruby
     [ "$status" -eq 0 ]
-    [[ "$output" == *"block and yield"* ]]
-    [[ "$output" == *"note here"* ]]
+    [[ "$output" == *"block and yield"* ]] || false
+    [[ "$output" == *"note here"* ]] || false
     # 未知の領域はエラーにする
     run bash "${DB_SCRIPT}" show nope
     [ "$status" -ne 0 ]
@@ -136,13 +136,13 @@ setup() {
     bash "${DB_SCRIPT}" upsert ruby topic junior "${long}" "PR #1" language
     run bash "${DB_SCRIPT}" show ruby
     [ "$status" -eq 0 ]
-    [[ "$output" != *"${long}"* ]]
-    [[ "$output" == *"…"* ]]
+    [[ "$output" != *"${long}"* ]] || false
+    [[ "$output" == *"…"* ]] || false
     run bash "${DB_SCRIPT}" show --full ruby
     [ "$status" -eq 0 ]
-    [[ "$output" == *"${long}"* ]]
+    [[ "$output" == *"${long}"* ]] || false
     # メモは一番右の列に置く（長くても他の列が崩れないように）
-    [[ "$output" =~ 出典[[:space:]]+メモ ]]
+    [[ "$output" =~ 出典[[:space:]]+メモ ]] || false
 }
 
 @test "skills-db: show rejects an unknown option" {
@@ -169,15 +169,15 @@ setup() {
     # 既定は今日
     run bash "${DB_SCRIPT}" tested
     [ "$status" -eq 0 ]
-    [[ "$output" == *"today_topic"* ]]
-    [[ "$output" != *"old_topic"* ]]
+    [[ "$output" == *"today_topic"* ]] || false
+    [[ "$output" != *"old_topic"* ]] || false
     # 判定の根拠も返す（COB の振り返りで使う）
-    [[ "$output" == *"stuck here"* ]]
+    [[ "$output" == *"stuck here"* ]] || false
     # 日付を指定できる
     run bash "${DB_SCRIPT}" tested 2020-01-01
     [ "$status" -eq 0 ]
-    [[ "$output" == *"old_topic"* ]]
-    [[ "$output" != *"today_topic"* ]]
+    [[ "$output" == *"old_topic"* ]] || false
+    [[ "$output" != *"today_topic"* ]] || false
 }
 
 @test "skills-db: show on an empty db does not fail" {

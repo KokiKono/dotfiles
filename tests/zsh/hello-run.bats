@@ -46,7 +46,7 @@ run_fn() {
     stub_herdr
     run_fn '__hr_find_tab issue-42'
     [ "$status" -eq 0 ]
-    [[ "$output" == "w2"$'\t'"w2:tA" ]]
+    [[ "$output" == "w2"$'\t'"w2:tA" ]] || false
 }
 
 @test "__hr_find_tab: fails when no workspace has the label" {

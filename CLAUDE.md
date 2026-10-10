@@ -68,6 +68,10 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 - Run all tests: `bats -r tests/` (needs `brew install bats-core chezmoi`).
 - `tests/files/apply.bats` applies into `$BATS_TEST_TMPDIR` with `--exclude scripts` (no brew side effects).
 - Add a script → add `tests/install/macos/<name>.bats` alongside it.
+- **Assertions must not be a bare `[[ ... ]]` in the middle of a test.** macOS の bash では
+  errexit が `[[ ]]` の失敗で止まらないので、行末以外の `[[ ]]` は失敗しても ok になる
+  （`[ ... ]` は止まる）。`|| false` を付けること。これを知らずに書いた assertion が
+  90 箇所近くあり、付けて初めて 1 件が本当に落ちた。
 - **`@test` titles must be ASCII** — bats mangles multibyte (Japanese) test names. Keep Japanese in comments only.
 
 ## Bootstrapping a new machine

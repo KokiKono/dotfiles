@@ -29,5 +29,5 @@ setup() {
 @test "aliases.zsh: sourcing defines representative aliases" {
     run zsh -c "source '${REPO_ROOT}/${DIR}/aliases.zsh'; alias g >/dev/null && alias gg >/dev/null && echo OK"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"OK"* ]]
+    [[ "$output" == *"OK"* ]] || false
 }

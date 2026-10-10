@@ -12,8 +12,8 @@ SCRIPT="install/macos/ohmyzsh.sh"
 @test "ohmyzsh.sh: sourcing defines install_ohmyzsh / main" {
     run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F install_ohmyzsh main"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"install_ohmyzsh"* ]]
-    [[ "$output" == *"main"* ]]
+    [[ "$output" == *"install_ohmyzsh"* ]] || false
+    [[ "$output" == *"main"* ]] || false
 }
 
 @test "ohmyzsh.sh: skips install when .oh-my-zsh already exists" {
@@ -21,6 +21,6 @@ SCRIPT="install/macos/ohmyzsh.sh"
     mkdir -p "${tmphome}/.oh-my-zsh"
     run bash -c "HOME='${tmphome}' bash '${REPO_ROOT}/${SCRIPT}'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"スキップ"* ]]
+    [[ "$output" == *"スキップ"* ]] || false
     rm -rf "${tmphome}"
 }
