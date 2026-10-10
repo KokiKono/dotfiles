@@ -32,7 +32,7 @@ EOF
 }
 
 run_fn() {
-    run env PATH="${STUB}:${PATH}" zsh -c "source '${HR}'; $1"
+    run env -u HELLO_RUN_ROOT PATH="${STUB}:${PATH}" zsh -c "source '${HR}'; $1"
 }
 
 @test "hello-run.zsh: valid zsh syntax" {
@@ -138,4 +138,57 @@ EOF
     [ "$status" -ne 0 ]
     grep -q 'tab create --workspace "$ws"' "${HR}"
     grep -q 'ws=$(__hr_workspace_id)' "${HR}"
+}
+
+
+# --- タブが本当にその issue のものか ---------------------------------------------
+
+# w2 に issue-42 ラベルのタブが 1 つあり、そのペインの cwd を指定できる herdr を装う
+stub_herdr_session() {
+    local pane_cwd="$1"
+    cat >"${STUB}/herdr" <<EOF
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w2"}]}}' ;;
+  "tab list") echo '{"result":{"tabs":[{"tab_id":"w2:tA","label":"issue-42"}]}}' ;;
+  "pane list") echo '{"result":{"panes":[{"tab_id":"w2:tA","cwd":"${pane_cwd}"}]}}' ;;
+  *) echo '{}' ;;
+esac
+EOF
+    chmod +x "${STUB}/herdr"
+}
+
+run_fn_root() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ROOT="$2" zsh -c "source '${HR}'; $1"
+}
+
+@test "__hr_find_tab: rejects a tab whose label matches but whose panes are elsewhere" {
+    # issue 番号はリポジトリ間で一意ではなく、ラベルは後から付け替えられる。
+    # ラベルだけを信じると、別の issue のタブへ黙って切り替えてしまう
+    stub_herdr_session "/r/.sessions/issue-99/auto_reserve"
+    run_fn_root '__hr_find_tab issue-42' /r
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "__hr_find_tab: accepts a tab whose panes live in the session directory" {
+    stub_herdr_session "/r/.sessions/issue-42/auto_reserve"
+    run_fn_root '__hr_find_tab issue-42' /r
+    [ "$status" -eq 0 ]
+    [[ "$output" == "w2"$'\t'"w2:tA" ]] || false
+}
+
+@test "__hr_find_tab: accepts the session directory itself, not just below it" {
+    # main ペインはセッションディレクトリそのものに居る
+    stub_herdr_session "/r/.sessions/issue-42"
+    run_fn_root '__hr_find_tab issue-42' /r
+    [ "$status" -eq 0 ]
+}
+
+@test "__hr_find_tab: falls back to the label when the root is unknown" {
+    # HELLO_RUN_ROOT が無いと検証しようがないので、従来どおりラベルだけで判断する
+    stub_herdr_session "/somewhere/else"
+    run_fn '__hr_find_tab issue-42'
+    [ "$status" -eq 0 ]
+    [[ "$output" == "w2"$'\t'"w2:tA" ]] || false
 }

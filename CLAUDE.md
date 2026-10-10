@@ -149,6 +149,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
     `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
     これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
+  - **ラベルが一致するだけでタブを「その issue のもの」と決めない。** `__hr_find_tab` は
+    `issue-<N>` ラベルで探したあと、`__hr_tab_in_session` でそのタブのペインが
+    `<root>/.sessions/issue-<N>` の下に居ることまで確かめる。issue 番号はリポジトリ間で
+    一意ではなく（ピッカーは org 横断で探す）、ラベルは後から付け替えられるので、
+    ラベルだけを信じると enter で別の issue のタブへ黙って飛ばされる。ピッカーの `●` も
+    `issues.zsh` が同じ条件で付ける（印と挙動がずれると、どちらが嘘か分からなくなる）。
+    `HELLO_RUN_ROOT` が無いときは検証しようがないのでラベルだけで判断する。
   - **プラグインの pane には `HERDR_WORKSPACE_ID` が渡ってこない。** herdr が渡すのは
     `HERDR_PLUGIN_CONTEXT_JSON`（`workspace_id` / `tab_id` / `focused_pane_id` /
     `focused_pane_cwd` などが入っている）だけなので、環境変数をそのまま

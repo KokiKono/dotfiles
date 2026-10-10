@@ -367,8 +367,7 @@ __hr_workspace_id() {
     ws=$(print -r -- "$HERDR_PLUGIN_CONTEXT_JSON" | jq -r '.workspace_id // empty' 2>/dev/null)
   fi
   if [[ -z $ws ]]; then
-    ws=$(herdr workspace list 2>/dev/null \
-           | jq -r '[.result.workspaces[]? | select(.focused) | .workspace_id] | first // empty')
+    ws=$(herdr workspace list 2>/dev/null            | jq -r '[.result.workspaces[]? | select(.focused) | .workspace_id] | first // empty')
   fi
   [[ -n $ws ]] || return 1
   print -r -- "$ws"
@@ -381,16 +380,31 @@ __hr_workspace_id() {
 __hr_find_tab() {
   emulate -L zsh
   local label=$1 ws tab
+  local sdir="${HELLO_RUN_ROOT:+$HELLO_RUN_ROOT/.sessions/$label}"
   for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
     [[ -n $ws ]] || continue
-    tab=$(herdr tab list --workspace "$ws" 2>/dev/null \
-            | jq -r --arg l "$label" '.result.tabs[]? | select(.label==$l) | .tab_id' | head -1)
-    if [[ -n $tab ]]; then
+    for tab in ${(f)"$(herdr tab list --workspace "$ws" 2>/dev/null \
+            | jq -r --arg l "$label" '.result.tabs[]? | select(.label==$l) | .tab_id')"}; do
+      [[ -n $tab ]] || continue
+      __hr_tab_in_session "$tab" "$sdir" || continue
       print -r -- "$ws"$'\t'"$tab"
       return 0
-    fi
+    done
   done
   return 1
+}
+
+# __hr_tab_in_session <tab_id> <session-dir> : ペインが session-dir の下に居るか。
+# ラベルの一致だけでは、そのタブが本当にこの issue のものとは限らない。issue 番号は
+# リポジトリ間で一意ではなく、ラベルは後から付け替えられるので、ラベルだけを信じると
+# 別の issue のタブへ黙って切り替えてしまう。session-dir が空なら検証しない。
+__hr_tab_in_session() {
+  emulate -L zsh
+  local tab=$1 dir=$2
+  [[ -n $dir ]] || return 0
+  herdr pane list 2>/dev/null | jq -e --arg t "$tab" --arg d "$dir" \
+    '[.result.panes[]? | select(.tab_id == $t) | (.cwd // "")]
+       | any(. == $d or startswith($d + "/"))' >/dev/null 2>&1
 }
 
 __hr_start_agent() {
