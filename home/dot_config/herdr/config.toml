@@ -17,3 +17,11 @@ key = "prefix+shift+h"
 type = "shell"
 command = "herdr plugin pane open --plugin kokikono.hello-run --entrypoint pick"
 description = "hello-run: issue を選んで作業環境を作る"
+
+# git-diff: prefix(Ctrl+B) → Shift+D で、PR を作る直前の差分を popup で見る。
+# 自作プラグイン kokikono.git-diff の pane を開くだけ（hello-run と同じ理由で shell 経由）。
+[[keys.command]]
+key = "prefix+shift+d"
+type = "shell"
+command = "herdr plugin pane open --plugin kokikono.git-diff --entrypoint files"
+description = "git-diff: 差分を GitHub の Files changed のように見る"
