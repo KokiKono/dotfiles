@@ -203,3 +203,25 @@ assert '-l' in pane['command'], pane['command']
 " "${REPO_ROOT}/${PLUGIN}/herdr-plugin.toml"
     [ "$status" -eq 0 ]
 }
+
+@test "lib.zsh: takes the repo from the plugin context json" {
+    # popup は元のペインの cwd を引き継がない。herdr が渡してくる context に
+    # 開いた時点のフォーカス中ペインの cwd が入っているので、まずそれを見る
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    make_repo
+    ctx="{\"focused_pane_cwd\":\"${REPO}\",\"workspace_cwd\":\"/nonexistent\"}"
+    run env -u GIT_DIFF_REPO HERDR_PLUGIN_CONTEXT_JSON="${ctx}" \
+        zsh -c "source '${LIB}'; gd_repo_dir"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cd "${REPO}" && pwd -P)" ]
+}
+
+@test "lib.zsh: skips context paths that are not git repositories" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    make_repo
+    ctx="{\"focused_pane_cwd\":\"${BATS_TEST_TMPDIR}\",\"workspace_cwd\":\"${REPO}\"}"
+    run env -u GIT_DIFF_REPO HERDR_PLUGIN_CONTEXT_JSON="${ctx}" \
+        zsh -c "source '${LIB}'; gd_repo_dir"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cd "${REPO}" && pwd -P)" ]
+}

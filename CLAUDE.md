@@ -149,6 +149,12 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
     `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
     これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
+  - **プラグインの pane には `HERDR_WORKSPACE_ID` が渡ってこない。** herdr が渡すのは
+    `HERDR_PLUGIN_CONTEXT_JSON`（`workspace_id` / `tab_id` / `focused_pane_id` /
+    `focused_pane_cwd` などが入っている）だけなので、環境変数をそのまま
+    `herdr tab create --workspace` に渡すと popup 経由のときだけ
+    `workspace_not_found` で落ちる。`__hr_workspace_id` が
+    環境変数 → context JSON → `workspace list` の `focused` の順に引き直す。
   - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
     `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
@@ -207,9 +213,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **見せるのは merge-base(origin/<default>, HEAD) からワーキングツリーまで** —
     「PR に載る差分 + 未コミット + 未追跡」。PR を作る直前の確認が用途なのでコミット済みに
     絞らず、未コミットを含むものに `●`、コミット済みのみに `○` を付けて区別する。
-  - **popup は元のペインの cwd を引き継がない。** 対象リポジトリは `herdr pane list` の
-    `focused` なペインの cwd から取る（popup 自体は pane list に出ず、popup が開いている間も
-    `focused` は元のペインを指す — これに依存している）。取れなければ `$PWD`。解決した結果は
+  - **popup は元のペインの cwd を引き継がない。** 対象リポジトリは
+    `HERDR_PLUGIN_CONTEXT_JSON` の `focused_pane_cwd`（herdr がプラグインの pane に渡す）から
+    取り、無ければ `herdr pane list` の `focused` なペインの cwd、それも駄目なら `$PWD`
+    （popup 自体は pane list に出ず、popup が開いている間も `focused` は元のペインを指す）。
+    git リポジトリでない候補は読み飛ばす。解決した結果は
     `pick.zsh` が `GIT_DIFF_REPO` に入れて子プロセスへ渡す。一覧と preview は別プロセスなので、
     ここで固定しないと preview が別のリポジトリを見にいく。
   - **`-z` の出力をそのまま awk に渡さない。** macOS の awk は `RS="\0"` を扱えず最初の

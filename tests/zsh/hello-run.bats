@@ -75,3 +75,67 @@ run_fn() {
     [ "${ask_line}" -gt "${switch_line}" ]
     [ "${ask_line}" -lt "${draw_line}" ]
 }
+
+# --- workspace id の解決 -------------------------------------------------------
+
+# focused な workspace を持つ herdr を装う
+stub_herdr_focused() {
+    cat >"${STUB}/herdr" <<'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "workspace list")
+    echo '{"result":{"workspaces":[{"workspace_id":"w1","focused":false},{"workspace_id":"w7","focused":true}]}}' ;;
+  *) echo '{}' ;;
+esac
+EOF
+    chmod +x "${STUB}/herdr"
+}
+
+run_fn_env() {
+    local expr="$1"; shift
+    run env -u HERDR_WORKSPACE_ID -u HERDR_PLUGIN_CONTEXT_JSON PATH="${STUB}:${PATH}" \
+        "$@" zsh -c "source '${HR}'; ${expr}"
+}
+
+@test "__hr_workspace_id: prefers the environment variable" {
+    stub_herdr_focused
+    run_fn_env '__hr_workspace_id' HERDR_WORKSPACE_ID=w3
+    [ "$status" -eq 0 ]
+    [ "$output" = "w3" ]
+}
+
+@test "__hr_workspace_id: falls back to the plugin context json" {
+    # herdr はプラグインの pane に HERDR_WORKSPACE_ID を渡さない。空のまま
+    # tab create に渡すと workspace_not_found になるので、context から拾うこと
+    stub_herdr_focused
+    run_fn_env '__hr_workspace_id' \
+        HERDR_PLUGIN_CONTEXT_JSON='{"workspace_id":"w5","focused_pane_id":"w5:p2"}'
+    [ "$status" -eq 0 ]
+    [ "$output" = "w5" ]
+}
+
+@test "__hr_workspace_id: falls back to the focused workspace" {
+    stub_herdr_focused
+    run_fn_env '__hr_workspace_id'
+    [ "$status" -eq 0 ]
+    [ "$output" = "w7" ]
+}
+
+@test "__hr_workspace_id: fails when nothing says where we are" {
+    cat >"${STUB}/herdr" <<'EOF'
+#!/usr/bin/env bash
+echo '{"result":{"workspaces":[]}}'
+EOF
+    chmod +x "${STUB}/herdr"
+    run_fn_env '__hr_workspace_id'
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "hello-run: tab create uses the resolved workspace id" {
+    # 生の環境変数を渡すと popup から呼ばれたときに空で落ちる
+    run grep -- 'tab create --workspace "${HERDR_WORKSPACE_ID}"' "${HR}"
+    [ "$status" -ne 0 ]
+    grep -q 'tab create --workspace "$ws"' "${HR}"
+    grep -q 'ws=$(__hr_workspace_id)' "${HR}"
+}

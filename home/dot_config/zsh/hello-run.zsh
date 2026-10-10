@@ -329,8 +329,12 @@ __hr_make_worktree() {
 __hr_build_tab() {
   emulate -L zsh
   local sdir=$1 label=$2; shift 2
-  local created tab_id main_pane prev new_pane direction=right r
-  created=$(herdr tab create --workspace "${HERDR_WORKSPACE_ID}" --label "$label" \
+  local created tab_id main_pane prev new_pane direction=right r ws
+  ws=$(__hr_workspace_id) || {
+    print -r -- "workspace を特定できません（herdr 環境か確認）" >&2
+    return 1
+  }
+  created=$(herdr tab create --workspace "$ws" --label "$label" \
               --cwd "$sdir" --no-focus) || return 1
   tab_id=$(print -r -- "$created" | jq -r '.result.tab.tab_id')
   main_pane=$(print -r -- "$created" | jq -r '.result.root_pane.pane_id')
@@ -352,6 +356,24 @@ __hr_build_tab() {
 # `agent start` は「入力可能になるまで」待つので、claude が初回の信頼確認ダイアログ
 # （新しいディレクトリで出る）で止まると起動済みでも非 0 を返す。その場合は agent 検出で
 # 起動成功とみなす。ペインの shell 起動中（agent_pane_busy）は数回リトライ。
+# __hr_workspace_id → 今いる workspace の id。特定できなければ 1 を返す。
+# herdr はプラグインの pane に HERDR_WORKSPACE_ID を渡さない（代わりに
+# HERDR_PLUGIN_CONTEXT_JSON に入れてくる）ので、popup から呼ばれた hello-run が
+# 空の id を tab create に渡して workspace_not_found で落ちていた。
+__hr_workspace_id() {
+  emulate -L zsh
+  local ws=${HERDR_WORKSPACE_ID:-}
+  if [[ -z $ws && -n ${HERDR_PLUGIN_CONTEXT_JSON:-} ]]; then
+    ws=$(print -r -- "$HERDR_PLUGIN_CONTEXT_JSON" | jq -r '.workspace_id // empty' 2>/dev/null)
+  fi
+  if [[ -z $ws ]]; then
+    ws=$(herdr workspace list 2>/dev/null \
+           | jq -r '[.result.workspaces[]? | select(.focused) | .workspace_id] | first // empty')
+  fi
+  [[ -n $ws ]] || return 1
+  print -r -- "$ws"
+}
+
 # __hr_find_tab <label> → "<workspace_id><TAB><tab_id>"。無ければ 1 を返す。
 # 現在の workspace だけでなく全部を見る。issue のタブは、それを作ったときに居た
 # workspace に残るので、別の workspace から hello-run を叩くと現在の workspace には
@@ -450,7 +472,8 @@ hello-run() {
   local panes="main / ${(j: / :)HELLO_RUN_REPOS}"
 
   # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）
-  local tab_id="" tab_ws="" found
+  local tab_id="" tab_ws="" found cur_ws
+  cur_ws=$(__hr_workspace_id) || cur_ws=""
   if found=$(__hr_find_tab "$label"); then
     tab_ws=${found%%$'\t'*}
     tab_id=${found##*$'\t'}
@@ -462,10 +485,10 @@ hello-run() {
     __hr_ui_box "$label" \
       branch  "${cur_branch:-?}" \
       session "${sdir/#$HOME/~}" \
-      tab     "$tab_id  ($panes)${${tab_ws:#${HERDR_WORKSPACE_ID}}:+  @$tab_ws}"
+      tab     "$tab_id  ($panes)${${tab_ws:#$cur_ws}:+  @$tab_ws}"
     if (( focus )); then
       # tab focus だけでは別 workspace のタブに移れないので先に workspace を切り替える
-      [[ -n $tab_ws && $tab_ws != ${HERDR_WORKSPACE_ID} ]] \
+      [[ -n $tab_ws && $tab_ws != $cur_ws ]] \
         && herdr workspace focus "$tab_ws" >/dev/null
       herdr tab focus "$tab_id" >/dev/null
     fi
