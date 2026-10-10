@@ -8,6 +8,11 @@ setup() {
     command -v zsh >/dev/null 2>&1 || skip "zsh not installed"
     PICK="${REPO_ROOT}/${PLUGIN}/executable_pick.zsh"
     ISSUES="${REPO_ROOT}/${PLUGIN}/executable_issues.zsh"
+    # 実キャッシュ（~/.cache/hello-run）を読み書きしないよう、テストごとに隔離する
+    CACHE="${BATS_TEST_TMPDIR}/cache"
+    export HELLO_RUN_CACHE_DIR="${CACHE}"
+    # ~/.pzshrc を拾って実 org に繋がらないようにする
+    export HELLO_RUN_PRIVATE_RC="${BATS_TEST_TMPDIR}/no-such-rc"
 }
 
 @test "pick.zsh / issues.zsh: valid zsh syntax" {
@@ -44,7 +49,8 @@ setup() {
 }
 
 @test "issues.zsh: requires HELLO_RUN_ISSUE_ORG" {
-    run env -u HELLO_RUN_ISSUE_ORG zsh "${ISSUES}"
+    run env -u HELLO_RUN_ISSUE_ORG -u HELLO_RUN_ISSUE_REPO \
+        HELLO_RUN_PRIVATE_RC="${BATS_TEST_TMPDIR}/no-such-rc" zsh "${ISSUES}"
     [ "$status" -eq 2 ]
     [[ "$output" == *"HELLO_RUN_ISSUE_ORG"* ]]
 }
@@ -59,7 +65,7 @@ echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"short"}
        {"url":"https://github.com/org/b/issues/3456","repository":{"name":"much-longer-name"},"number":3456,"title":"world"}]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
     [ "$status" -eq 0 ]
     # 1 列目は URL。番号はリポジトリ間で一意でないので hello-run には URL を渡す
     [[ "${lines[0]}" == "https://github.com/org/a/issues/12	"* ]]
@@ -97,7 +103,7 @@ case "$1 $2" in
 esac
 EOF
     chmod +x "${STUB}/gh" "${STUB}/herdr"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org HELLO_RUN_ROOT="${ROOT}"         zsh "${ISSUES}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org HELLO_RUN_ROOT="${ROOT}"         zsh "${ISSUES}"
     [ "$status" -eq 0 ]
     [[ "$output" == *"●"*"12"*"tab もある"* ]]
     [[ "$output" == *"○"*"34"*"worktree だけ"* ]]
@@ -121,7 +127,7 @@ echo "\$*" >"${BATS_TEST_TMPDIR}/args"
 echo '[]'
 EOF
     chmod +x "${STUB}/gh"
-    run env PATH="${STUB}:${PATH}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org zsh "${ISSUES}"
     [ "$status" -eq 0 ]
     # リポジトリ単位の issue list ではなく org 横断の search を使うこと
     grep -q "^search issues " "${BATS_TEST_TMPDIR}/args"
@@ -136,6 +142,11 @@ EOF
     run grep -E -- '--bind=.*(ctrl-a|all)' "${PICK}"
     [ "$status" -ne 0 ]
     grep -q 'アサインされた open issue がありません' "${PICK}"
+}
+
+@test "pick.zsh: r bypasses the cache" {
+    # キャッシュがあるぶん、r は「取り直し」である必要がある
+    grep -q -- '--bind="r:reload(${(q)issues} --refresh)"' "${PICK}"
 }
 
 @test "pick.zsh: reload is a plain key, not a ctrl chord" {
@@ -159,4 +170,110 @@ EOF
 @test "pick.zsh: derives the org from HELLO_RUN_ISSUE_REPO, hardcoding none" {
     # public リポジトリなので org 名は持たず ~/.pzshrc から取ること
     grep -q 'HELLO_RUN_ISSUE_ORG:-${HELLO_RUN_ISSUE_REPO%%/\*}' "${PICK}"
+}
+
+# --- キャッシュ ---------------------------------------------------------------
+
+# 呼ばれた回数を数える gh。CALLS に 1 行ずつ足す。
+stub_gh() {
+    STUB="${BATS_TEST_TMPDIR}/bin"
+    CALLS="${BATS_TEST_TMPDIR}/gh.calls"
+    mkdir -p "${STUB}"
+    : >"${CALLS}"
+    cat >"${STUB}/gh" <<EOF
+#!/usr/bin/env bash
+echo call >>"${CALLS}"
+[ -n "\${GH_FAIL:-}" ] && exit 1
+echo '[{"url":"https://github.com/org/a/issues/12","repository":{"name":"a"},"number":12,"title":"hello"}]'
+EOF
+    chmod +x "${STUB}/gh"
+}
+
+run_issues() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        "$@" zsh "${ISSUES}"
+}
+
+@test "issues.zsh: second run serves the cache without calling gh" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    run_issues
+    [ "$status" -eq 0 ]
+    [ "$(grep -c . "${CALLS}")" -eq 1 ]
+    run_issues
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"12"*"hello"* ]]
+    # gh は増えていないこと
+    [ "$(grep -c . "${CALLS}")" -eq 1 ]
+}
+
+@test "issues.zsh: --refresh always calls gh" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    run_issues
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        zsh "${ISSUES}" --refresh
+    [ "$status" -eq 0 ]
+    [ "$(grep -c . "${CALLS}")" -eq 2 ]
+}
+
+@test "issues.zsh: an expired cache is refetched" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    run_issues
+    find "${CACHE}" -name 'issues-*.tsv' -exec touch -t 202001010000 {} +
+    run_issues
+    [ "$status" -eq 0 ]
+    [ "$(grep -c . "${CALLS}")" -eq 2 ]
+}
+
+@test "issues.zsh: --warm fills the cache and prints nothing" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        zsh "${ISSUES}" --warm
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ -s "${CACHE}/issues-org.tsv" ]
+    # 温めてあるので次は gh を呼ばない
+    run_issues
+    [ "$(grep -c . "${CALLS}")" -eq 1 ]
+    [[ "$output" == *"hello"* ]]
+}
+
+@test "issues.zsh: falls back to the cache when gh fails" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    run_issues
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        GH_FAIL=1 zsh "${ISSUES}" --refresh
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hello"* ]]
+}
+
+@test "issues.zsh: gives up when gh fails and there is no cache" {
+    stub_gh
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        GH_FAIL=1 zsh "${ISSUES}"
+    [ "$status" -ne 0 ]
+}
+
+@test "issues.zsh: marks are recomputed on a cache hit, not cached" {
+    # 印は worktree / タブの有無なので、キャッシュに焼き付けると嘘になる
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    stub_gh
+    ROOT="${BATS_TEST_TMPDIR}/root"
+    run_issues
+    [[ "$output" == *"・"* ]]
+    # キャッシュはそのままに、worktree だけ後から生やす
+    mkdir -p "${ROOT}/.sessions/issue-12"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"○"* ]]
+    [ "$(grep -c . "${CALLS}")" -eq 1 ]
+}
+
+@test "herdr-plugin.toml: warms the cache on startup" {
+    grep -q 'issues.zsh", "--warm' "${REPO_ROOT}/${PLUGIN}/herdr-plugin.toml"
 }

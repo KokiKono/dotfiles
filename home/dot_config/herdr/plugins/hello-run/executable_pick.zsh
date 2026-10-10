@@ -62,9 +62,9 @@ selected=$(
   print -r -- "$initial" | fzf \
     --delimiter=$'\t' --with-nth=2 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue   ● タブあり  ○ worktree のみ  ・なし\nenter: 開く / r: 再取得 / esc: 閉じる" \
+    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue   ● タブあり  ○ worktree のみ  ・なし\nenter: 開く / r: 取り直す（キャッシュ無視） / esc: 閉じる" \
     --disabled \
-    --bind="r:reload(${(q)issues})" \
+    --bind="r:reload(${(q)issues} --refresh)" \
     --bind='change:clear-query' \
     --preview='gh issue view {1}' \
     --preview-window='right,55%,wrap'

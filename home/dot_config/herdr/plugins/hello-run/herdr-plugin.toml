@@ -12,6 +12,11 @@ min_herdr_version = "0.9.0"
 description = "GitHub issue を選んで作業環境（worktree + タブ + claude）を一発で用意する"
 platforms = ["macos"]
 
+# セッション開始時に issue 一覧のキャッシュを温めておく（gh が 1.5 秒ほどかかるため、
+# 最初の 1 回目だけ popup が待たされるのを避ける）。失敗してもサーバーは止まらない。
+[[startup]]
+command = ["zsh", "-l", "issues.zsh", "--warm"]
+
 [[panes]]
 id = "pick"
 title = "hello-run"

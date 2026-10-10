@@ -160,6 +160,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
     `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
     `--with-nth=2,3,4` で見せていない。
+  - **`gh` の結果だけをキャッシュする。** 実測で `gh search issues` が 1.1〜1.5 秒、
+    タブの走査は 0.03 秒なので、遅いのは `gh` だけ。キャッシュ命中で 1.55 秒 → 0.04 秒。
+    置き場は `HERDR_PLUGIN_STATE_DIR`（herdr の外では `~/.cache/hello-run`）、TTL は
+    `HELLO_RUN_CACHE_TTL` で既定 600 秒。`issues.zsh --refresh` が fzf の `r`、
+    `--warm` はプラグインの `[[startup]]` から呼ばれて初回を温める。`gh` が落ちても
+    キャッシュがあればそれを見せる。**印はキャッシュに焼かない** — worktree やタブの
+    有無は刻々変わるので、毎回その場で付け直す。
   - **一覧の先頭に作業環境の有無を出す**（`●` タブまである / `○` worktree だけ / `・` なし）。
     判定は hello-run が見るのと同じ `<root>/.sessions/issue-<N>` と `issue-<N>` ラベルのタブ。
     **タブは全 workspace を走査する** — hello-run 側と揃えないと印と挙動がずれる。桁揃えは
