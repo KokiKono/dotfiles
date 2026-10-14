@@ -23,6 +23,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr のタブ探索/workspace 解決。hello-run と dev-server が source)
+├── dot_config/hello-run/prompt.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
@@ -166,6 +167,20 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `herdr tab create --workspace` に渡すと popup 経由のときだけ
     `workspace_not_found` で落ちる。`__hr_workspace_id` が
     環境変数 → context JSON → `workspace list` の `focused` の順に引き直す。
+  - **初期プロンプトの文面はコードに持たない。** `~/.config/hello-run/prompt.md`
+    （追跡あり。ソースは `home/dot_config/hello-run/prompt.md`）から読み、
+    `{{issue_url}}` / `{{issue_repo}}` / `{{issue_number}}` / `{{issue_title}}` /
+    `{{branch}}` / `{{repos}}` / `{{session_dir}}` を差し込む。置き場は
+    `HELLO_RUN_PROMPT_FILE` で差し替えられ、ファイルが無ければ組み込みの既定文に落ちる
+    （新しいマシンで `chezmoi apply` より先に叩いても動くようにするため）。
+    HTML コメントの行は送らないので、テンプレートに人間向けの注意書きを置ける。
+    **改行は送信前に空白へ畳む** — claude の入力欄で改行が途中送信として扱われうるため、
+    現状の 1 行送信と同じ経路に保っている。複数段落を送りたくなったらここを見直すこと。
+    リポジトリ名は `{{repos}}`（実体は `~/.pzshrc` の `HELLO_RUN_REPOS`）で差し込むので、
+    **テンプレートに org/repo 名を直接書かない**。`apply.bats` が非混入を検査する。
+    ピッカー（プラグイン）からは `p` で `$EDITOR` が開く。`EDITOR` は `options.zsh`
+    （`~/.zshrc` 経由）でしか設定されず、プラグインは `zsh -l` で起動されるので届かない —
+    `\${EDITOR:-vim}` のまま fzf 側の sh に展開させている。
   - **`wt` never fetches, and its `--base` default is the *local* default branch**, so a naive
     `wt switch --create` branches off whenever the parent repo was last pulled. `__hr_make_worktree`
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
@@ -193,8 +208,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     **タブは全 workspace を走査する** — hello-run 側と揃えないと印と挙動がずれる。桁揃えは
     fzf がやってくれないので `issues.zsh` が 1 列に組み立て、fzf には `--with-nth=2` で渡す。
   - **fzf は `--disabled` で絞り込みを切ってある。** 候補が十数件で検索が要らないのと、
-    切ると ctrl 無しの素のキー（`r` = 再取得）をバインドできるため（`ctrl-r` は端末側の
-    履歴検索と当たる）。打った文字が入力欄に残るのを `change:clear-query` で消している。
+    切ると ctrl 無しの素のキー（`r` = 再取得、`p` = 初期プロンプトの編集）をバインド
+    できるため（`ctrl-r` は端末側の履歴検索と当たる）。打った文字が入力欄に残るのを
+    `change:clear-query` で消している。
   - **`gh` のクエリを `pick.zsh` に inline せず `issues.zsh` に分けてあるのは、fzf の `--bind` が
     コンマでバインドを区切るから。** jq のフィルタを `reload(...)` に直接埋めると中のコンマが
     区切りとして食われ、fzf が起動時に `bind action not specified` で rc=2 即死する。popup が

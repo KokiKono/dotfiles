@@ -192,3 +192,60 @@ run_fn_root() {
     [ "$status" -eq 0 ]
     [[ "$output" == "w2"$'\t'"w2:tA" ]] || false
 }
+
+# --- 初期プロンプトのテンプレート -----------------------------------------------
+
+render() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_PROMPT_FILE="$1" zsh -c \
+        "source '${HR}'; __hr_render_prompt \
+           'https://github.com/o/r/issues/42' 'o/r' 42 'ある題' 'wip/foo' 'repo_a repo_b' '/s/issue-42'"
+}
+
+@test "__hr_render_prompt: fills every placeholder from the template" {
+    cat >"${BATS_TEST_TMPDIR}/p.md" <<'EOF'
+{{issue_url}} / {{issue_repo}} / {{issue_number}} / {{issue_title}} / {{branch}} / {{repos}} / {{session_dir}}
+EOF
+    render "${BATS_TEST_TMPDIR}/p.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://github.com/o/r/issues/42 / o/r / 42 / ある題 / wip/foo / repo_a repo_b / /s/issue-42" ]
+}
+
+@test "__hr_render_prompt: drops html comment lines and folds newlines" {
+    # テンプレートに人間向けの注意書きを置けること、改行が送信前に畳まれること。
+    # 改行をそのまま送ると claude の入力欄で途中送信になりうる
+    cat >"${BATS_TEST_TMPDIR}/p.md" <<'EOF'
+<!-- 送られない注意書き
+     複数行にまたがる -->
+
+一行目。
+
+二行目。
+EOF
+    render "${BATS_TEST_TMPDIR}/p.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "一行目。 二行目。" ]
+}
+
+@test "__hr_render_prompt: falls back to the built-in text without a template" {
+    # 新しいマシンで chezmoi apply より先に叩いても動くこと
+    render "${BATS_TEST_TMPDIR}/missing.md"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "https://github.com/o/r/issues/42 に取り組みます。"* ]] || false
+    [[ "$output" == *"repo_a repo_b"* ]] || false
+}
+
+@test "__hr_render_prompt: falls back when the template has only comments" {
+    cat >"${BATS_TEST_TMPDIR}/p.md" <<'EOF'
+<!-- 本文が無い -->
+EOF
+    render "${BATS_TEST_TMPDIR}/p.md"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"まず issue の内容を確認してください。" ]] || false
+}
+
+@test "hello-run: sends the rendered prompt, not an inline literal" {
+    # 文面を直接書き戻すと、テンプレートを直しても反映されなくなる
+    grep -q '__hr_render_prompt "https://github.com/\$repo/issues/\$num"' "${HR}"
+    run grep -c 'local text="https://github.com' "${HR}"
+    [ "$output" = "0" ]
+}

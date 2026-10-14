@@ -25,6 +25,7 @@ source "${0:A:h}/herdr-lib.zsh"
 HELLO_RUN_ROOT="${HELLO_RUN_ROOT:-}"
 HELLO_RUN_ISSUE_REPO="${HELLO_RUN_ISSUE_REPO:-}"
 HELLO_RUN_SLUG_MODEL="${HELLO_RUN_SLUG_MODEL:-claude-haiku-4-5-20251001}"
+HELLO_RUN_PROMPT_FILE="${HELLO_RUN_PROMPT_FILE:-$HOME/.config/hello-run/prompt.md}"
 typeset -ga HELLO_RUN_REPOS
 
 __hr_err() { print -r -- "hello-run: $*" >&2; }
@@ -390,6 +391,46 @@ __hr_start_agent() {
   return 1
 }
 
+# __hr_render_prompt <issue_url> <issue_repo> <issue_number> <issue_title> <branch> <repos> <session_dir>
+# 初期プロンプトを組み立てる。本文は HELLO_RUN_PROMPT_FILE（既定
+# ~/.config/hello-run/prompt.md）から読み、無ければ組み込みの既定文を使う
+# （新しいマシンで chezmoi apply を待たずに動くようにするため）。
+#
+# <!-- --> の行を落とすのは、テンプレートに人間向けの注意書きを置けるようにするため。
+# 改行を空白へ畳むのは、claude の入力欄で改行が途中送信として扱われうるため — 現状の
+# 1 行送信と同じ経路に保つ。複数段落のプロンプトを送りたくなったらここを見直す。
+__hr_render_prompt() {
+  emulate -L zsh
+  local line body
+  local -a words
+  integer in_comment=0
+  if [[ -r $HELLO_RUN_PROMPT_FILE ]]; then
+    for line in ${(f)"$(<$HELLO_RUN_PROMPT_FILE)"}; do
+      if (( in_comment )); then
+        [[ $line == *'-->'* ]] && in_comment=0
+        continue
+      fi
+      if [[ $line == *'<!--'* ]]; then
+        [[ $line == *'-->'* ]] || in_comment=1
+        continue
+      fi
+      # ${=line} は IFS で分割するので、空行と余分な空白はここで落ちる
+      words+=(${=line})
+    done
+  fi
+  body="${(j: :)words}"
+  [[ -n $body ]] \
+    || body='{{issue_url}} に取り組みます。カレントディレクトリ直下に {{repos}} の worktree（ブランチ {{branch}}）があります。まず issue の内容を確認してください。'
+  body=${body//\{\{issue_url\}\}/$1}
+  body=${body//\{\{issue_repo\}\}/$2}
+  body=${body//\{\{issue_number\}\}/$3}
+  body=${body//\{\{issue_title\}\}/$4}
+  body=${body//\{\{branch\}\}/$5}
+  body=${body//\{\{repos\}\}/$6}
+  body=${body//\{\{session_dir\}\}/$7}
+  print -r -- "$body"
+}
+
 # __hr_send_prompt <label> <text>: claude が入力待ち（信頼確認を抜けた状態）になってから送る
 __hr_send_prompt() {
   emulate -L zsh
@@ -573,7 +614,9 @@ hello-run() {
   (( focus )) && herdr tab focus "$tab_id" >/dev/null
 
   if [[ ${__HR_UI_STATES[5]} == done && $prompt_mode == yes ]]; then
-    local text="https://github.com/$repo/issues/$num に取り組みます。カレントディレクトリ直下に ${HELLO_RUN_REPOS[*]} の worktree（ブランチ $branch）があります。まず issue の内容を確認してください。"
+    local text
+    text=$(__hr_render_prompt "https://github.com/$repo/issues/$num" "$repo" "$num" \
+             "$title" "$branch" "${HELLO_RUN_REPOS[*]}" "$sdir")
     __hr_ui_begin 5
     __hr_ui_detail "入力待ちになるまで待っています"
     if __hr_step "$tmpd/prompt" __hr_send_prompt "$label" "$text"; then
