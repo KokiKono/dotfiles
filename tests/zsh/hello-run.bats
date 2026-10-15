@@ -249,3 +249,117 @@ EOF
     run grep -c 'local text="https://github.com' "${HR}"
     [ "$output" = "0" ]
 }
+
+# --- scratch（issue 起票なしの作業）---------------------------------------------
+
+render_scratch() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_SCRATCH_PROMPT_FILE="$1" zsh -c \
+        "source '${HR}'; __hr_render_scratch_prompt \
+           'ログイン後のリダイレクトを直す' 'scratch/fix-login' 'repo_a repo_b' \
+           '/s/scratch-fix-login' '/s/scratch-fix-login/README.md'"
+}
+
+@test "__hr_render_scratch_prompt: fills every placeholder from the template" {
+    cat >"${BATS_TEST_TMPDIR}/ps.md" <<'EOF'
+{{task}} / {{branch}} / {{repos}} / {{session_dir}} / {{readme}}
+EOF
+    render_scratch "${BATS_TEST_TMPDIR}/ps.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "ログイン後のリダイレクトを直す / scratch/fix-login / repo_a repo_b / /s/scratch-fix-login / /s/scratch-fix-login/README.md" ]
+}
+
+@test "__hr_render_scratch_prompt: falls back to the built-in text without a template" {
+    # 新しいマシンで chezmoi apply より先に叩いても動くこと
+    render_scratch "${BATS_TEST_TMPDIR}/missing.md"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]] || false
+    [[ "$output" == *"repo_a repo_b"* ]] || false
+    [[ "$output" == *"scratch/fix-login"* ]] || false
+}
+
+@test "__hr_render_scratch_prompt: uses its own template, not the issue one" {
+    # 共用すると issue 用の差し込みが空のまま送られる
+    cat >"${BATS_TEST_TMPDIR}/issue.md" <<'EOF'
+issue 用の文面
+EOF
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_PROMPT_FILE="${BATS_TEST_TMPDIR}/issue.md" \
+        HELLO_RUN_SCRATCH_PROMPT_FILE="${BATS_TEST_TMPDIR}/missing.md" zsh -c \
+        "source '${HR}'; __hr_render_scratch_prompt t b r s m"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"issue 用の文面"* ]] || false
+}
+
+# やりたいことを書く代わりに決め打ちの本文を流し込む EDITOR
+stub_editor() {
+    cat >"${STUB}/fake-editor" <<EOF
+#!/usr/bin/env bash
+cat >>"\$1" <<'BODY'
+$1
+BODY
+EOF
+    chmod +x "${STUB}/fake-editor"
+}
+
+read_task() {
+    run env PATH="${STUB}:${PATH}" EDITOR="${STUB}/fake-editor" zsh -c \
+        "source '${HR}'; __hr_read_task '${BATS_TEST_TMPDIR}/task.md'"
+}
+
+@test "__hr_read_task: keeps what was written and drops the html comment" {
+    # 書いたものがそのまま README.md になるので、雛形の注意書きは残らないこと。
+    # 複数行を畳まないこと（README であってプロンプトではない）
+    stub_editor "$(printf 'ログインを直す\n\n- 再現手順を書く')"
+    read_task
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"やりたいこと"* ]] || false
+    [[ "$output" == "ログインを直す"$'\n\n'"- 再現手順を書く" ]] || false
+}
+
+@test "__hr_read_task: fails when nothing was written" {
+    # 空のまま閉じたら中止（slug も置き場も決められない）
+    stub_editor ""
+    read_task
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "__hr_unique_slug: avoids an existing scratch session" {
+    # scratch には issue 番号のような鍵が無いので、同じ slug が二度出たら連番にする。
+    # 上書きすると別の作業の README が消える
+    mkdir -p "${BATS_TEST_TMPDIR}/.sessions/scratch-foo"
+    run env PATH="${STUB}:${PATH}" zsh -c \
+        "source '${HR}'; __hr_unique_slug '${BATS_TEST_TMPDIR}/.sessions' foo"
+    [ "$status" -eq 0 ]
+    [ "$output" = "foo-2" ]
+}
+
+@test "__hr_unique_slug: keeps the slug when nothing collides" {
+    run env PATH="${STUB}:${PATH}" zsh -c \
+        "source '${HR}'; __hr_unique_slug '${BATS_TEST_TMPDIR}/.sessions' bar"
+    [ "$status" -eq 0 ]
+    [ "$output" = "bar" ]
+}
+
+@test "hello-run: scratch does not require gh" {
+    # issue を引かないので gh は要らない。必須にすると gh が無い環境で落ちる
+    grep -q 'need=(herdr wt jq git)' "${HR}"
+    grep -q '(( scratch )) || need+=(gh)' "${HR}"
+}
+
+@test "hello-run: scratch writes the task to README.md in the session dir" {
+    # worktree の外（セッションディレクトリ直下）なので git を汚さない
+    grep -q 'print -r -- "\$task" >"\$sdir/README.md"' "${HR}"
+}
+
+@test "hello-run: scratch asks for the task before drawing the progress ui" {
+    # エディタと進捗表示のカーソル制御は同時に走らせられない
+    read_line="$(grep -n '__hr_read_task "\$taskd/README.md"' "${HR}" | head -1 | cut -d: -f1)"
+    draw_line="$(grep -n '"ブランチ名を推定" "やりたいことを記録"' "${HR}" | head -1 | cut -d: -f1)"
+    [ -n "${read_line}" ] && [ -n "${draw_line}" ]
+    [ "${read_line}" -lt "${draw_line}" ]
+}
+
+@test "hello-run: scratch skips the existing-tab shortcut" {
+    # scratch は毎回新しい作業。ラベルで既存タブを拾うと別の作業に飛ばされる
+    grep -q 'if (( ! scratch )); then' "${HR}"
+}

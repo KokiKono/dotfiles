@@ -113,6 +113,17 @@ run_fn() {
     [[ "$output" == "myrepo"$'\t'* ]] || false
 }
 
+@test "__ds_context: derives the label from a scratch session too" {
+    # hello-run --scratch の置き場は issue-<N> ではなく scratch-<slug>。
+    # issue-<N> だけを見ていると、スクラッチ作業が worktree ごとのタブに分かれない
+    scratch="${BATS_TEST_TMPDIR}/root/.sessions/scratch-fix-login/myrepo"
+    mkdir -p "${scratch}"
+    git -C "${scratch}" init -q .
+    run env PATH="${STUB}:${PATH}" zsh -c "source '${DS}'; cd '${scratch}'; __ds_context"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *$'\t'"dev-scratch-fix-login" ]] || false
+}
+
 @test "__ds_context: falls back to the repo name outside a session dir" {
     plain="${BATS_TEST_TMPDIR}/plain/solo"
     mkdir -p "${plain}"

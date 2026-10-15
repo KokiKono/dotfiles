@@ -119,6 +119,21 @@ setup() {
     grep -q 'config/hello-run/prompt.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
 }
 
+@test "apply: hello-run scratch prompt template is deployed with placeholders only" {
+    # issue を起票していない作業用。issue 版と共用すると、どちらでも意味が通る
+    # 曖昧な文面に寄るので置き場ごと分けてある
+    TPL="${TESTHOME}/.config/hello-run/prompt-scratch.md"
+    [ -f "${TPL}" ]
+    grep -qF '{{repos}}' "${TPL}"
+    grep -qF '{{branch}}' "${TPL}"
+    # public リポジトリなので勤務先の org/repo 名をテンプレートに置かないこと
+    run grep -nE 'HELLO_RUN_REPOS=\(|github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' "${TPL}"
+    [ "$status" -ne 0 ]
+    # hello-run 側がこのファイルを既定の置き場として見ていること
+    grep -q 'HELLO_RUN_SCRATCH_PROMPT_FILE' "${TESTHOME}/.config/zsh/hello-run.zsh"
+    grep -q 'config/hello-run/prompt-scratch.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
+}
+
 @test "apply: hello-run creates worktrees from the fetched default branch" {
     # wt は fetch せず base もローカルのデフォルトブランチなので、古い base から
     # 枝が生えないよう fetch と --base origin/<default> が入っていること

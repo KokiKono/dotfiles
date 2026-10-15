@@ -23,7 +23,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr のタブ探索/workspace 解決。hello-run と dev-server が source)
-├── dot_config/hello-run/prompt.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート)
+├── dot_config/hello-run/prompt{,-scratch}.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート。issue 用と --scratch 用)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
@@ -144,6 +144,24 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   creates one worktree per repo under `<root>/.sessions/issue-<N>/`, lays out a herdr tab with a pane
   per repo, and launches `claude` in the main pane. Needs `herdr` (`HERDR_ENV=1`), `wt`, `gh`, `jq`.
   Two things to know when editing:
+  - **issue を起票していない作業は `--scratch`。** issue の代わりに「やりたいこと」を
+    `$EDITOR` で書かせ（引数で渡せばエディタは開かない）、それをセッションディレクトリ直下の
+    `README.md` に置く。置き場は `<root>/.sessions/scratch-<slug>/`、ブランチは `scratch/<slug>`
+    で、slug の推定（haiku）・worktree・タブ・claude 起動は issue 版と同じ経路を通る。
+    `gh` は要らない。知っておくこと:
+    - **issue 番号に当たる一意な鍵が無いので、slug がそのまま置き場の名前になる。** 同じ slug が
+      二度出たら `__hr_unique_slug` が `-2`, `-3` と連番を振る。既存のセッションに合流させると
+      別の作業の `README.md` を上書きしてしまう。同じ理由で、issue 版にある「既存タブがあれば
+      切り替えるだけ」の早期 return は `--scratch` では通らない（毎回新しい作業として作る）。
+    - claude が無い / slug 推定に失敗したときは時刻（`YYYYMMDD-HHMMSS`）で代用する。
+      issue 版と違って `issue-<N>` のような代わりの名前が無く、名前が決まらないと置き場も
+      決まらないため。
+    - **やりたいことの聞き取りは進捗表示を描き始める前に済ませる。** エディタと、カーソルを
+      相対移動させるチェックリスト表示は同時に走らせられない。
+    - `README.md` はセッションディレクトリ直下、つまり worktree の外に置くので git を汚さない。
+    - 初期プロンプトのテンプレートは issue 版とは別で `~/.config/hello-run/prompt-scratch.md`
+      （`HELLO_RUN_SCRATCH_PROMPT_FILE`）。差し込みは `{{task}}` / `{{readme}}` / `{{branch}}` /
+      `{{repos}}` / `{{session_dir}}`。共用すると、どちらでも意味が通る曖昧な文面に寄る。
   - **The target org/repos are NOT in this repo** — it is PUBLIC. `HELLO_RUN_ROOT` /
     `HELLO_RUN_ISSUE_REPO` / `HELLO_RUN_REPOS` default to empty and the real values live in
     `~/.pzshrc` (untracked; `dot_zshrc` sources it *before* `hello-run.zsh`, so the `${VAR:-}`
@@ -308,9 +326,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
   アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
   この CLI を `--json` で叩くだけの薄いスキルになっている。知っておくこと:
-  - **タブは worktree ごとに1つ**（label `dev-issue-<N>`。`<root>/.sessions/issue-<N>/<repo>` という
-    hello-run の配置からパスだけで決めるので `HELLO_RUN_ROOT` には依存しない。worktree でない
-    チェックアウトでは `dev-<repo>`）。タブの探索は `herdr-lib.zsh` 経由で**全 workspace**を見て、
+  - **タブは worktree ごとに1つ**（label `dev-<session>`。`<root>/.sessions/<session>/<repo>` という
+    hello-run の配置からパスだけで決めるので `HELLO_RUN_ROOT` には依存しない。`<session>` は
+    `issue-<N>` でも `--scratch` の `scratch-<slug>` でもよく、`.sessions` 直下かどうかだけを見る。
+    worktree でないチェックアウトでは `dev-<repo>`）。タブの探索は `herdr-lib.zsh` 経由で**全 workspace**を見て、
     ペインの cwd がその session dir 配下にあることまで確かめる。
   - **ポートは base から空きまで +1 して、起動コマンドの `{{port}}` に注入する。** これで同じ
     アプリを複数の worktree で同時に動かせる。設定に書くのは package.json の script 名ではなく
