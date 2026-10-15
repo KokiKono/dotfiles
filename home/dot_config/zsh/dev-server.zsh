@@ -1,7 +1,8 @@
 # dev-server: worktree ごとに dev サーバーを立てる（herdr のタブ1つ + アプリごとの pane）。
 # 依存: herdr(HERDR_ENV=1), jq, lsof, curl。アプリを選ばせるときだけ fzf。
 #
-#   <root>/.sessions/issue-<N>/<repo>  で叩くと label `dev-issue-<N>` のタブに pane が並ぶ
+#   <root>/.sessions/<session>/<repo>  で叩くと label `dev-<session>` のタブに pane が並ぶ
+#   （<session> は hello-run が作る issue-<N> / scratch-<slug>）
 #
 # worktree ごとにタブを分けるので、同じアプリを別ブランチで同時に動かせる。そのために
 # ポートは base から空きを探して **起動コマンドの {{port}} に注入する**（package.json の
@@ -27,8 +28,9 @@ __ds_err() { print -r -- "dev-server: $*" >&2; }
 # ---------------------------------------------------------------------------
 
 # __ds_context → "<repo>\t<toplevel>\t<session>\t<label>"
-# session は worktree の親。hello-run の配置（<root>/.sessions/issue-<N>/<repo>）なら
-# label は dev-issue-<N>。そうでない普通のチェックアウトでは dev-<repo> にする。
+# session は worktree の親。hello-run の配置（<root>/.sessions/<session>/<repo>）なら
+# label は dev-<session>（issue-<N> でも scratch-<slug> でも同じ扱い）。そうでない
+# 普通のチェックアウトでは dev-<repo> にする。
 # HELLO_RUN_ROOT には依存しない（パスの形だけで決める）。
 __ds_context() {
   emulate -L zsh
@@ -39,7 +41,7 @@ __ds_context() {
   }
   repo=${top:t}
   parent=${top:h}
-  if [[ ${parent:t} == issue-<-> && ${parent:h:t} == .sessions ]]; then
+  if [[ ${parent:h:t} == .sessions ]]; then
     label="dev-${parent:t}"
   else
     label="dev-${repo}"

@@ -312,3 +312,37 @@ EOF
     # worktree はあるがタブは別物なので ○ まで
     [[ "$output" == *"○"*"34"*"ラベルだけ一致"* ]] || false
 }
+
+# --- 初期プロンプトの編集 -------------------------------------------------------
+
+@test "pick.zsh: p opens the prompt template in an editor" {
+    # プラグインから出ずに文面を直せること。execute() は端末を明け渡すので
+    # popup の中でそのままエディタが開く
+    grep -q -- '--bind="p:execute(${edit_prompt})"' "${PICK}"
+    grep -q 'HELLO_RUN_PROMPT_FILE' "${PICK}"
+    # 鍵の案内が header に出ていること
+    grep -q 'p: 初期プロンプトを編集' "${PICK}"
+}
+
+@test "pick.zsh: the editor has a default because zsh -l skips zshrc" {
+    # EDITOR は options.zsh（~/.zshrc 経由）でしか設定されず、プラグインは
+    # zsh -l で起動されるので届かない。展開は fzf 側の sh に任せる
+    grep -qF '\${EDITOR:-vim}' "${PICK}"
+}
+
+@test "pick.zsh: fzf accepts the prompt-edit bind" {
+    # --bind はコンマ区切りなので、中身によっては fzf が rc=2 で即死する。
+    # この bind はパスを含むため、組み立てた実物を fzf に食わせて確かめる
+    command -v fzf >/dev/null 2>&1 || skip "fzf not installed"
+    run zsh -c '
+      prompt_file='"${BATS_TEST_TMPDIR}"'/prompt.md
+      prompt_dir=${prompt_file:h}
+      edit_prompt="mkdir -p ${(q)prompt_dir} && \${EDITOR:-vim} ${(q)prompt_file}"
+      print -r -- x | fzf --bind="p:execute(${edit_prompt})" --filter=x'
+    [ "$status" -eq 0 ]
+}
+
+@test "pick.zsh: creates the template directory before editing" {
+    # まだ chezmoi apply していないマシンでも編集に入れること
+    grep -q 'mkdir -p ${(q)prompt_dir}' "${PICK}"
+}

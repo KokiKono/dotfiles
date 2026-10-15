@@ -10,6 +10,14 @@
 #   ├── <repo-a>/
 #   └── <repo-b>/
 #
+# issue を起票していない作業は `--scratch`。issue の代わりに「やりたいこと」を
+# エディタで書かせ、それをセッションディレクトリ直下の README.md に置く。
+# 置き場とブランチは slug から決まる（issue 番号のような一意な鍵が無いため）:
+#
+#   <root>/.sessions/scratch-<slug>/   ← claude の cwd。直下に README.md
+#   ├── <repo-a>/                      ← ブランチ scratch/<slug>
+#   └── <repo-b>/
+#
 # NOTE: zsh では `path` は $PATH に連動する特殊配列。local 変数名には使わない（wtpath 等にする）。
 #       また同一スコープで同じ名前を二度 local 宣言すると中身が stdout に出るので避ける。
 
@@ -25,6 +33,8 @@ source "${0:A:h}/herdr-lib.zsh"
 HELLO_RUN_ROOT="${HELLO_RUN_ROOT:-}"
 HELLO_RUN_ISSUE_REPO="${HELLO_RUN_ISSUE_REPO:-}"
 HELLO_RUN_SLUG_MODEL="${HELLO_RUN_SLUG_MODEL:-claude-haiku-4-5-20251001}"
+HELLO_RUN_PROMPT_FILE="${HELLO_RUN_PROMPT_FILE:-$HOME/.config/hello-run/prompt.md}"
+HELLO_RUN_SCRATCH_PROMPT_FILE="${HELLO_RUN_SCRATCH_PROMPT_FILE:-$HOME/.config/hello-run/prompt-scratch.md}"
 typeset -ga HELLO_RUN_REPOS
 
 __hr_err() { print -r -- "hello-run: $*" >&2; }
@@ -267,17 +277,33 @@ __hr_sanitize_slug() {
   print -r -- "$out"
 }
 
-# __hr_slugify <title>: haiku に kebab-case の英語 slug を推定させる。
+# __hr_slugify <text>: haiku に kebab-case の英語 slug を推定させる。text は issue の
+# タイトルか、--scratch で書いた「やりたいこと」（複数行可）。
 # claude が無い / 失敗 / 空ならば非 0 を返し、呼び出し側は slug 無しにフォールバックする。
 __hr_slugify() {
   emulate -L zsh
   local title=$1 out
   command -v claude >/dev/null 2>&1 || return 1
   out=$(print -r -- "$title" | claude -p --model "$HELLO_RUN_SLUG_MODEL" \
-    'Convert the GitHub issue title given on stdin into a short English branch slug.
+    'Convert the task description given on stdin (a GitHub issue title, or a free-form
+note about what to work on) into a short English branch slug.
 Rules: kebab-case, 3-5 words, lowercase a-z 0-9 and hyphens only, no issue number,
 no prefix such as feat/ or fix/. Output the slug only, nothing else.' 2>/dev/null) || return 1
   __hr_sanitize_slug "$out"
+}
+
+# __hr_unique_slug <sessions-dir> <slug>: 既存のセッションと衝突しない slug にする。
+# scratch には issue 番号のような一意な鍵が無く、似た題を二度書くと衝突しうる。
+# 別の作業の README を上書きするより、連番を付けて隣に作る。
+__hr_unique_slug() {
+  emulate -L zsh
+  local dir=$1 slug=$2 try=$2
+  integer n=1
+  while [[ -e "$dir/scratch-$try" ]]; do
+    (( n++ ))
+    try="$slug-$n"
+  done
+  print -r -- "$try"
 }
 
 # __hr_branch_exists <repo-dir> <branch>
@@ -390,6 +416,97 @@ __hr_start_agent() {
   return 1
 }
 
+# __hr_strip_comments <file>: HTML コメント（<!-- --> の行・ブロック）を落として中身を出す。
+# プロンプトのテンプレートにも、やりたいことを書かせる雛形にも、人間向けの注意書きを
+# 置けるようにするため。
+__hr_strip_comments() {
+  emulate -L zsh
+  local line
+  integer in_comment=0
+  [[ -r $1 ]] || return 1
+  while IFS= read -r line || [[ -n $line ]]; do
+    if (( in_comment )); then
+      [[ $line == *'-->'* ]] && in_comment=0
+      continue
+    fi
+    if [[ $line == *'<!--'* ]]; then
+      [[ $line == *'-->'* ]] || in_comment=1
+      continue
+    fi
+    print -r -- "$line"
+  done <"$1"
+}
+
+# __hr_template_body <file>: テンプレートを 1 行に畳んで出す。中身が無ければ非 0。
+# 改行を空白へ畳むのは、claude の入力欄で改行が途中送信として扱われうるため — 現状の
+# 1 行送信と同じ経路に保つ。複数段落のプロンプトを送りたくなったらここを見直す。
+__hr_template_body() {
+  emulate -L zsh
+  local line
+  local -a words
+  for line in ${(f)"$(__hr_strip_comments "$1" 2>/dev/null)"}; do
+    # ${=line} は IFS で分割するので、空行と余分な空白はここで落ちる
+    words+=(${=line})
+  done
+  (( ${#words} )) || return 1
+  print -r -- "${(j: :)words}"
+}
+
+# __hr_read_task <file>: $EDITOR で「やりたいこと」を書かせて中身を出す（空なら非 0）。
+# read の 1 行では足りないことが多いのでエディタを開く。雛形の注意書きは HTML コメントに
+# 置いて落とすので、書いたものがそのまま README.md になる。
+__hr_read_task() {
+  emulate -L zsh
+  local file=$1 editor=${EDITOR:-vim} body
+  cat >"$file" <<'EOF'
+<!-- やりたいことを書いて保存する（このコメントは送られない）。
+     書いた内容はそのまま作業ディレクトリ直下の README.md になり、
+     ブランチ名の slug もここから推定する。空のまま閉じると中止。 -->
+
+EOF
+  # 呼び出し側が端末のときだけ来るので、そのまま端末を引き継がせる
+  ${=editor} "$file" || return 1
+  # 先頭の空行だけ落とす（末尾は $() が落とす）。中身の改行は README なので畳まない
+  body=$(__hr_strip_comments "$file" | sed -e '/./,$!d')
+  [[ -n ${body//[[:space:]]/} ]] || return 1
+  print -r -- "$body"
+}
+
+# __hr_render_prompt <issue_url> <issue_repo> <issue_number> <issue_title> <branch> <repos> <session_dir>
+# 初期プロンプトを組み立てる。本文は HELLO_RUN_PROMPT_FILE（既定
+# ~/.config/hello-run/prompt.md）から読み、無ければ組み込みの既定文を使う
+# （新しいマシンで chezmoi apply を待たずに動くようにするため）。
+__hr_render_prompt() {
+  emulate -L zsh
+  local body
+  body=$(__hr_template_body "$HELLO_RUN_PROMPT_FILE") \
+    || body='{{issue_url}} に取り組みます。カレントディレクトリ直下に {{repos}} の worktree（ブランチ {{branch}}）があります。まず issue の内容を確認してください。'
+  body=${body//\{\{issue_url\}\}/$1}
+  body=${body//\{\{issue_repo\}\}/$2}
+  body=${body//\{\{issue_number\}\}/$3}
+  body=${body//\{\{issue_title\}\}/$4}
+  body=${body//\{\{branch\}\}/$5}
+  body=${body//\{\{repos\}\}/$6}
+  body=${body//\{\{session_dir\}\}/$7}
+  print -r -- "$body"
+}
+
+# __hr_render_scratch_prompt <task> <branch> <repos> <session_dir> <readme>
+# --scratch 用。issue が無いので差し込みが別物になる。テンプレートを共用すると
+# どちらでも意味が通る曖昧な文面に寄るので、置き場ごと分けてある。
+__hr_render_scratch_prompt() {
+  emulate -L zsh
+  local body
+  body=$(__hr_template_body "$HELLO_RUN_SCRATCH_PROMPT_FILE") \
+    || body='カレントディレクトリ直下の README.md に今回やりたいことを書きました。同じ階層に {{repos}} の worktree（ブランチ {{branch}}）があります。まず README.md を読んでください。'
+  body=${body//\{\{task\}\}/$1}
+  body=${body//\{\{branch\}\}/$2}
+  body=${body//\{\{repos\}\}/$3}
+  body=${body//\{\{session_dir\}\}/$4}
+  body=${body//\{\{readme\}\}/$5}
+  print -r -- "$body"
+}
+
 # __hr_send_prompt <label> <text>: claude が入力待ち（信頼確認を抜けた状態）になってから送る
 __hr_send_prompt() {
   emulate -L zsh
@@ -399,33 +516,46 @@ __hr_send_prompt() {
 }
 
 # hello-run <issue-url|number> [--prompt|--no-prompt] [--plan] [--no-focus]
+# hello-run --scratch ["やりたいこと"]
 hello-run() {
   emulate -L zsh
   setopt local_options no_monitor no_notify
-  local issue_arg="" prompt_mode=ask focus=1 plan=0 slug_arg=""
+  local issue_arg="" prompt_mode=ask focus=1 plan=0 slug_arg="" task_arg=""
+  integer scratch=0
+  local -a positional
   while (( $# )); do
     case $1 in
       --prompt)    prompt_mode=yes ;;
       --no-prompt) prompt_mode=no ;;
       --plan)      plan=1 ;;
       --no-focus)  focus=0 ;;
+      --scratch)   scratch=1 ;;
       --slug)
         [[ -n ${2:-} ]] || { __hr_err "--slug には値が必要です"; return 2; }
         slug_arg=$2; shift ;;
       --slug=*)    slug_arg=${1#--slug=} ;;
       -h|--help)
         print -r -- "usage: hello-run <issue-url|number> [--slug <slug>] [--prompt|--no-prompt] [--plan] [--no-focus]"
-        print -r -- "  --slug  ブランチ名の slug を自分で指定する（省略時は issue タイトルから推定）"
+        print -r -- "       hello-run --scratch [\"やりたいこと\"] [--slug <slug>] [--prompt|--no-prompt] [--plan] [--no-focus]"
+        print -r -- "  --scratch  issue を起票していない作業。やりたいことを \$EDITOR で書かせ、"
+        print -r -- "             作業ディレクトリ直下の README.md に置く（引数で渡せばエディタは開かない）"
+        print -r -- "  --slug  ブランチ名の slug を自分で指定する（省略時は issue タイトル / やりたいことから推定）"
         print -r -- "  --plan  claude を plan モード（--permission-mode plan）で起動する"
         return 0 ;;
       -*) __hr_err "不明な引数: $1"; return 2 ;;
-      *)
-        [[ -n $issue_arg ]] && { __hr_err "issue は 1 つだけ指定してください"; return 2; }
-        issue_arg=$1 ;;
+      *)  positional+=("$1") ;;
     esac
     shift
   done
-  [[ -n $issue_arg ]] || { __hr_err "issue の URL か番号を指定してください"; return 2; }
+  # --scratch は位置引数より後ろに書けるので、振り分けはループを抜けてから
+  if (( scratch )); then
+    (( ${#positional} > 1 )) && { __hr_err "やりたいことは 1 つだけ指定してください"; return 2; }
+    task_arg=${positional[1]:-}
+  else
+    (( ${#positional} > 1 )) && { __hr_err "issue は 1 つだけ指定してください"; return 2; }
+    issue_arg=${positional[1]:-}
+    [[ -n $issue_arg ]] || { __hr_err "issue の URL か番号を指定してください（issue 無しの作業は --scratch）"; return 2; }
+  fi
   if [[ -n $slug_arg ]]; then
     slug_arg=$(__hr_sanitize_slug "$slug_arg") \
       || { __hr_err "--slug に使える文字がありません: 英数字を含めてください"; return 2; }
@@ -436,44 +566,68 @@ hello-run() {
     return 1
   fi
 
-  local -a missing
+  local -a missing need=(herdr wt jq git)
   local c
-  for c in herdr wt gh jq git; do
+  (( scratch )) || need+=(gh)   # scratch は issue を引かないので gh は要らない
+  for c in "${need[@]}"; do
     command -v "$c" >/dev/null 2>&1 || missing+=("$c")
   done
   (( ${#missing} )) && { __hr_err "未インストール: ${missing[*]}"; return 1; }
   [[ -n ${HERDR_ENV:-} ]] || { __hr_err "herdr 環境ではありません（HERDR_ENV が未設定）"; return 1; }
 
-  local parsed repo num
-  parsed=$(__hr_parse_issue "$issue_arg") || { __hr_err "issue を解釈できません: $issue_arg"; return 2; }
-  repo=${parsed%%$'\t'*}
-  num=${parsed##*$'\t'}
-
-  local label="issue-$num" sdir="$HELLO_RUN_ROOT/.sessions/issue-$num"
+  local parsed="" repo="" num="" label="" sdir="" task=""
+  local tab_id="" tab_ws="" found cur_ws
   local panes="main / ${(j: / :)HELLO_RUN_REPOS}"
 
-  # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）
-  local tab_id="" tab_ws="" found cur_ws
-  cur_ws=$(__hr_workspace_id) || cur_ws=""
-  if found=$(__hr_find_tab "$label"); then
-    tab_ws=${found%%$'\t'*}
-    tab_id=${found##*$'\t'}
-  fi
-  if [[ -n $tab_id && -d "$sdir/${HELLO_RUN_REPOS[1]}" ]]; then
-    local cur_branch
-    cur_branch=$(git -C "$sdir/${HELLO_RUN_REPOS[1]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
-    __hr_ui_init "hello-run  ${repo}#${num}  — 既存のタブに切り替え"
-    __hr_ui_box "$label" \
-      branch  "${cur_branch:-?}" \
-      session "${sdir/#$HOME/~}" \
-      tab     "$tab_id  ($panes)${${tab_ws:#$cur_ws}:+  @$tab_ws}"
-    if (( focus )); then
-      # tab focus だけでは別 workspace のタブに移れないので先に workspace を切り替える
-      [[ -n $tab_ws && $tab_ws != $cur_ws ]] \
-        && herdr workspace focus "$tab_ws" >/dev/null
-      herdr tab focus "$tab_id" >/dev/null
+  if (( ! scratch )); then
+    parsed=$(__hr_parse_issue "$issue_arg") || { __hr_err "issue を解釈できません: $issue_arg"; return 2; }
+    repo=${parsed%%$'\t'*}
+    num=${parsed##*$'\t'}
+    label="issue-$num"
+    sdir="$HELLO_RUN_ROOT/.sessions/issue-$num"
+
+    # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）。
+    # scratch は毎回新しい作業なので、この経路を通さず常に作る。
+    cur_ws=$(__hr_workspace_id) || cur_ws=""
+    if found=$(__hr_find_tab "$label"); then
+      tab_ws=${found%%$'\t'*}
+      tab_id=${found##*$'\t'}
     fi
-    return 0
+    if [[ -n $tab_id && -d "$sdir/${HELLO_RUN_REPOS[1]}" ]]; then
+      local cur_branch
+      cur_branch=$(git -C "$sdir/${HELLO_RUN_REPOS[1]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
+      __hr_ui_init "hello-run  ${repo}#${num}  — 既存のタブに切り替え"
+      __hr_ui_box "$label" \
+        branch  "${cur_branch:-?}" \
+        session "${sdir/#$HOME/~}" \
+        tab     "$tab_id  ($panes)${${tab_ws:#$cur_ws}:+  @$tab_ws}"
+      if (( focus )); then
+        # tab focus だけでは別 workspace のタブに移れないので先に workspace を切り替える
+        [[ -n $tab_ws && $tab_ws != $cur_ws ]] \
+          && herdr workspace focus "$tab_ws" >/dev/null
+        herdr tab focus "$tab_id" >/dev/null
+      fi
+      return 0
+    fi
+  fi
+
+  # やりたいことの聞き取りは進捗表示を描き始める前に済ませる（エディタと競合する）。
+  if (( scratch )); then
+    if [[ -n $task_arg ]]; then
+      task=$task_arg
+    elif [[ -t 0 ]]; then
+      local taskd
+      taskd=$(mktemp -d) || return 1
+      task=$(__hr_read_task "$taskd/README.md") || {
+        rm -rf "$taskd"
+        __hr_err "やりたいことが空なので中止しました"
+        return 1
+      }
+      rm -rf "$taskd"
+    else
+      __hr_err "端末が無いのでエディタを開けません。--scratch \"やりたいこと\" のように引数で渡してください"
+      return 2
+    fi
   fi
 
   # ここから先は新規作成。初期プロンプトの確認はこの経路でしか要らないので、
@@ -490,32 +644,66 @@ hello-run() {
     fi
   fi
 
-  __hr_ui_init "hello-run  ${repo}#${num}" \
-    "issue を取得" "ブランチ名を推定" "worktree を作成" "herdr タブを構成" "claude を起動"
+  if (( scratch )); then
+    __hr_ui_init "hello-run  scratch" \
+      "ブランチ名を推定" "やりたいことを記録" "worktree を作成" "herdr タブを構成" "claude を起動"
+  else
+    __hr_ui_init "hello-run  ${repo}#${num}" \
+      "issue を取得" "ブランチ名を推定" "worktree を作成" "herdr タブを構成" "claude を起動"
+  fi
 
   local tmpd
   tmpd=$(mktemp -d) || return 1
 
-  # 1. issue タイトル（取れなくても致命的ではない）
-  local title=""
-  __hr_ui_begin 1
-  __hr_step "$tmpd/title" __hr_issue_title "$repo" "$num" && title=$(<"$tmpd/title")
-  title=${title%%$'\n'*}
-  __hr_ui_detail "${title:-（タイトルは取得できず）}"
-  __hr_ui_done
+  local title="" slug=$slug_arg branch=""
+  if (( scratch )); then
+    # 1. slug → ブランチ名と置き場（issue 番号に当たる鍵が無いので slug が名前になる）
+    __hr_ui_begin 1
+    if [[ -n $slug ]]; then
+      __hr_ui_detail "指定された slug を使用"
+    else
+      __hr_step "$tmpd/slug" __hr_slugify "$task" && slug=$(<"$tmpd/slug")
+      slug=${slug%%$'\n'*}
+    fi
+    # claude が無い / 失敗したときは時刻で代用する（名前が決まらないと置き場も決まらない）
+    [[ -n $slug ]] || slug=$(date +%Y%m%d-%H%M%S)
+    slug=$(__hr_unique_slug "$HELLO_RUN_ROOT/.sessions" "$slug")
+    label="scratch-$slug"
+    sdir="$HELLO_RUN_ROOT/.sessions/$label"
+    branch="scratch/$slug"
+    __hr_ui_detail "$branch"
+    __hr_ui_done
 
-  # 2. slug 推定 → ブランチ名（claude が無い / 失敗なら slug 無しにフォールバック）
-  local slug=$slug_arg branch="issue-$num"
-  __hr_ui_begin 2
-  if [[ -n $slug ]]; then
-    __hr_ui_detail "指定された slug を使用"
-  elif [[ -n $title ]]; then
-    __hr_step "$tmpd/slug" __hr_slugify "$title" && slug=$(<"$tmpd/slug")
-    slug=${slug%%$'\n'*}
+    # 2. やりたいこと → README.md。claude の cwd 直下、かつ worktree の外なので git を汚さない
+    __hr_ui_begin 2
+    if ! mkdir -p "$sdir" || ! print -r -- "$task" >"$sdir/README.md"; then
+      __hr_ui_fail
+      __hr_err "README.md を書けませんでした: $sdir"
+      return 1
+    fi
+    __hr_ui_detail "${sdir:t}/README.md"
+    __hr_ui_done
+  else
+    # 1. issue タイトル（取れなくても致命的ではない）
+    __hr_ui_begin 1
+    __hr_step "$tmpd/title" __hr_issue_title "$repo" "$num" && title=$(<"$tmpd/title")
+    title=${title%%$'\n'*}
+    __hr_ui_detail "${title:-（タイトルは取得できず）}"
+    __hr_ui_done
+
+    # 2. slug 推定 → ブランチ名（claude が無い / 失敗なら slug 無しにフォールバック）
+    branch="issue-$num"
+    __hr_ui_begin 2
+    if [[ -n $slug ]]; then
+      __hr_ui_detail "指定された slug を使用"
+    elif [[ -n $title ]]; then
+      __hr_step "$tmpd/slug" __hr_slugify "$title" && slug=$(<"$tmpd/slug")
+      slug=${slug%%$'\n'*}
+    fi
+    [[ -n $slug ]] && branch="issue-$num/$slug"
+    __hr_ui_detail "$branch"
+    __hr_ui_done
   fi
-  [[ -n $slug ]] && branch="issue-$num/$slug"
-  __hr_ui_detail "$branch"
-  __hr_ui_done
 
   # 3. worktree
   mkdir -p "$sdir" || return 1
@@ -573,7 +761,14 @@ hello-run() {
   (( focus )) && herdr tab focus "$tab_id" >/dev/null
 
   if [[ ${__HR_UI_STATES[5]} == done && $prompt_mode == yes ]]; then
-    local text="https://github.com/$repo/issues/$num に取り組みます。カレントディレクトリ直下に ${HELLO_RUN_REPOS[*]} の worktree（ブランチ $branch）があります。まず issue の内容を確認してください。"
+    local text
+    if (( scratch )); then
+      text=$(__hr_render_scratch_prompt "$task" "$branch" "${HELLO_RUN_REPOS[*]}" \
+               "$sdir" "$sdir/README.md")
+    else
+      text=$(__hr_render_prompt "https://github.com/$repo/issues/$num" "$repo" "$num" \
+               "$title" "$branch" "${HELLO_RUN_REPOS[*]}" "$sdir")
+    fi
     __hr_ui_begin 5
     __hr_ui_detail "入力待ちになるまで待っています"
     if __hr_step "$tmpd/prompt" __hr_send_prompt "$label" "$text"; then
