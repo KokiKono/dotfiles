@@ -321,9 +321,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   なので、記録する / しないの線引き (`references/judgment.md`) がこのスキルの本体で、DB の
   プロパティと本文テンプレは `references/schema.md` にある。書き込みは Notion MCP 経由のみで
   `scripts/` は持たない。**追記先の Notion DB ID は追跡しない** — `~/.claude/ubiquitous-language.local.json`
-  （非追跡）に `database_url` / `data_source_url` / `glossary_search_hints` / `dry_run` を置き、
-  スキルは起動時にそれを読む。
-  設定が無ければ `setup` モードで DB を作るところから始まる。`dry_run: true` のあいだは Notion に
+  （非追跡）に `database_url` / `data_source_url` / `template_url` / `glossary_search_hints` / `dry_run` を置き、
+  スキルは起動時にそれを読む。追記先はイシュー検討メモと同居する個人メモ DB で、用語の行は
+  `種別 = ユビキタス言語` で見分ける（用語の中身は列ではなく本文の「概要」節に書く）。
+  設定が無ければ `setup` モードで追記先の DB とテンプレートを設定するところから始まる。`dry_run: true` のあいだは Notion に
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。

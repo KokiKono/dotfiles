@@ -21,15 +21,16 @@ cat ~/.claude/ubiquitous-language.local.json
 
 | キー | 意味 |
 |---|---|
-| `database_url` | 追記先の Notion データベース（`notion-create-pages` の親） |
-| `data_source_url` | その data source（`collection://…`。`notion-query-data-sources` に渡す） |
+| `database_url` | 追記先の Notion データベース（イシュー検討メモと同居する個人メモ DB） |
+| `data_source_url` | その data source（`collection://…`。`notion-create-pages` の親と `notion-query-data-sources` に渡す） |
+| `template_url` | DB テンプレート「ユビキタス言語」のページ。本文先頭の記載ルール callout をここから写す |
 | `glossary_search_hints` | 社内の既存用語集を探すときの検索語 |
 | `dry_run` | `true` なら Notion に書かず、書く内容を表示するだけ |
 
 **このファイルは追跡外**（スキル本体は public リポジトリにある）。
 無い / `database_url` が空なら `setup` モードへ。それ以外は §1 へ。
 
-引数が `show` なら記録せず、DB を新しい順に 10 件引いて一覧で見せて終わる。
+引数が `show` なら記録せず、`種別 = 'ユビキタス言語'` で絞って新しい順に 10 件引き、一覧で見せて終わる。
 
 ## 1. 記録するか決める
 
@@ -44,27 +45,37 @@ cat ~/.claude/ubiquitous-language.local.json
 
 ## 2. 重複を見る
 
-`notion-query-data-sources` に `data_source_url` を渡して引き、**用語名と「読み・別名」の両方**で突き合わせる
-（`ARR` と `Annual Recurring Revenue` は同じ語）。
+**用語名と「読み・別名」の両方**で突き合わせる（`ARR` と `Annual Recurring Revenue` は同じ語）。
+「読み・別名」は列ではなく本文の概要にあるので、2 つの手段を併用する。
+
+- `notion-query-data-sources`（SQL）で `種別 = 'ユビキタス言語'` の `名前` を全件引いて照合する
+- `notion-search` に `data_source_url` を渡し、用語と思いつく別名で本文を検索する。
+  同じ DB にイシュー検討メモも入っているので、ヒットしたページの `種別` を確かめる
 
 - 無ければ §3 へ
 - **あれば新規に作らず既存ページを更新する。** 本文の末尾に `## 追記（YYYY-MM-DD）` を足し、
-  今回分かったことを書く。プロパティは空欄だった項目だけ埋める（既存の記述を上書きしない）
+  今回分かったことを書く。概要の行は空だった項目を足すだけにする（既存の記述を上書きしない）
+- 同じものではないが意味が重なる語が見つかったら、`references/schema.md` の「関連と重複の整理」に従う
 
 ## 3. 公式定義を探す
 
 `glossary_search_hints` の語 + 用語そのもので `notion-search` する。社内の既存用語集に
-エントリがあれば URL を `公式定義` に入れる。
+エントリがあれば概要の `公式定義:` 行にメンションで入れる。
 
 **ここが一番価値を生むのは、自分の理解と公式定義がずれていたとき。** ずれていたら
 本文に「自分の理解」と「公式定義」を並べて書く。黙って公式定義で上書きしない —
 なぜ誤解したかが後で効く。
 
-見つからなければ `公式定義` は空のままでよい。探すのは一度だけで、深追いしない。
+見つからなければ `公式定義:` 行は置かない。探すのは一度だけで、深追いしない。
 
 ## 4. 書く
 
-`references/schema.md` のテンプレに従って、`database_url` を親に `notion-create-pages` で 1 ページ作る。
+`template_url` を fetch して記載ルールの callout を取り、`references/schema.md` のテンプレに従って
+`data_source_url` を親に `notion-create-pages` で 1 ページ作る。`種別` は `ユビキタス言語`、
+出典が GitHub の issue / PR なら `Github Issue` にその URL を入れる。
+
+`template_id` でテンプレートを適用する手は使わない。適用は非同期で、本文を同時に渡せず、
+空のページに後から追記する手順になるため。
 
 `dry_run` が `true` のときは**ツールを呼ばず**、書こうとしたプロパティと本文を
 そのまま出力して終わる（§5 の 1 行報告の代わり）。これは内容を確認しながら調整するための
@@ -81,12 +92,14 @@ cat ~/.claude/ubiquitous-language.local.json
 
 ## setup モード
 
-1. 置き場所を聞く（既定はプライベート領域直下）
-2. `references/schema.md` のプロパティ定義どおりに `notion-create-database` で作る
-3. `~/.claude/ubiquitous-language.local.json` に `database_url` / `data_source_url` /
+1. 追記先の DB の URL を聞く。既存の個人メモ DB を使うのが基本で、無ければ
+   `references/schema.md` のプロパティ定義どおりに `notion-create-database` で作る
+2. DB を fetch し、`collection://…` と、`種別 = ユビキタス言語` の DB テンプレートのページ URL を取る。
+   テンプレートが無ければ作ってもらう（記載ルールの正本はそこに置く）
+3. `~/.claude/ubiquitous-language.local.json` に `database_url` / `data_source_url` / `template_url` /
    `glossary_search_hints` / `dry_run` を書く。`dry_run` は最初 `true` にして、
    数件ためしてから `false` に倒すことを勧める
-4. 作った DB の URL を伝える
+4. DB の URL を伝える
 
 ## 守ること
 
