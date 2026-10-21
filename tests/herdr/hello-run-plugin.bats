@@ -13,6 +13,10 @@ setup() {
     export HELLO_RUN_CACHE_DIR="${CACHE}"
     # ~/.pzshrc を拾って実 org に繋がらないようにする
     export HELLO_RUN_PRIVATE_RC="${BATS_TEST_TMPDIR}/no-such-rc"
+    # 実 herdr のタブを拾わないよう、何も無い herdr を既定で置く（必要なテストは上書きする）
+    mkdir -p "${BATS_TEST_TMPDIR}/bin"
+    printf '#!/usr/bin/env bash\necho "{}"\n' >"${BATS_TEST_TMPDIR}/bin/herdr"
+    chmod +x "${BATS_TEST_TMPDIR}/bin/herdr"
 }
 
 @test "pick.zsh / issues.zsh: valid zsh syntax" {
@@ -115,8 +119,10 @@ EOF
 @test "issues.zsh: looks for tabs in every workspace, not just the current one" {
     # 印と hello-run の挙動を揃えるため。現在の workspace だけ見ると、別 workspace に
     # あるタブを「無い」と表示してしまう
-    grep -q 'workspace list' "${ISSUES}"
-    run grep -- 'tab list --workspace "$HERDR_WORKSPACE_ID"' "${ISSUES}"
+    LIB="${REPO_ROOT}/${PLUGIN}/lib.zsh"
+    grep -q 'lib.zsh' "${ISSUES}"
+    grep -q 'workspace list' "${LIB}"
+    run grep -- 'tab list --workspace "$HERDR_WORKSPACE_ID"' "${LIB}"
     [ "$status" -ne 0 ]
 }
 
@@ -345,4 +351,165 @@ EOF
 @test "pick.zsh: creates the template directory before editing" {
     # まだ chezmoi apply していないマシンでも編集に入れること
     grep -q 'mkdir -p ${(q)prompt_dir}' "${PICK}"
+}
+
+# --- クローズ済み issue のタブを閉じる --------------------------------------------
+
+# close-done.zsh 用の herdr / gh スタブ。閉じたタブは ${BATS_TEST_TMPDIR}/closed に残る。
+# issue-1 / issue-2 は hello-run が URL を残したセッション、issue-3 / issue-4 は残す前に
+# 作ったもの。issue-4 はラベルだけ同じ別物（ペインが別の場所に居る）。
+close_done_stubs() {
+    STUB="${BATS_TEST_TMPDIR}/bin"
+    ROOT="${BATS_TEST_TMPDIR}/root"
+    mkdir -p "${STUB}" "${ROOT}/.sessions/issue-1" "${ROOT}/.sessions/issue-2" \
+        "${ROOT}/.sessions/issue-3" "${ROOT}/.sessions/issue-4"
+    echo "https://github.com/org/a/issues/1" >"${ROOT}/.sessions/issue-1/.issue-url"
+    echo "https://github.com/org/b/issues/2" >"${ROOT}/.sessions/issue-2/.issue-url"
+    cat >"${STUB}/herdr" <<EOF
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1"},{"workspace_id":"w2"}]}}' ;;
+  "tab list")
+    if [[ "\$*" == *"--workspace w2"* ]]; then
+      echo '{"result":{"tabs":[{"tab_id":"w2:t1","label":"issue-1"},{"tab_id":"w2:t3","label":"issue-3"}]}}'
+    else
+      echo '{"result":{"tabs":[{"tab_id":"w1:t2","label":"issue-2"},{"tab_id":"w1:t4","label":"issue-4"},{"tab_id":"w1:t9","label":"dev-x"}]}}'
+    fi ;;
+  "pane list")
+    echo '{"result":{"panes":[{"tab_id":"w2:t1","cwd":"${ROOT}/.sessions/issue-1"},
+                              {"tab_id":"w1:t2","cwd":"${ROOT}/.sessions/issue-2/a"},
+                              {"tab_id":"w2:t3","cwd":"${ROOT}/.sessions/issue-3"},
+                              {"tab_id":"w1:t4","cwd":"/somewhere/else"}]}}' ;;
+  "tab close") echo "\$3" >>"${BATS_TEST_TMPDIR}/closed" ;;
+  *) echo '{}' ;;
+esac
+EOF
+    # org/a#1 はクローズ済み、org/b#2 は open。URL の無い #3 は org 検索でちょうど 1 件
+    # 当たる（本文に 3 を含む #30 も返ってくるが番号で弾く）
+    cat >"${STUB}/gh" <<'GH'
+#!/usr/bin/env bash
+case "$*" in
+  "issue view 1 --repo org/a "*) echo '{"url":"https://github.com/org/a/issues/1","title":"t","state":"CLOSED"}' ;;
+  "issue view 2 --repo org/b "*) echo '{"url":"https://github.com/org/b/issues/2","title":"t","state":"OPEN"}' ;;
+  "search issues --owner org "*" -- 3")
+    echo '[{"url":"https://github.com/org/c/issues/3","number":3,"title":"t","state":"closed","repository":{"name":"c"}},
+           {"url":"https://github.com/org/c/issues/30","number":30,"title":"t","state":"closed","repository":{"name":"c"}}]' ;;
+  "search issues "*) echo '[]' ;;
+  *) exit 1 ;;
+esac
+GH
+    chmod +x "${STUB}/herdr" "${STUB}/gh"
+}
+
+run_close_done() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_ROOT="${ROOT}" HELLO_RUN_ISSUE_ORG=org \
+        zsh "${REPO_ROOT}/${PLUGIN}/executable_close-done.zsh" "$@"
+}
+
+@test "close-done.zsh: closes only tabs of closed issues, in every workspace" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    close_done_stubs
+    run_close_done --yes
+    [ "$status" -eq 0 ]
+    run sort "${BATS_TEST_TMPDIR}/closed"
+    # t2 は open、t4 はラベルだけ同じ別物、t9 は hello-run のタブではない
+    [ "$output" = "$(printf 'w2:t1\nw2:t3')" ]
+}
+
+@test "close-done.zsh: --dry-run closes nothing" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    close_done_stubs
+    run_close_done --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"issue-1"* ]] || false
+    [ ! -e "${BATS_TEST_TMPDIR}/closed" ]
+}
+
+@test "close-done.zsh: keeps a tab whose state cannot be fetched" {
+    # 状態を取れないものは閉じない。開いている作業を誤って閉じるほうが痛い
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    close_done_stubs
+    printf '#!/usr/bin/env bash\nexit 1\n' >"${STUB}/gh"
+    run_close_done --yes
+    [ "$status" -eq 0 ]
+    [ ! -e "${BATS_TEST_TMPDIR}/closed" ]
+}
+
+@test "close-done.zsh: an ambiguous org search keeps the tab" {
+    # URL の無いセッションで、番号の一致するクローズ済み issue が複数リポジトリにある
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    close_done_stubs
+    cat >"${STUB}/gh" <<'GH'
+#!/usr/bin/env bash
+case "$*" in
+  "search issues --owner org "*" -- 3")
+    echo '[{"url":"https://github.com/org/c/issues/3","number":3,"title":"t","state":"closed","repository":{"name":"c"}},
+           {"url":"https://github.com/org/d/issues/3","number":3,"title":"t","state":"closed","repository":{"name":"d"}}]' ;;
+  "search issues "*) echo '[]' ;;
+  *) echo '{"url":"x","title":"t","state":"OPEN"}' ;;
+esac
+GH
+    run_close_done --yes
+    [ "$status" -eq 0 ]
+    [ ! -e "${BATS_TEST_TMPDIR}/closed" ]
+}
+
+@test "pick.zsh: x closes done tabs and reloads the list" {
+    grep -qF -- '--bind="x:execute(${(q)close_done})+reload(${(q)issues})"' "${PICK}"
+}
+
+@test "hello-run: records the issue url in the session directory" {
+    # close-done.zsh はこれでどのリポジトリの issue かを知る（番号は一意でない）
+    grep -qF '>"$sdir/.issue-url"' "${REPO_ROOT}/home/dot_config/zsh/hello-run.zsh"
+}
+
+# 一覧（open かつ自分にアサイン）に無い issue でも、タブが残っていれば出す
+issues_with_closed_tab_stubs() {
+    close_done_stubs
+    cat >"${STUB}/gh" <<'GH'
+#!/usr/bin/env bash
+echo "$*" >>"${GH_LOG:-/dev/null}"
+case "$*" in
+  "search issues --owner org --assignee @me --state open "*)
+    echo '[{"url":"https://github.com/org/b/issues/2","repository":{"name":"b"},"number":2,"title":"まだ open"}]' ;;
+  "issue view 1 --repo org/a "*)
+    echo '{"url":"https://github.com/org/a/issues/1","title":"閉じた issue","state":"CLOSED"}' ;;
+  "search issues --owner org --assignee @me --json "*" -- 3")
+    echo '[{"url":"https://github.com/org/c/issues/3","number":3,"title":"古いセッション","state":"closed","repository":{"name":"c"}}]' ;;
+  *) echo '[]' ;;
+esac
+GH
+}
+
+@test "issues.zsh: lists issues that still have a tab even when closed" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    issues_with_closed_tab_stubs
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 3 ]
+    [[ "${lines[0]}" == "https://github.com/org/b/issues/2	"*"まだ open"* ]] || false
+    [[ "$output" == *"https://github.com/org/a/issues/1	● "*"[closed] 閉じた issue"* ]] || false
+    [[ "$output" == *"https://github.com/org/c/issues/3	● "*"[closed] 古いセッション"* ]] || false
+    # issue-4 はラベルだけ同じ別物なので出さない
+    [[ "$output" != *"/issues/4"* ]] || false
+}
+
+@test "issues.zsh: closed tab rows are cached until --refresh" {
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    issues_with_closed_tab_stubs
+    export GH_LOG="${BATS_TEST_TMPDIR}/gh.log"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}"
+    [ "$status" -eq 0 ]
+    : >"${GH_LOG}"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[closed] 閉じた issue"* ]] || false
+    [ ! -s "${GH_LOG}" ]
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_CACHE_DIR="${CACHE}" HELLO_RUN_ISSUE_ORG=org \
+        HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}" --refresh
+    [ "$status" -eq 0 ]
+    grep -q 'issue view 1' "${GH_LOG}"
 }

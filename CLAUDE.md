@@ -207,13 +207,17 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
-  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）。知っておくこと:
+  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）、`close-done.zsh`（クローズ済みの
+  タブを閉じる）、`lib.zsh`（タブ探索と issue の特定。前 2 つが共有）。知っておくこと:
   - **一覧は org 横断で、自分にアサインされた open issue だけ。** リポジトリ単位の
     `gh issue list` ではなく `gh search issues --owner <org> --assignee @me` を使う。org 名は
     持たず、`~/.pzshrc` の `HELLO_RUN_ISSUE_REPO`（`<org>/<repo>`）の所有者部分から取る
     （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
     `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
     `--with-nth=2,3,4` で見せていない。
+  - **ただしタブが残っている issue は、一覧から外れていても末尾に足す**（クローズ済みなら
+    タイトルに `[closed]`）。足さないと、issue を閉じた途端にそのタブへ戻る道が消える。
+    1 件ずつ `gh` を叩くので結果を `tab-issues-<org>.tsv` にキャッシュし、`r` で取り直す。
   - **`gh` の結果だけをキャッシュする。** 実測で `gh search issues` が 1.1〜1.5 秒、
     タブの走査は 0.03 秒なので、遅いのは `gh` だけ。キャッシュ命中で 1.55 秒 → 0.04 秒。
     置き場は `HERDR_PLUGIN_STATE_DIR`（herdr の外では `~/.cache/hello-run`）、TTL は
@@ -254,6 +258,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `config.toml` の `plugin_action` が外部プラグインを呼んでいるのに一覧に無いと、新マシンで
     キーが空振りするので `tests/install/macos/herdr.bats` が対応を見張っている。
     `config.toml` を変えたら `herdr server reload-config`。
+  - **`x` でクローズ済み issue のタブを閉じる**（`close-done.zsh`）。対象はタブ側から探す
+    （`●` と同じ条件: `issue-<N>` ラベル + ペインがセッションディレクトリ配下、全 workspace。
+    `lib.zsh` の `__hrp_session_tabs`）。閉じるのはタブだけで worktree は `wrm` に任せる。
+    どのリポジトリの issue かは、`hello-run` がセッションディレクトリに残す `.issue-url` で知る。
+    それが無い古いセッションは、自分にアサインされた issue を org 横断で番号検索し、
+    ちょうど 1 件当たったときだけそれとみなす（`__hrp_issue_of`。一覧の `[closed]` 行も同じ）。
+    `HELLO_RUN_ISSUE_REPO` で代用しないのは、ピッカーが org 横断なので issue が別リポジトリに
+    あることが多いため。CLOSED と確かめられないものは閉じない。
   - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
 - **`home/dot_config/herdr/plugins/git-diff/`** は自作の herdr プラグイン
   (`kokikono.git-diff`)。`prefix+Shift+D` でどのペインからでも popup が開き、PR を作る直前の
