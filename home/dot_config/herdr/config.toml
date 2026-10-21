@@ -7,6 +7,7 @@ show_agent_labels_on_pane_borders = true
 delivery = "off"
 
 [experimental]
+kitty_graphics = true
 pane_history = true
 
 # hello-run: prefix(Ctrl+B) → Shift+H で issue ピッカーを popup で開く。
@@ -25,3 +26,12 @@ key = "prefix+shift+d"
 type = "shell"
 command = "herdr plugin pane open --plugin kokikono.git-diff --entrypoint files"
 description = "git-diff: 差分を GitHub の Files changed のように見る"
+
+# reviewr: prefix(Ctrl+B) → Shift+R で、エージェントが書いた差分のレビューペインを開閉する。
+# 外部プラグイン persiyanov.reviewr（`herdr plugin install` で導入）が toggle アクションを
+# 持つので、自作プラグインと違い shell を介さず plugin_action で直接呼べる。
+[[keys.command]]
+key = "prefix+shift+r"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "reviewr: 差分レビューペインを開閉する"

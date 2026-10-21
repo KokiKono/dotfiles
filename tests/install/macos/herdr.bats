@@ -40,10 +40,11 @@ run_script() {
     [ "$status" -eq 0 ]
 }
 
-@test "herdr.sh: sourcing defines link_plugins / main without running" {
-    run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F link_plugins main"
+@test "herdr.sh: sourcing defines link_plugins / install_github_plugins / main without running" {
+    run bash -c "source '${REPO_ROOT}/${SCRIPT}'; declare -F link_plugins install_github_plugins main"
     [ "$status" -eq 0 ]
     [[ "$output" == *"link_plugins"* ]] || false
+    [[ "$output" == *"install_github_plugins"* ]] || false
     [[ "$output" == *"main"* ]] || false
 }
 
@@ -74,6 +75,36 @@ run_script() {
     run_script
     [ "$status" -eq 0 ]
     ! grep -qF "plugin link" "${LOG}"
+}
+
+@test "herdr.sh: installs github plugins non-interactively" {
+    stub_herdr "No plugins installed."
+    run_script
+    [ "$status" -eq 0 ]
+    grep -qF "plugin install -y persiyanov/herdr-reviewr" "${LOG}"
+}
+
+@test "herdr.sh: does not install a github plugin twice" {
+    stub_herdr "- persiyanov.reviewr (reviewr) enabled [github:persiyanov/herdr-reviewr@a253b1b]"
+    run_script
+    [ "$status" -eq 0 ]
+    ! grep -qF "plugin install" "${LOG}"
+    [[ "$output" == *"既に install 済み"* ]] || false
+}
+
+@test "herdr.sh: every plugin_action key binding has its plugin installed" {
+    # config.toml が呼ぶ <plugin_id>.<action> のうち外部のものは、HERDR_GITHUB_PLUGINS に
+    # 入っていないと新マシンでキーが空振りする。plugin_id の名前部分 (reviewr) が
+    # リポジトリ名 (herdr-reviewr) に含まれることで対応を見る
+    run bash -c "source '${REPO_ROOT}/${SCRIPT}'; printf '%s\n' \"\${HERDR_GITHUB_PLUGINS[@]}\""
+    [ "$status" -eq 0 ]
+    local repos="$output" id name
+    while read -r id; do
+        [[ "$id" == kokikono.* ]] && continue
+        name="${id#*.}"
+        [[ "$repos" == *"${name}"* ]] || false
+    done < <(awk -F'"' '/^type = "plugin_action"/{p=1; next} p && /^command =/{split($2, a, "."); print a[1] "." a[2]; p=0}' \
+        "${REPO_ROOT}/home/dot_config/herdr/config.toml")
 }
 
 @test "herdr.sh: every listed plugin exists in the chezmoi source" {
