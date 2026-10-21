@@ -248,6 +248,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - 登録は `install/macos/herdr.sh` が `herdr plugin link ~/.config/herdr/plugins/<name>` で行う
     （`install` ではなく `link` — 本体はこのリポジトリが持つので herdr 側にチェックアウトを
     作らせない）。プラグインを足したらこのスクリプトの `HERDR_PLUGINS` にも足すこと。
+    外部プラグイン（いまは `persiyanov/herdr-reviewr`。`prefix+Shift+R` で差分レビューペインを
+    開閉）は本体を vendoring せず、同じスクリプトの `HERDR_GITHUB_PLUGINS` から
+    `herdr plugin install -y` で入れる（`chezmoi apply` 経由では応答できないので確認は `-y` で飛ばす）。
+    `config.toml` の `plugin_action` が外部プラグインを呼んでいるのに一覧に無いと、新マシンで
+    キーが空振りするので `tests/install/macos/herdr.bats` が対応を見張っている。
     `config.toml` を変えたら `herdr server reload-config`。
   - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
 - **`home/dot_config/herdr/plugins/git-diff/`** は自作の herdr プラグイン
