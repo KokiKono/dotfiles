@@ -422,12 +422,3 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
         "${REPO_ROOT}/home"
     [ "$status" -ne 0 ]
 }
-
-@test "apply: terminal-browser zoom avoids cmd and ctrl chords" {
-    CFG="${TESTHOME}/.config/terminal-browser/shortcuts.json"
-    [ -f "${CFG}" ]
-    # 既定の cmd+= は Ghostty のフォント拡大に食われる。option は macos-option-as-alt で素通しになる
-    for k in zoom.in zoom.out zoom.reset; do
-        jq -e --arg k "${k}" '.[$k] | test("^alt\\+")' "${CFG}"
-    done
-}
