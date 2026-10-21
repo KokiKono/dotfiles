@@ -20,6 +20,11 @@ export PATH="$GRIT_INSTALL/bin:$PATH"
 
 export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
 
+# Ghostty の CLI はアプリバンドルの中にあり、cask は PATH を通さない。
+# `ghostty +list-themes` / `+show-config` を使うために自分で足す。
+[ -d /Applications/Ghostty.app/Contents/MacOS ] &&
+  export PATH="/Applications/Ghostty.app/Contents/MacOS:$PATH"
+
 # bun completions
 [ -s "/Users/kokikono/.bun/_bun" ] && source "/Users/kokikono/.bun/_bun"
 

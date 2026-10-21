@@ -27,6 +27,28 @@ type = "shell"
 command = "herdr plugin pane open --plugin kokikono.git-diff --entrypoint files"
 description = "git-diff: 差分を GitHub の Files changed のように見る"
 
+# editor: prefix(Ctrl+B) → Shift+E で、今のペインの cwd を Helix で開く。
+# type = "pane" は一時的なズームペインを開き、コマンドが終了したら閉じる。
+# 常設の editor ペインにしなかったのは、herdr に「pane を id 指定で focus する」API が
+# 無く（pane focus は方向指定のみ）、zoom と focus が別管理だから。ズームしても入力は
+# 元のペインに行ってしまう。一時ペインなら閉じ忘れも「見失い」も起きない。
+# cwd は main ペインならセッションディレクトリ、repo ペインならその worktree になる。
+[[keys.command]]
+key = "prefix+shift+e"
+type = "pane"
+command = "hx ."
+description = "editor: このペインの cwd を Helix で開く"
+
+# lazygit: prefix(Ctrl+B) → Shift+G。popup はタブのレイアウトを変えないので、
+# ステージとコミットのあいだだけ被せて使う用途に合う（git-diff プラグインと同じ理由）。
+[[keys.command]]
+key = "prefix+shift+g"
+type = "popup"
+command = "lazygit"
+description = "lazygit: ステージ・コミット・ブランチ操作"
+width = "90%"
+height = "90%"
+
 # reviewr: prefix(Ctrl+B) → Shift+R で、エージェントが書いた差分のレビューペインを開閉する。
 # 外部プラグイン persiyanov.reviewr（`herdr plugin install` で導入）が toggle アクションを
 # 持つので、自作プラグインと違い shell を介さず plugin_action で直接呼べる。

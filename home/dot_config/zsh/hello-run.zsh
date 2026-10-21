@@ -707,6 +707,9 @@ hello-run() {
 
   # 3. worktree
   mkdir -p "$sdir" || return 1
+  # issue 番号はリポジトリ間で一意でないのに、置き場は番号だけで決まる。どの issue の
+  # セッションかを後から引けるよう URL を残す（プラグインの close-done.zsh が読む）。
+  (( scratch )) || print -r -- "https://github.com/$repo/issues/$num" >"$sdir/.issue-url"
   local r rdir
   __hr_ui_begin 3
   for r in "${HELLO_RUN_REPOS[@]}"; do

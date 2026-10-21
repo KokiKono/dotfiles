@@ -2,7 +2,8 @@
 
 export LANG=ja_JP.UTF-8
 export LESSCHARSET=utf-8
-export EDITOR=vim
+# Helix。hello-run --scratch の聞き取りや git のコミットメッセージもこれで開く。
+export EDITOR=hx
 export CLICOLOR=true
 
 # 他のターミナルとヒストリーを共有

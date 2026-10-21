@@ -28,15 +28,17 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
-├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
+├── dot_config/{karabiner,ghostty,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
+├── dot_config/helix/config.toml   # → ~/.config/helix/config.toml (TUI エディタ。herdr の prefix+Shift+E から開く)
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr}.sh
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
+install/macos/gh-extensions.txt     # one `<owner>/<repo>` per line (used by gh.sh)
 install/macos/skills-lock.json      # `npx skills` の lock のコピー（skills.sh が復元に使う）
 tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
@@ -85,13 +87,14 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,skills,herdr}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages: 18 `tap`, 156 `brew`, 34 `cask`,
-  9 `mas` (Mac App Store — needs `brew "mas"`, which is in the file), 5 `npm`, 3 `go`, 54 `vscode`.
+- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 146 `brew`, 34 `cask`,
+  3 `go`, 56 `vscode` (`mas` entries were dropped in c8bb43a; `npm "corepack"` was dropped because
+  corepack shims `/opt/homebrew/bin/pnpm` and collides with the `pnpm` formula — see below).
   `chezmoi` and `bats-core` are included. Regenerate with:
 
   ```
@@ -106,6 +109,15 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   素朴に dump すると 54 行の拡張リストが消える。同じ理由で `install/macos/vscode-extensions.txt`
   も `code --list-extensions` が空でないことを確認してから更新する
   (`code --list-extensions > install/macos/vscode-extensions.txt`)。
+- **`brew.sh` は `brew bundle` の失敗で止まらない。** chezmoi の `run_onchange` は
+  `set -Eeuo pipefail` の下で install スクリプトを順に呼ぶので、`brew.sh` が非 0 を返すと
+  **そこでチェーンが止まり、gpg/mise/.../gh/skills/herdr も設定ファイルの配備も走らない**
+  （実際 `npm "corepack"` の失敗 1 件で全部止まった）。他のスクリプトと同じ graceful skip に
+  揃えてあり、失敗した依存は警告としてログに残すだけで続行する。
+  **`brew bundle dump` で Brewfile を作り直したら `brew "pnpm"` と `npm "corepack"` が
+  同居していないか確認すること** — corepack はインストール時に `/opt/homebrew/bin/pnpm` へ
+  シムを張ろうとし、formula の pnpm が持つ symlink と `EEXIST` で衝突して bundle ごと落ちる。
+  `tests/install/macos/brew.bats` が両方を見張っている。
 - **GPG 署名は `install/macos/gpg.sh` がマシン側を用意する。** `dot_gitconfig.tmpl` は
   `commit.gpgsign = true` と `[gpg] program = gpg` を持つが、**鍵 ID は持たない** — マシン固有なので
   `[include] path = ~/.config/git/signing.conf` に逃がしてあり、そのファイルは `gpg.sh` が書き出す
@@ -118,6 +130,44 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `bash install/macos/gpg.sh` を叩くこと。`gnupg` / `pinentry-mac` は Brewfile 済み。
   テストは `gpg`/`pinentry-mac`/`gpgconf`/`git` を PATH にスタブし、`GNUPGHOME` と
   `GIT_SIGNING_CONF` を tmpdir に向けて検証する。
+- **ターミナルは Ghostty（`home/dot_config/ghostty/config`）。** WezTerm から移った理由は 2 つで、
+  ① 当時使っていた `terminal-browser` が kitty graphics protocol と **kitty unicode placeholders**
+  を要求し、WezTerm は後者を持たない（terminal-browser は重いので後に外した）② herdr は画像をインラインの base64 ではなく一時ファイルで渡す
+  高速経路を持つが、効くのは「ローカルの Unix **Ghostty** クライアント」だけで、他の端末は
+  インラインにフォールバックする。ペイン内で画像やブラウザを動かすならここが効く。
+  **ウィンドウマネージャは入れない方針**なので、位置とサイズは端末自身が持つ:
+  `window-position-x/y = 0` + 画面より大きい `window-width/height`（セル数。画面サイズに
+  丸められるので実質「起動時に最大化」）+ `window-save-state = never`。
+  **`window-position-x/y` は「プライマリモニタ左上からのピクセル」で macOS 限定**なので、
+  34" を中央に置いていてもシステム設定でメニューバーをそちらへ移してプライマリにしないと
+  `(0,0)` が左のモニタを指す。Slack / Notion は Dock 右クリック →「割り当て先: ディスプレイ」で
+  固定する（Stage Manager は切ること。割り当てと競合する）。
+  `wezterm.lua` は戻せるよう残してあるが、`.zshrc` からは何も参照していない。
+- **エディタは Helix（`home/dot_config/helix/config.toml`）。** `EDITOR=hx`（`options.zsh`）。
+  herdr から `prefix+Shift+E` で開くが、これは**常設ペインではなく `type = "pane"`**
+  （終了したら閉じる一時ズームペイン）。常設にしなかったのは、herdr に **pane を id 指定で
+  focus する API が無く**（`pane focus` は方向指定のみ）、`zoom` と `focus` が別管理だから。
+  ズームしても入力は元のペインに行ってしまう。一時ペインなら「worktree をまたいでエディタを
+  見失う」も起きない。cwd は押したペインのもの（main ならセッションディレクトリ、repo ペイン
+  ならその worktree）。`file-picker.hidden = false` は必須 — 既定の `true` だと `.github/` や
+  `.claude/` がピッカーに出ない。キーバインドは既定のまま（`space w` は Helix ではウィンドウ
+  操作なので、vim の勘で `:write` に潰すと分割が触れなくなる）。`prefix+Shift+G` は lazygit の popup。
+- **Helix の言語サーバーは Brewfile で持つ。** Helix は言語ごとに決め打ちのバイナリ名で
+  サーバーを起動するので（`hx --health <lang>` で確認できる）、**formula 名がその名前と
+  一致していれば `languages.toml` は要らない**。業務リポジトリ（Rails と TypeScript の
+  monorepo）で使う分として `typescript-language-server`（ts/tsx）、
+  `vscode-langservers-extracted`（json/css/html の 3 つを 1 formula で賄う）、
+  `yaml-language-server`、`bash-language-server`、`marksman`（markdown）を入れてある。
+  **Ruby だけは Brewfile に無い** — `ruby-lsp` は mise の shim 経由（プロジェクトの Ruby
+  ツールチェーン側）で入っており、brew にも formula はあるが別の Ruby を抱えるので
+  プロジェクトの gem を見られない。新マシンでは Ruby 環境を整えるまで Ruby の LSP が
+  効かない点に注意。`tests/install/macos/brew.bats` が helix とサーバー群の対を見張っている。
+- **gh 拡張は `install/macos/gh.sh` が `gh-extensions.txt` から復元する。** 拡張本体は upstream が
+  持つので一覧だけを管理する（`skills.sh` と同じ方針）。**未認証だと `gh extension install` が
+  対話を求めて固まる**ので `gh auth status` で先に弾く。`gh-attach` は **pr-screenshot スキルが
+  依存している**のに復元経路が無かったのでここに入れた。なおこの拡張はローカル修正を当てて
+  使っており、`gh.sh` は素のまま入れるだけで、修正はスキル側の `ensure-gh-attach-patch.sh` が
+  冪等に当て直す。`gh dash`（`prs` エイリアス）は PR / issue の巡回用。
 - **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
   `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; candidates are shown in an
   aligned STATE/BRANCH/PATH table in `fzf --multi`, **all pre-selected** (`start:select-all`), so
@@ -207,13 +257,17 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
-  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）。知っておくこと:
+  `pick.zsh`（実装）、`issues.zsh`（issue 一覧を TSV で吐く）、`close-done.zsh`（クローズ済みの
+  タブを閉じる）、`lib.zsh`（タブ探索と issue の特定。前 2 つが共有）。知っておくこと:
   - **一覧は org 横断で、自分にアサインされた open issue だけ。** リポジトリ単位の
     `gh issue list` ではなく `gh search issues --owner <org> --assignee @me` を使う。org 名は
     持たず、`~/.pzshrc` の `HELLO_RUN_ISSUE_REPO`（`<org>/<repo>`）の所有者部分から取る
     （`HELLO_RUN_ISSUE_ORG` で上書き可）。issue 番号はリポジトリ間で一意でないので、
     `hello-run` には番号ではなく **URL** を渡す。TSV の 1 列目が URL で、fzf には
     `--with-nth=2,3,4` で見せていない。
+  - **ただしタブが残っている issue は、一覧から外れていても末尾に足す**（クローズ済みなら
+    タイトルに `[closed]`）。足さないと、issue を閉じた途端にそのタブへ戻る道が消える。
+    1 件ずつ `gh` を叩くので結果を `tab-issues-<org>.tsv` にキャッシュし、`r` で取り直す。
   - **`gh` の結果だけをキャッシュする。** 実測で `gh search issues` が 1.1〜1.5 秒、
     タブの走査は 0.03 秒なので、遅いのは `gh` だけ。キャッシュ命中で 1.55 秒 → 0.04 秒。
     置き場は `HERDR_PLUGIN_STATE_DIR`（herdr の外では `~/.cache/hello-run`）、TTL は
@@ -254,6 +308,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `config.toml` の `plugin_action` が外部プラグインを呼んでいるのに一覧に無いと、新マシンで
     キーが空振りするので `tests/install/macos/herdr.bats` が対応を見張っている。
     `config.toml` を変えたら `herdr server reload-config`。
+  - **`x` でクローズ済み issue のタブを閉じる**（`close-done.zsh`）。対象はタブ側から探す
+    （`●` と同じ条件: `issue-<N>` ラベル + ペインがセッションディレクトリ配下、全 workspace。
+    `lib.zsh` の `__hrp_session_tabs`）。閉じるのはタブだけで worktree は `wrm` に任せる。
+    どのリポジトリの issue かは、`hello-run` がセッションディレクトリに残す `.issue-url` で知る。
+    それが無い古いセッションは、自分にアサインされた issue を org 横断で番号検索し、
+    ちょうど 1 件当たったときだけそれとみなす（`__hrp_issue_of`。一覧の `[closed]` 行も同じ）。
+    `HELLO_RUN_ISSUE_REPO` で代用しないのは、ピッカーが org 横断なので issue が別リポジトリに
+    あることが多いため。CLOSED と確かめられないものは閉じない。
   - 対象 org/repo は `hello-run` 同様 `~/.pzshrc` 任せで、`apply.bats` が非混入を検査する。
 - **`home/dot_config/herdr/plugins/git-diff/`** は自作の herdr プラグイン
   (`kokikono.git-diff`)。`prefix+Shift+D` でどのペインからでも popup が開き、PR を作る直前の
@@ -321,9 +383,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   なので、記録する / しないの線引き (`references/judgment.md`) がこのスキルの本体で、DB の
   プロパティと本文テンプレは `references/schema.md` にある。書き込みは Notion MCP 経由のみで
   `scripts/` は持たない。**追記先の Notion DB ID は追跡しない** — `~/.claude/ubiquitous-language.local.json`
-  （非追跡）に `database_url` / `data_source_url` / `glossary_search_hints` / `dry_run` を置き、
-  スキルは起動時にそれを読む。
-  設定が無ければ `setup` モードで DB を作るところから始まる。`dry_run: true` のあいだは Notion に
+  （非追跡）に `database_url` / `data_source_url` / `template_url` / `glossary_search_hints` / `dry_run` を置き、
+  スキルは起動時にそれを読む。追記先はイシュー検討メモと同居する個人メモ DB で、用語の行は
+  `種別 = ユビキタス言語` で見分ける（用語の中身は列ではなく本文の「概要」節に書く）。
+  設定が無ければ `setup` モードで追記先の DB とテンプレートを設定するところから始まる。`dry_run: true` のあいだは Notion に
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。

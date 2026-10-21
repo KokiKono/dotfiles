@@ -46,13 +46,18 @@ typeset -r issues=${0:A:h}/issues.zsh
 # issues.zsh は印を付けるのに HELLO_RUN_ROOT（セッションの置き場）も見る
 export HELLO_RUN_ISSUE_ORG HELLO_RUN_LIMIT HELLO_RUN_ROOT
 
+# クローズ済み issue のタブをまとめて閉じる（x）。一覧で 1 件ずつ選ばせず、
+# 別スクリプトでタブ側から探す。
+typeset -r close_done=${0:A:h}/close-done.zsh
+[[ -x $close_done ]] || die "close-done.zsh が見つかりません: $close_done"
+
 # claude に送る初期プロンプトのテンプレート。置き場の既定は hello-run.zsh が入れる。
 # fzf の execute() は端末を明け渡すので、popup の中でそのままエディタが開く。
-# EDITOR は ~/.zshrc 経由でしか設定されず zsh -l では来ないので、既定を持たせたまま
+# EDITOR は ~/.zshrc 経由でしか設定されず zsh -l では来ないので、既定（hx）を持たせたまま
 # sh に展開させる（\$ のまま fzf へ渡す）。
 typeset -r prompt_file=${HELLO_RUN_PROMPT_FILE:-$HOME/.config/hello-run/prompt.md}
 typeset -r prompt_dir=${prompt_file:h}
-typeset -r edit_prompt="mkdir -p ${(q)prompt_dir} && \${EDITOR:-vim} ${(q)prompt_file}"
+typeset -r edit_prompt="mkdir -p ${(q)prompt_dir} && \${EDITOR:-hx} ${(q)prompt_file}"
 
 # 一覧は自分にアサインされた open issue だけ。0 件なら作る対象が無いので終わる。
 typeset initial
@@ -70,10 +75,11 @@ selected=$(
   print -r -- "$initial" | fzf \
     --delimiter=$'\t' --with-nth=2 \
     --prompt='issue> ' \
-    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue   ● タブあり  ○ worktree のみ  ・なし\nenter: 開く / r: 取り直す（キャッシュ無視） / p: 初期プロンプトを編集 / esc: 閉じる" \
+    --header=$"${HELLO_RUN_ISSUE_ORG}  —  自分の issue（＋タブが残っている issue）   ● タブあり  ○ worktree のみ  ・なし\nenter: 開く / r: 取り直す（キャッシュ無視） / p: 初期プロンプトを編集 / x: クローズ済みのタブを閉じる / esc: 閉じる" \
     --disabled \
     --bind="r:reload(${(q)issues} --refresh)" \
     --bind="p:execute(${edit_prompt})" \
+    --bind="x:execute(${(q)close_done})+reload(${(q)issues})" \
     --bind='change:clear-query' \
     --preview='gh issue view {1}' \
     --preview-window='right,55%,wrap'

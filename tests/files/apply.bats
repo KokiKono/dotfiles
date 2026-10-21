@@ -389,6 +389,81 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     done
 }
 
+@test "apply: ghostty config is deployed and pins the window" {
+    CFG="${TESTHOME}/.config/ghostty/config"
+    [ -f "${CFG}" ]
+    # WM を入れない方針なので、位置とサイズは端末自身が持つ。どれか欠けると毎回置き直しになる。
+    grep -q '^window-position-x = 0$' "${CFG}"
+    grep -q '^window-position-y = 0$' "${CFG}"
+    grep -qE '^window-width = [0-9]+$' "${CFG}"
+    grep -qE '^window-height = [0-9]+$' "${CFG}"
+    # 保存状態を復元されると上の指定が無視される
+    grep -q '^window-save-state = never$' "${CFG}"
+    # herdr の prefix/alt 系が死ぬので option は alt として通すこと
+    grep -q '^macos-option-as-alt = true$' "${CFG}"
+}
+
+@test "apply: ghostty config declares a font that the Brewfile installs" {
+    FAMILY="$(grep '^font-family = ' "${TESTHOME}/.config/ghostty/config" | cut -d'"' -f2)"
+    [ -n "${FAMILY}" ]
+    # JetBrainsMono Nerd Font -> font-jetbrains-mono-nerd-font
+    SLUG="font-$(echo "${FAMILY}" | tr 'A-Z' 'a-z' | tr -d ' ' \
+        | command sed -E 's/mono/-mono-/; s/nerdfont/nerd-font/')"
+    grep -q "cask \"${SLUG}\"" "${REPO_ROOT}/Brewfile"
+}
+
+@test "apply: helix config is deployed as valid toml" {
+    CFG="${TESTHOME}/.config/helix/config.toml"
+    [ -f "${CFG}" ]
+    python3 -c "import tomllib,sys; tomllib.load(open(sys.argv[1],'rb'))" "${CFG}"
+    # 隠しディレクトリ（.github/ .claude/）がピッカーに出ないと、このリポジトリでは使い物にならない
+    python3 -c "
+import tomllib, sys
+cfg = tomllib.load(open(sys.argv[1], 'rb'))
+assert cfg['editor']['file-picker']['hidden'] is False, cfg['editor']['file-picker']
+" "${CFG}"
+}
+
+@test "apply: EDITOR points at helix everywhere it is defaulted" {
+    grep -q '^export EDITOR=hx$' "${TESTHOME}/.config/zsh/options.zsh"
+    # プラグインは zsh -l で起動し ~/.zshrc を読まないので、自前の既定を持っている。
+    # ここが vim のままだと、ピッカーの p だけ別のエディタが開く。
+    grep -q 'EDITOR:-hx' "${TESTHOME}/.config/herdr/plugins/hello-run/pick.zsh"
+}
+
+@test "apply: herdr binds an editor and a lazygit command" {
+    run python3 -c "
+import sys, tomllib
+cfg = tomllib.load(open(sys.argv[1], 'rb'))
+cmds = {k['key']: k for k in cfg['keys']['command']}
+
+ed = cmds['prefix+shift+e']
+# type = 'pane' は終了で閉じる一時ズームペイン。shell にすると detach して何も出ない。
+assert ed['type'] == 'pane', ed
+assert ed['command'].startswith('hx'), ed
+
+lg = cmds['prefix+shift+g']
+assert lg['type'] == 'popup', lg
+assert lg['command'] == 'lazygit', lg
+" "${TESTHOME}/.config/herdr/config.toml"
+    [ "$status" -eq 0 ]
+}
+
+@test "apply: hello-run prompt asks claude to pull the spec from Notion" {
+    # GitHub <-> Notion の往復を減らすのが目的。ここが消えると手で開きに行く運用に戻る。
+    grep -q 'Notion' "${TESTHOME}/.config/hello-run/prompt.md"
+}
+
+@test "apply: gh extensions the skills depend on have a restore path" {
+    LIST="${REPO_ROOT}/install/macos/gh-extensions.txt"
+    [ -f "${LIST}" ]
+    # pr-screenshot スキルが gh attach を叩くので、一覧に無いと新マシンで落ちる
+    grep -q 'gh attach' "${TESTHOME}/.claude/skills/pr-screenshot/SKILL.md"
+    grep -q 'gh-attach' "${LIST}"
+    # チェーンに繋がっていないと chezmoi apply で走らない
+    grep -q 'macos/gh.sh' "${REPO_ROOT}/home/.chezmoiscripts/run_onchange_install.sh.tmpl"
+}
+
 @test "apply: app configs are deployed" {
     [ -f "${TESTHOME}/.config/karabiner/karabiner.json" ]
     python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${TESTHOME}/.config/karabiner/karabiner.json"

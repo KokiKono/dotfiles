@@ -1,0 +1,44 @@
+# Helix。AI が書いた差分を読んで、定義へ飛んで、少し直すのが主な用途。
+# herdr の prefix+Shift+E から一時ペインで開かれる（type = "pane" なので終了で閉じる）。
+# 常設しないぶん開くたびに状態が消えるので、セッションを跨ぐ記憶は持たせない前提で組む。
+
+theme = "default"
+
+[editor]
+line-number = "relative"
+cursorline = true
+color-modes = true
+true-color = true
+bufferline = "multiple"
+# 差分レビューでは行が長いことが多く、横スクロールすると隣の行と目で揃えられない。
+rulers = [100]
+# 保存時の整形はリポジトリ側の設定（lefthook / formatter）と二重にかかりうるので切る。
+auto-format = false
+
+[editor.cursor-shape]
+normal = "block"
+insert = "bar"
+select = "underline"
+
+[editor.file-picker]
+# hidden = true だと .github/ や .claude/ がピッカーに出ない。このリポジトリでは致命的。
+hidden = false
+
+[editor.indent-guides]
+render = true
+character = "┆"
+
+[editor.statusline]
+left = ["mode", "spinner", "version-control", "file-name", "file-modification-indicator"]
+right = ["diagnostics", "selections", "position", "file-type"]
+
+[editor.lsp]
+display-messages = true
+display-inlay-hints = false
+
+[editor.soft-wrap]
+enable = true
+wrap-indicator = "↪ "
+
+# キーバインドは既定のまま。space w は Helix ではウィンドウ操作、space f はファイルピッカーで、
+# vim の勘で space+w を :write に潰すと分割が触れなくなる。慣れるまで `hx --tutor` を回すこと。

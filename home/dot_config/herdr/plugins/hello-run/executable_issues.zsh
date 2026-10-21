@@ -1,5 +1,6 @@
 #!/usr/bin/env zsh
 # 自分にアサインされた open issue を org 横断で探し、"URL<TAB>表示行" の TSV で吐く。
+# タブが残っている issue は、クローズ済みなどで一覧から外れていても末尾に足す。
 # pick.zsh から直接と、fzf の reload バインド（再取得）と、プラグインの startup から呼ばれる。
 #
 #   issues.zsh              キャッシュがあればそれを使う（TTL 内）
@@ -88,44 +89,56 @@ fi
 [[ $mode == warm ]] && exit 0
 
 typeset -a rows
-rows=("${(@f)$(<$cache)}")
-(( ${#rows} )) || exit 0
+rows=(${(f)"$(<$cache)"})
 
-# 既にタブがあるものの一覧。herdr の外なら空のまま（印は worktree 止まり）。
-# hello-run が探すのに合わせて全 workspace を見る。タブはそれを作ったときに居た
-# workspace に残るので、現在の workspace だけ見ると印と実際の挙動がずれる。
-# ラベルの一致だけでは ● を付けない。hello-run が切り替え先を決めるときと同じく、
-# そのタブのペインが本当にその issue のセッションディレクトリに居ることまで確かめる。
-# 確かめないと、ラベルだけ同じ別物に ● が付き、enter でそこへ飛ばされる。
+# 既にタブがあるもの。herdr の外なら空のまま（印は worktree 止まり）。
+# 見つけ方は hello-run が切り替え先を決めるときと同じ（lib.zsh）。ラベルだけ同じ別物に
+# ● が付くと、enter でそこへ飛ばされる。
+source "${0:A:h}/lib.zsh"
 typeset -A has_tab
 if command -v herdr >/dev/null 2>&1; then
-  local ws label tab cwd root=${HELLO_RUN_ROOT:-}
-  typeset -A label_of
-  for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
-    [[ -n $ws ]] || continue
-    while IFS=$'\t' read -r tab label; do
-      [[ -n $tab && -n $label ]] && label_of[$tab]=$label
-    done < <(herdr tab list --workspace "$ws" 2>/dev/null \
-              | jq -r '.result.tabs[]? | select(.label != null) | "\(.tab_id)\t\(.label)"' 2>/dev/null)
-  done
-  if [[ -z $root ]]; then
-    # 置き場を知らないと検証できないので、従来どおりラベルだけで判断する
-    for tab in ${(k)label_of}; do has_tab[${label_of[$tab]}]=1; done
-  else
-    # pane list は 1 回だけ。タブ数に関係なく herdr への往復は増やさない
-    while IFS=$'\t' read -r tab cwd; do
-      label=${label_of[$tab]:-}
-      [[ -n $label && -n $cwd ]] || continue
-      [[ $cwd == "$root/.sessions/$label" || $cwd == "$root/.sessions/$label/"* ]] \
-        && has_tab[$label]=1
-    done < <(herdr pane list 2>/dev/null \
-              | jq -r '.result.panes[]? | "\(.tab_id)\t\(.cwd // "")"' 2>/dev/null)
-  fi
+  local tab label
+  while IFS=$'\t' read -r tab label; do
+    [[ -n $label ]] && has_tab[$label]=1
+  done < <(__hrp_session_tabs "${HELLO_RUN_ROOT:-}")
 fi
+
+# タブが残っているのに一覧に無い issue（クローズ済みや、自分のアサインが外れたもの）も出す。
+# gh の一覧は open かつ自分にアサインのものだけなので、そのままだとタブに戻る道が無くなる。
+# 1 件ごとに gh を叩くので結果をキャッシュする。対象は一覧に無いタブの分だけで、
+# r（--refresh）で取り直す。書き戻すのは今あるタブの分だけなので、閉じたタブの分は消える。
+typeset extra_cache=$cache_dir/tab-issues-${HELLO_RUN_ISSUE_ORG//[^A-Za-z0-9._-]/_}.tsv
+typeset -A listed cached_extra
+local line num info url repo state title
+for line in "${rows[@]}"; do listed[${${(s:	:)line}[3]}]=1; done
+if [[ $mode == use && -s $extra_cache ]]; then
+  for line in ${(f)"$(<$extra_cache)"}; do cached_extra[${line%%	*}]=${line#*	}; done
+fi
+typeset -a extra_lines
+for label in ${(ok)has_tab}; do
+  num=${label#issue-}
+  (( ${+listed[$num]} )) && continue
+  if (( ${+cached_extra[$num]} )); then
+    info=${cached_extra[$num]}
+  else
+    info=$(__hrp_issue_of "${HELLO_RUN_ROOT:-}" "$HELLO_RUN_ISSUE_ORG" "$num") || continue
+  fi
+  extra_lines+=("$num	$info")
+  # url repo num title。state は表示の飾りに使う
+  url=${${(s:	:)info}[1]} repo=${${(s:	:)info}[2]} state=${info##*	}
+  title=${${info#*	*	}%	*}
+  [[ $state == CLOSED ]] && title="[closed] $title"
+  rows+=("$url	$repo	$num	$title")
+done
+if (( ${#extra_lines} )); then
+  print -rl -- "${extra_lines[@]}" >"$extra_cache" 2>/dev/null
+else
+  rm -f "$extra_cache"
+fi
+(( ${#rows} )) || exit 0
 
 # リポジトリ名と番号の桁を揃える
 integer rw=0 nw=0
-local line url repo num title
 for line in "${rows[@]}"; do
   [[ -z $line ]] && continue
   repo=${${(s:	:)line}[2]}

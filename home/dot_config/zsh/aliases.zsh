@@ -19,6 +19,8 @@ alias branch-all-delete="git branch --merged|egrep -v '\*|develop|master'|xargs 
 alias debug-chrome="/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=54888 --no-first-run --no-default-browser-check --user-data-dir=$(mktemp -d -t 'chrome-remote_data_dir')"
 alias ibrew='arch -x86_64 /usr/local/bin/brew'
 alias dc='docker-compose'
+alias lg='lazygit'
+alias prs='gh dash'
 
 ############
 # Claude
