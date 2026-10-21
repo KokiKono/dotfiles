@@ -1,0 +1,51 @@
+# Ghostty。herdr を常時走らせる母艦なので、端末側は「場所を固定する」ことだけを担う。
+#
+# WezTerm から移った理由は 2 つ。
+#   1. terminal-browser が kitty graphics protocol と kitty unicode placeholders を要求する。
+#      WezTerm は後者を持たない。動作確認端末は ghostty / kitty / libghostty 系のみ。
+#   2. herdr は画像をインラインの base64 ではなく一時ファイルで渡す高速経路を持つが、
+#      これが効くのは「ローカルの Unix Ghostty クライアント」だけ。他の端末はインラインに
+#      フォールバックする。ペイン内でブラウザを動かすなら、ここの差が効く。
+# WezTerm の設定は home/dot_config/wezterm/ に残してある（戻せるように）。
+
+# --- ウィンドウの固定 ---------------------------------------------------------
+# window-position-x/y は「プライマリモニタの左上からのピクセル」で、macOS 限定。
+# 34"(3440x1440) を中央に置いていても、システム設定でメニューバーをそちらへ移して
+# プライマリにしておかないと (0,0) が左の 27" を指す。ここが前提。
+# ウィンドウマネージャを入れない方針なので、位置決めは端末自身に持たせる。
+window-position-x = 0
+window-position-y = 0
+
+# window-width/height は「セル数」。画面より大きい値は画面サイズに丸められるので、
+# 大きめの値を置くことで「起動時に最大化」になる（Ghostty が明示している使い方）。
+window-width = 999
+window-height = 999
+
+# 保存された位置・サイズを復元されると上の指定が無視される。毎回同じ場所に出したい。
+window-save-state = never
+
+# herdr がタブとペインを持つので、端末側のタブバーとパディングは要らない。
+window-show-tab-bar = never
+window-padding-x = 4
+window-padding-y = 2
+window-padding-balance = true
+
+# --- 入力 ---------------------------------------------------------------------
+# herdr の prefix は ctrl+b。alt を Meta として通さないと herdr 側の alt 系が死ぬ。
+macos-option-as-alt = true
+
+# herdr がセッションを永続化するので、閉じる確認は邪魔なだけ。
+confirm-close-surface = false
+quit-after-last-window-closed = true
+
+# --- 表示 ---------------------------------------------------------------------
+font-family = "JetBrainsMono Nerd Font"
+font-size = 13
+# macOS の外観設定に追従させる。light/dark は両方の指定が要る（片方だけだと無効）。
+# 同梱テーマは `ghostty +list-themes` で一覧・プレビューできる。
+theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+cursor-style = block
+mouse-hide-while-typing = true
+
+# herdr 自身がスクロールバックを持つので端末側は最小限でよい。
+scrollback-limit = 1000000

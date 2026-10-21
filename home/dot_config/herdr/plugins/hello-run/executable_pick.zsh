@@ -53,11 +53,11 @@ typeset -r close_done=${0:A:h}/close-done.zsh
 
 # claude に送る初期プロンプトのテンプレート。置き場の既定は hello-run.zsh が入れる。
 # fzf の execute() は端末を明け渡すので、popup の中でそのままエディタが開く。
-# EDITOR は ~/.zshrc 経由でしか設定されず zsh -l では来ないので、既定を持たせたまま
+# EDITOR は ~/.zshrc 経由でしか設定されず zsh -l では来ないので、既定（hx）を持たせたまま
 # sh に展開させる（\$ のまま fzf へ渡す）。
 typeset -r prompt_file=${HELLO_RUN_PROMPT_FILE:-$HOME/.config/hello-run/prompt.md}
 typeset -r prompt_dir=${prompt_file:h}
-typeset -r edit_prompt="mkdir -p ${(q)prompt_dir} && \${EDITOR:-vim} ${(q)prompt_file}"
+typeset -r edit_prompt="mkdir -p ${(q)prompt_dir} && \${EDITOR:-hx} ${(q)prompt_file}"
 
 # 一覧は自分にアサインされた open issue だけ。0 件なら作る対象が無いので終わる。
 typeset initial

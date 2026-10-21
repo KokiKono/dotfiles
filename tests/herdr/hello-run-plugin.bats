@@ -332,8 +332,11 @@ EOF
 
 @test "pick.zsh: the editor has a default because zsh -l skips zshrc" {
     # EDITOR は options.zsh（~/.zshrc 経由）でしか設定されず、プラグインは
-    # zsh -l で起動されるので届かない。展開は fzf 側の sh に任せる
-    grep -qF '\${EDITOR:-vim}' "${PICK}"
+    # zsh -l で起動されるので届かない。展開は fzf 側の sh に任せる。
+    # 既定値は options.zsh の EDITOR と揃えること（ずれるとここだけ別のエディタが開く）。
+    DEFAULT="$(grep '^export EDITOR=' "${REPO_ROOT}/home/dot_config/zsh/options.zsh" | cut -d= -f2)"
+    [ -n "${DEFAULT}" ]
+    grep -qF "\${EDITOR:-${DEFAULT}}" "${PICK}"
 }
 
 @test "pick.zsh: fzf accepts the prompt-edit bind" {

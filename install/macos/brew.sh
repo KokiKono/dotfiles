@@ -39,7 +39,13 @@ trust_taps() {
 
 brew_bundle() {
     log "Brewfile からパッケージを導入します。"
-    brew bundle --file "${REPO_ROOT}/Brewfile"
+    # パッケージ1件の失敗で後続（gpg/mise/.../gh/skills/herdr）と設定ファイルの配備まで
+    # 道連れにしない。このスクリプトは chezmoi の run_onchange から呼ばれ、非 0 で返すと
+    # そこでチェーンが止まるため。他の install スクリプトと同じ graceful skip に揃える。
+    # 失敗した依存は brew bundle 自身が上のログに出すので、ここでは目印だけ残す。
+    if ! brew bundle --file "${REPO_ROOT}/Brewfile"; then
+        log "警告: brew bundle に失敗した依存があります（続行）。上のログを確認してください。"
+    fi
 }
 
 main() {
