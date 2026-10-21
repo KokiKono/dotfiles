@@ -28,7 +28,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
-├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
+├── dot_config/{karabiner,wezterm,zed,herdr,private_gh,git,terminal-browser}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin。terminal-browser はズームを option キーに寄せた shortcuts.json だけ）
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
