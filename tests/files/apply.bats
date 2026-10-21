@@ -203,6 +203,26 @@ print(m['panes'][0]['command'][-1])
     [ -f "${PLUGIN}/${output}" ]
 }
 
+@test "apply: open-link herdr plugin is deployed and its link handler is wired" {
+    PLUGIN="${TESTHOME}/.config/herdr/plugins/open-link"
+    [ -f "${PLUGIN}/herdr-plugin.toml" ]
+    [ -x "${PLUGIN}/open.zsh" ]
+    run zsh -n "${PLUGIN}/open.zsh"
+    [ "$status" -eq 0 ]
+    # link_handlers の action が同じマニフェストの action を指し、その action が実在する
+    # スクリプトを起動すること。どちらかがずれると Ctrl+クリックしても何も起きない
+    run python3 -c "
+import sys, tomllib
+m = tomllib.load(open(sys.argv[1], 'rb'))
+actions = {a['id']: a for a in m['actions']}
+for h in m['link_handlers']:
+    assert h['action'] in actions, h
+    print(actions[h['action']]['command'][-1])
+" "${PLUGIN}/herdr-plugin.toml"
+    [ "$status" -eq 0 ]
+    [ -f "${PLUGIN}/${output}" ]
+}
+
 @test "apply: herdr keybindings match the plugins that ship here" {
     # config.toml のキーバインドが、配られたマニフェストの id / entrypoint と
     # ずれていないこと（プラグインを足すたびに両方直す必要がある）
@@ -212,6 +232,9 @@ cfg = tomllib.load(open(sys.argv[1], 'rb'))
 cmds = [k.get('command', '') for k in cfg.get('keys', {}).get('command', [])]
 for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     m = tomllib.load(open(manifest, 'rb'))
+    # pane を持たないもの（リンクのクリックから直接呼ばれる open-link など）はキーで開く入口が無い
+    if not m.get('panes'):
+        continue
     pane_ids = {p['id'] for p in m['panes']}
     hit = [c for c in cmds if m['id'] in c]
     assert hit, f'no keybinding invokes {m[\"id\"]}: {cmds}'

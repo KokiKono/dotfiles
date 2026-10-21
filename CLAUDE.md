@@ -273,6 +273,21 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     判定せず、中身が変わっていないファイルが「全行追加」に見える。
   - `fzf` の絞り込みは切らない（hello-run と違い候補が数十件になる）。`ctrl-r` で取り直し、
     `enter` で全画面（delta のページャ）。登録と `config.toml` の扱いは hello-run と同じ。
+- **`home/dot_config/herdr/plugins/open-link/`** は自作の herdr プラグイン
+  (`kokikono.open-link`)。ペイン内の http(s) リンクを **Ctrl+クリック**すると、既定の
+  ブラウザではなく terminal-browser で開く（`[[link_handlers]]` → `open.zsh`）。知っておくこと:
+  - **Cmd+クリックにはできない。** herdr が受け取るマウス報告では Cmd を区別できないので、
+    link handler の修飾キーは macOS でも Ctrl 固定。`ui.mouse_capture = false` にすると
+    herdr がクリックを受け取らなくなり、このプラグインも呼ばれない。
+  - **キーバインドも pane も持たない**ので、`apply.bats` のキーバインド整合テストは
+    `panes` の無いマニフェストを読み飛ばす。
+  - **action はペインの外で走るので `HERDR_PANE_ID` / `HERDR_TAB_ID` が付いてこない。**
+    terminal-browser はこの 2 つで「どのタブのブラウザに足すか」「どこを split するか」を
+    決めるので、`open.zsh` が context JSON の `focused_pane_id` / `tab_id` から詰め直す。
+  - `terminal-browser new-tab` で開く（タブ内にブラウザがあればそこにタブを足し、無ければ
+    右に split）。クリックのたびにペインが増えないようにするため。ブラウザが 2 つ以上あると
+    new-tab が失敗するので、そのときは `open --split right` に落とす。terminal-browser が
+    無ければ `open`（既定のブラウザ）。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,

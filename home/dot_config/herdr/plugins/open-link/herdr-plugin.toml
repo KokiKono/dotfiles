@@ -1,0 +1,31 @@
+# ペイン内の http(s) リンクを Ctrl+クリックしたとき、既定のブラウザではなく
+# terminal-browser で開くプラグイン。実装は open.zsh で、ここは起動方法の宣言だけ。
+#
+# キーバインドも pane も持たない。link_handlers はクリックから直接 action を呼ぶので、
+# 人間が手で呼び出す入口が要らない。
+#
+# 修飾キーが Cmd ではなく Ctrl なのは herdr の制約（端末から届くマウス報告では Cmd を
+# 区別できない）。ui.mouse_capture = false にすると herdr はクリックを受け取らなくなり、
+# このプラグインも呼ばれない。
+id = "kokikono.open-link"
+name = "open-link"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Ctrl+クリックしたリンクを terminal-browser で開く"
+platforms = ["macos"]
+
+[[actions]]
+id = "open"
+title = "Open in terminal-browser"
+contexts = ["pane"]
+# herdr はシェルを介さず argv をそのまま exec する。zsh -l にするのは ~/.zprofile
+# （brew shellenv）を読ませて terminal-browser / jq を PATH に乗せるため。
+command = ["zsh", "-l", "open.zsh"]
+
+# http(s) は全部ここに来る。どれにも一致しなければ herdr が既定のブラウザで開くので、
+# 絞りたくなったら pattern を狭めればよい。
+[[link_handlers]]
+id = "http"
+title = "Open in terminal-browser"
+pattern = "^https?://"
+action = "open"
