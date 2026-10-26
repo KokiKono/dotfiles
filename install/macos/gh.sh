@@ -29,8 +29,6 @@ install_extensions() {
         return 0
     fi
 
-    # NOTE: gh-attach はローカル修正を当てて使っている。ここでは素のまま入れるだけで、
-    #       修正は pr-screenshot スキルの ensure-gh-attach-patch.sh が冪等に当て直す。
     log "gh 拡張を導入します。"
     local current
     current="$(installed_extensions)"

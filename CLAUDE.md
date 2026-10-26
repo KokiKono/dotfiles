@@ -164,10 +164,15 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   効かない点に注意。`tests/install/macos/brew.bats` が helix とサーバー群の対を見張っている。
 - **gh 拡張は `install/macos/gh.sh` が `gh-extensions.txt` から復元する。** 拡張本体は upstream が
   持つので一覧だけを管理する（`skills.sh` と同じ方針）。**未認証だと `gh extension install` が
-  対話を求めて固まる**ので `gh auth status` で先に弾く。`gh-attach` は **pr-screenshot スキルが
-  依存している**のに復元経路が無かったのでここに入れた。なおこの拡張はローカル修正を当てて
-  使っており、`gh.sh` は素のまま入れるだけで、修正はスキル側の `ensure-gh-attach-patch.sh` が
-  冪等に当て直す。`gh dash`（`prs` エイリアス）は PR / issue の巡回用。
+  対話を求めて固まる**ので `gh auth status` で先に弾く。`gh dash`（`prs` エイリアス）は
+  PR / issue の巡回用。以前は pr-screenshot 用に `atani/gh-attach` を入れていたが、gh v2.99.0 で
+  標準の `--attach` が入ったので外した（下の github-attach の項）。
+- **画像・動画の添付は gh 標準の `--attach`（`home/dot_claude/skills/github-attach/`）。** スキルが
+  無いと Claude は GitHub Releases を作って画像を置き、本文からリンクしがちなので、それを止める
+  ためのスキル。`pr-screenshot` もアップロード部分はこの方式。実投稿で確かめた挙動として、本文の
+  `![alt](path)` は相対・絶対・`./` 有無を問わず置換されるが、**`<img src>` は置換されず**、壊れた
+  パスが残ったうえ末尾に同じ画像が足される。`apply.bats` が旧経路（拡張・playwright・`<img>`）の
+  非混入を見張っている。
 - **Worktree/branch cleanup** lives in `home/dot_config/zsh/git-worktree.zsh` (sourced by `dot_zshrc`):
   `wrm` (remove worktrees whose PR is MERGED / has no PR, via `gh`; candidates are shown in an
   aligned STATE/BRANCH/PATH table in `fzf --multi`, **all pre-selected** (`start:select-all`), so
@@ -428,7 +433,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
