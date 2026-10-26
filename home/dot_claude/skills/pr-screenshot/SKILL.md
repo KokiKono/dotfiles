@@ -1,6 +1,6 @@
 ---
 name: pr-screenshot
-description: ローカルの dev サーバーでページを3幅（375/768/1440）撮影し、gh attach でアップロードして PR 本文に「## 実表示」の表として追加する。「スクショをPRに貼って」「実表示を本文に追加して」「UI の見た目をPRに載せて」等、PR に画面キャプチャを載せたいときに使う。UI 変更の PR を作る流れで「見た目を見せたい」という話が出たら、明示的にスクショと言われなくても提案してよい。
+description: ローカルの dev サーバーでページを3幅（375/768/1440）撮影し、gh 標準の --attach でアップロードして PR 本文に「## 実表示」の表として追加する。「スクショをPRに貼って」「実表示を本文に追加して」「UI の見た目をPRに載せて」等、PR に画面キャプチャを載せたいときに使う。UI 変更の PR を作る流れで「見た目を見せたい」という話が出たら、明示的にスクショと言われなくても提案してよい。
 ---
 
 # PR にスクリーンショットを貼る
@@ -26,25 +26,11 @@ scripts/capture-3widths.sh "<URL>"     # $TMPDIR/w375.png, w768.png, w1440.png
 
 撮れた3枚は **Read ツールで目視する。** 崩れ・ローディング途中・空白のまま撮れている、といった失敗は検算では捕まらない。
 
-## 2. アップロード
+## 2. PR 本文に追記してアップロード
 
-```bash
-scripts/ensure-gh-attach-patch.sh      # 拡張のローカル修正2件を検査・再適用（冪等）
-gh attach --repo <owner/repo> --issue <PR番号> \
-  --image "$TMPDIR/w375.png" --image "$TMPDIR/w768.png" --image "$TMPDIR/w1440.png" \
-  --url-only --session gh-attach --keep-session
-```
+gh 標準の `--attach`（v2.99.0 以降）で、本文の更新と画像のアップロードを 1 コマンドで行う。仕組みと落とし穴は `github-attach` スキルにまとめてある。GitHub Releases や gh-attach 拡張は使わない（リリースタグが残る / ブラウザログインが要る）。
 
-- `--session` は必須。無いと macOS の bash 3.2 が `pw_open_extra[@]: unbound variable` を出す。
-- `--release` は**使わない**。リポジトリにリリースタグを作ってしまう。
-- 前提として `npm install -g @playwright/cli`。
-- 未ログインなら `playwright-cli --session gh-attach open --persistent --headed https://github.com/login` を実行し、**ユーザーにログインしてもらってから**続行する。
-- `ensure-gh-attach-patch.sh` が「自動適用できません」と言う場合は拡張の実装が変わっている。拡張本体を読んで手で当て、スクリプトの検出条件も直す（`gh extension upgrade` のたびに修正は消えるので、都度当て直す前提で作ってある）。
-- Bash が E2BIG で全滅する場合は `dangerouslyDisableSandbox: true` で実行する。
-
-## 3. PR 本文に追記
-
-既存の本文を `gh pr view <PR番号> --json body -q .body` で取得し、**消さずに**「変更内容」と「確認事項」の間へ次のセクションを挿入して `gh pr edit <PR番号> --body-file <file>`。
+既存の本文を `gh pr view <PR番号> --json body -q .body > "$TMPDIR/body.md"` で取得し、**消さずに**「変更内容」と「確認事項」の間へ次のセクションを挿入する。
 
 ```markdown
 ## 実表示
@@ -53,21 +39,27 @@ gh attach --repo <owner/repo> --issue <PR番号> \
 
 | モバイル 375px | タブレット 768px | デスクトップ 1440px |
 | --- | --- | --- |
-| <img alt="モバイル 375px" src="URL1" /> | <img alt="タブレット 768px" src="URL2" /> | <img alt="デスクトップ 1440px" src="URL3" /> |
+| ![モバイル 375px](<TMPDIR>/w375.png) | ![タブレット 768px](<TMPDIR>/w768.png) | ![デスクトップ 1440px](<TMPDIR>/w1440.png) |
 ```
 
-`width` 属性は付けない（3列レイアウトが崩れる）。列ヘッダーの3列構成を保つ。
-
-## 4. 検証して報告
-
-投稿しただけでは画像が壊れていても気づけないので、ログイン済みセッションで本文を開いて実際に描画されたか確かめる。
+`<TMPDIR>` は展開済みの絶対パスを書く。
 
 ```bash
-playwright-cli --session gh-attach goto "<PR URL>"
-playwright-cli --session gh-attach eval "() => { const t=document.querySelector('.markdown-body table'); return JSON.stringify({headers:[...t.querySelectorAll('th')].map(e=>e.innerText), imgs:[...t.querySelectorAll('td img')].map(i=>i.naturalWidth)}); }"
+gh pr edit <PR番号> --body-file "$TMPDIR/body.md" \
+  --attach "$TMPDIR/w375.png" --attach "$TMPDIR/w768.png" --attach "$TMPDIR/w1440.png"
 ```
 
-3列のヘッダーと画像3枚（`naturalWidth` が 375/768/1440）を確認できたら完了を報告する。
+- 画像は **Markdown の画像記法** で書く。`<img src="...">` はパスが置換されず、壊れた画像が残ったうえ末尾に同じ画像がもう 1 枚足される。
+- 列ヘッダーの3列構成を保つ。
+
+## 3. 検証して報告
+
+```bash
+gh pr view <PR番号> --json body -q .body | grep -c 'user-attachments/assets/'     # 実表示の 3 枚分あること
+gh pr view <PR番号> --json body -q .body | grep -nE '\]\((\.|/)'                 # 何も出なければ OK
+```
+
+ローカルパスが残っていれば置換に失敗している。`gh pr edit` が非 0 で終わった場合も一部の添付が失敗しているので、エラーを見せて止まる。問題が無ければ PR の URL を添えて完了を報告し、表示の目視はユーザーに任せる。
 
 撮影中に気づいた**この PR と無関係な表示崩れ**は本文に書かない（レビュー対象が広がる）。報告で伝えて扱いを聞く。
 

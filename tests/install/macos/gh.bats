@@ -24,9 +24,10 @@ SCRIPT="install/macos/gh.sh"
     [ "$status" -ne 0 ]
 }
 
-@test "gh.sh: pr-screenshot's gh-attach is in the list" {
-    # pr-screenshot スキルが gh attach に依存しているので、復元経路が無いと新マシンで落ちる
-    grep -q 'gh-attach' "${REPO_ROOT}/install/macos/gh-extensions.txt"
+@test "gh.sh: the gh-attach extension is no longer restored" {
+    # 添付は gh 標準の --attach に移した。拡張を戻すとスキルが旧経路（リリース/ブラウザ）に流れうる
+    run grep -q 'gh-attach' "${REPO_ROOT}/install/macos/gh-extensions.txt"
+    [ "$status" -ne 0 ]
 }
 
 @test "gh.sh: skips safely when gh is absent" {
@@ -67,7 +68,7 @@ case "$1" in
   auth) exit 0 ;;
   extension)
     case "$2" in
-      list)    printf 'gh attach\tatani/gh-attach\tabc1234\n' ;;
+      list)    printf 'gh dash\tdlvhdr/gh-dash\tabc1234\n' ;;
       install) printf '%s\n' "$3" >> "${STUB_MARKER}" ;;
     esac
     exit 0 ;;
@@ -79,8 +80,7 @@ STUBEOF
     run env PATH="${STUB}:/usr/bin:/bin" HOME="${HOME}" STUB_MARKER="${MARKER}" \
         bash "${REPO_ROOT}/${SCRIPT}"
     [ "$status" -eq 0 ]
-    grep -q 'dlvhdr/gh-dash' "${MARKER}"
     grep -q 'github/gh-stack' "${MARKER}"
-    run grep -q 'atani/gh-attach' "${MARKER}"
+    run grep -q 'dlvhdr/gh-dash' "${MARKER}"
     [ "$status" -ne 0 ]
 }
