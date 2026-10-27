@@ -24,6 +24,9 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr のタブ探索/workspace 解決。hello-run と dev-server が source)
 ├── dot_config/hello-run/prompt{,-scratch}.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート。issue 用と --scratch 用)
+├── dot_config/hello-run/{prompt-kb,kb-readme}.md # → ~/.config/hello-run/ (kb を繋いだときに足す文と、kb の issue README の雛形)
+├── dot_config/kb/executable_autosave.sh # → ~/.config/kb/autosave.sh (kb を全部コミットして push。launchd が 10 分ごとに呼ぶ)
+├── Library/LaunchAgents/com.kokikono.kb-autosave.plist.tmpl # → ~/Library/LaunchAgents/ (autosave の launchd 定義)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
@@ -36,7 +39,8 @@ home/                              # chezmoi source (rendered into $HOME)
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb}.sh
+install/macos/kb-seed/              # kb を初めて作るときに置く CLAUDE.md と .gitignore
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 install/macos/gh-extensions.txt     # one `<owner>/<repo>` per line (used by gh.sh)
 install/macos/skills-lock.json      # `npx skills` の lock のコピー（skills.sh が復元に使う）
@@ -44,6 +48,7 @@ tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
 ├── install/macos/*.bats           # unit tests for each install script
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
+├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
 .github/workflows/ci.yml           # macOS CI: bats + apply E2E (weekly full setup)
@@ -87,7 +92,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -259,6 +264,25 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     therefore runs `git fetch --prune origin` and passes `--base origin/<default>` (detected by
     `__hr_default_branch` via `origin/HEAD` → main/master). Base and branch names differ, so the new
     branch gets no upstream — same as before; push with `-u` or `push.autoSetupRemote`.
+- **kb（issue をまたぐナレッジ置き場）** は `install/macos/kb.sh` が作る。remote は GitHub ではなく
+  ローカルの bare リポジトリ（`~/git_remote/kb.git`）で、作業用の clone は `~/git_clone/local/kb`
+  に 1 つだけ置く。勤務先の org にこの用途のリポジトリを作った前例が無いため。中身は業務知識なので
+  このリポジトリには入れず、初回に置く雛形（`install/macos/kb-seed/`）だけを持つ。知っておくこと:
+  - **hello-run はセッションディレクトリに `kb` という symlink を張り、`kb/issues/<repo>-<N>/README.md`
+    を `kb-readme.md` から作る**（`--scratch` は `scratch-<slug>/`。既にあれば上書きしない）。
+    issue ごとに clone や worktree を持たないのは、並行するセッション同士で知見がすぐ見えるように
+    するため。kb の worktree を切ると、ローカルの remote には PR ができないので `wrm` が必ず
+    削除候補に出す。kb が無ければ hello-run は繋がずに進み、初期プロンプトにも `prompt-kb.md` を足さない。
+  - **git を操作するのは autosave（launchd、10 分ごと）だけ。** 複数の claude が同じ clone に
+    書くので、各セッションに commit させると index を取り合い、他のセッションの変更が自分の
+    コミットに入る。目的はロスト防止なのでコミットは `git add -A` の一括でよい。kb の
+    CLAUDE.md でも claude に git を触らせない。autosave は `commit.gpgsign=false` で
+    コミットする — launchd からは pinentry を出せず、署名で止まるため。lock や merge・rebase の
+    途中なら何もしない。
+  - **push 先が同じディスクなのでバックアップにはならない。** 戻せるのは claude が壊した・消した
+    ファイルだけ。Time Machine の対象に入れるか、bundle を別の場所に書き出すこと。
+  - plist は chezmoi が配り、`kb.sh` が `launchctl bootstrap` する。`kb.sh` が plist より先に
+    走ると登録をスキップするので、そのときはもう一度 `bash install/macos/kb.sh` を叩く。
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
@@ -470,6 +494,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   only the empty template ships; see the learning-code entry above),
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
   search hints — workspace-specific, and this repo is PUBLIC),
+  `~/git_remote/kb.git` / `~/git_clone/local/kb` (the kb — work knowledge; see the kb entry above),
   `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
   ports, internal URLs — see the dev-server entry above; only the placeholder
   `apps.example.json` ships), and `~/Library/Preferences/com.googlecode.iterm2.plist`

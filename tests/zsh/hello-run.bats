@@ -363,3 +363,70 @@ read_task() {
     # scratch は毎回新しい作業。ラベルで既存タブを拾うと別の作業に飛ばされる
     grep -q 'if (( ! scratch )); then' "${HR}"
 }
+
+# --- kb（issue をまたぐナレッジ置き場）-------------------------------------------
+
+setup_kb() {
+    KB="${BATS_TEST_TMPDIR}/kb"
+    SDIR="${BATS_TEST_TMPDIR}/sessions/issue-42"
+    mkdir -p "${KB}/.git" "${SDIR}"
+}
+
+# link_kb <readme template> <name> <issue url>
+link_kb() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB="${KB}" HELLO_RUN_KB_README_FILE="$1" zsh -c \
+        "source '${HR}'; __hr_link_kb '${SDIR}' '$2' '$3'"
+}
+
+@test "__hr_link_kb: links kb into the session and writes the issue README" {
+    setup_kb
+    printf '%s\n' '<!-- 書き出されない注意書き -->' '' '- Issueリンク: {{issue_url}}' '# 概要' \
+        >"${BATS_TEST_TMPDIR}/t.md"
+    link_kb "${BATS_TEST_TMPDIR}/t.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    [ -L "${SDIR}/kb" ]
+    [ "$(readlink "${SDIR}/kb")" = "${KB}" ]
+    [ "$(cat "${KB}/issues/r-42/README.md")" = "$(printf '%s\n' '- Issueリンク: https://github.com/o/r/issues/42' '# 概要')" ]
+}
+
+@test "__hr_link_kb: keeps an existing README" {
+    # 同じ issue をやり直したときに、書きためた概要と進捗を消さない
+    setup_kb
+    mkdir -p "${KB}/issues/r-42"
+    echo "書きかけのメモ" >"${KB}/issues/r-42/README.md"
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    [ "$(cat "${KB}/issues/r-42/README.md")" = "書きかけのメモ" ]
+}
+
+@test "__hr_link_kb: falls back to the built-in README without a template" {
+    setup_kb
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    grep -qxF -- '- Issueリンク: https://github.com/o/r/issues/42' "${KB}/issues/r-42/README.md"
+    grep -qxF -- '# 進捗' "${KB}/issues/r-42/README.md"
+}
+
+@test "__hr_link_kb: does nothing when kb is not set up" {
+    # kb.sh を流していないマシンでも hello-run 自体は動くこと
+    KB="${BATS_TEST_TMPDIR}/no-kb"
+    SDIR="${BATS_TEST_TMPDIR}/sessions/issue-42"
+    mkdir -p "${SDIR}"
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 ''
+    [ "$status" -ne 0 ]
+    [ ! -e "${SDIR}/kb" ]
+}
+
+@test "__hr_render_kb_prompt: fills the readme path from the template" {
+    printf '%s\n' '<!-- 送られない -->' 'メモは' '{{kb_readme}} です。' >"${BATS_TEST_TMPDIR}/p.md"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB_PROMPT_FILE="${BATS_TEST_TMPDIR}/p.md" zsh -c \
+        "source '${HR}'; __hr_render_kb_prompt kb/issues/r-42/README.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "メモは kb/issues/r-42/README.md です。" ]
+}
+
+@test "hello-run: names the kb dir <repo>-<N> and appends the kb prompt only when linked" {
+    # issue-<N> はリポジトリ間で一意でないので、kb 側はリポジトリ名を前に付ける
+    grep -qF 'kb_name="${repo#*/}-$num"' "${HR}"
+    grep -qF '[[ -n $kb_readme ]] && text+=" $(__hr_render_kb_prompt "$kb_readme")"' "${HR}"
+}

@@ -35,6 +35,10 @@ HELLO_RUN_ISSUE_REPO="${HELLO_RUN_ISSUE_REPO:-}"
 HELLO_RUN_SLUG_MODEL="${HELLO_RUN_SLUG_MODEL:-claude-haiku-4-5-20251001}"
 HELLO_RUN_PROMPT_FILE="${HELLO_RUN_PROMPT_FILE:-$HOME/.config/hello-run/prompt.md}"
 HELLO_RUN_SCRATCH_PROMPT_FILE="${HELLO_RUN_SCRATCH_PROMPT_FILE:-$HOME/.config/hello-run/prompt-scratch.md}"
+# issue をまたぐナレッジ置き場（install/macos/kb.sh が作る）。無ければ繋がずに進む。
+HELLO_RUN_KB="${HELLO_RUN_KB:-$HOME/git_clone/local/kb}"
+HELLO_RUN_KB_README_FILE="${HELLO_RUN_KB_README_FILE:-$HOME/.config/hello-run/kb-readme.md}"
+HELLO_RUN_KB_PROMPT_FILE="${HELLO_RUN_KB_PROMPT_FILE:-$HOME/.config/hello-run/prompt-kb.md}"
 typeset -ga HELLO_RUN_REPOS
 
 __hr_err() { print -r -- "hello-run: $*" >&2; }
@@ -507,6 +511,34 @@ __hr_render_scratch_prompt() {
   print -r -- "$body"
 }
 
+# __hr_link_kb <session_dir> <name> <issue_url>
+# kb をセッションディレクトリに `kb` として symlink し、kb/issues/<name>/README.md を
+# 雛形から作る（既にあれば触らない）。kb が無ければ非 0。
+# clone を issue ごとに持たず symlink にしているのは、並行するセッション同士で知見が
+# すぐ見えるようにするため。git の操作は kb の autosave（launchd）だけが行う。
+__hr_link_kb() {
+  emulate -L zsh
+  local sdir=$1 name=$2 url=$3 readme body
+  [[ -d $HELLO_RUN_KB/.git ]] || return 1
+  [[ -e $sdir/kb || -L $sdir/kb ]] || ln -s "$HELLO_RUN_KB" "$sdir/kb" || return 1
+  readme="$HELLO_RUN_KB/issues/$name/README.md"
+  [[ -e $readme ]] && return 0
+  mkdir -p "${readme:h}" || return 1
+  body=$(__hr_strip_comments "$HELLO_RUN_KB_README_FILE" 2>/dev/null | sed -e '/./,$!d')
+  [[ -n ${body//[[:space:]]/} ]] \
+    || body=$'- Issueリンク: {{issue_url}}\n- Notionリンク:\n- Figmaリンク:\n\n# 概要\n<ここは作業しながらAIが埋める>\n# 進捗\n<ここも作業しながらAIが埋める>'
+  print -r -- "${body//\{\{issue_url\}\}/$url}" >"$readme"
+}
+
+# __hr_render_kb_prompt <kb_readme>: kb を繋いだときだけ初期プロンプトの後ろに足す文
+__hr_render_kb_prompt() {
+  emulate -L zsh
+  local body
+  body=$(__hr_template_body "$HELLO_RUN_KB_PROMPT_FILE") \
+    || body='カレントディレクトリの kb/ は issue をまたいで使うナレッジ置き場です。まず kb/CLAUDE.md を読んでください。この作業のメモは {{kb_readme}} です。'
+  print -r -- "${body//\{\{kb_readme\}\}/$1}"
+}
+
 # __hr_send_prompt <label> <text>: claude が入力待ち（信頼確認を抜けた状態）になってから送る
 __hr_send_prompt() {
   emulate -L zsh
@@ -710,6 +742,17 @@ hello-run() {
   # issue 番号はリポジトリ間で一意でないのに、置き場は番号だけで決まる。どの issue の
   # セッションかを後から引けるよう URL を残す（プラグインの close-done.zsh が読む）。
   (( scratch )) || print -r -- "https://github.com/$repo/issues/$num" >"$sdir/.issue-url"
+  # kb のディレクトリ名は <repo>-<N>。セッションの issue-<N> だとリポジトリ間で衝突する。
+  # 繋がらなくても作業環境は作れるので失敗は無視する。
+  local kb_name kb_readme=""
+  if (( scratch )); then
+    kb_name=$label
+    __hr_link_kb "$sdir" "$kb_name" "" && kb_readme="kb/issues/$kb_name/README.md"
+  else
+    kb_name="${repo#*/}-$num"
+    __hr_link_kb "$sdir" "$kb_name" "https://github.com/$repo/issues/$num" \
+      && kb_readme="kb/issues/$kb_name/README.md"
+  fi
   local r rdir
   __hr_ui_begin 3
   for r in "${HELLO_RUN_REPOS[@]}"; do
@@ -772,6 +815,7 @@ hello-run() {
       text=$(__hr_render_prompt "https://github.com/$repo/issues/$num" "$repo" "$num" \
                "$title" "$branch" "${HELLO_RUN_REPOS[*]}" "$sdir")
     fi
+    [[ -n $kb_readme ]] && text+=" $(__hr_render_kb_prompt "$kb_readme")"
     __hr_ui_begin 5
     __hr_ui_detail "入力待ちになるまで待っています"
     if __hr_step "$tmpd/prompt" __hr_send_prompt "$label" "$text"; then
@@ -789,5 +833,6 @@ hello-run() {
   __hr_ui_box "$label" \
     branch  "$branch" \
     session "${sdir/#$HOME/~}" \
-    tab     "$tab_id  ($panes)"
+    tab     "$tab_id  ($panes)" \
+    kb      "${kb_readme:-（未接続）}"
 }
