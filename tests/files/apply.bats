@@ -454,6 +454,22 @@ assert lg['command'] == 'lazygit', lg
     grep -q 'Notion' "${TESTHOME}/.config/hello-run/prompt.md"
 }
 
+@test "apply: kb autosave script and its launchd agent are deployed" {
+    [ -x "${TESTHOME}/.config/kb/autosave.sh" ]
+    PLIST="${TESTHOME}/Library/LaunchAgents/com.kokikono.kb-autosave.plist"
+    [ -f "${PLIST}" ]
+    if command -v plutil >/dev/null 2>&1; then plutil -lint "${PLIST}" >/dev/null; fi
+    grep -q '<integer>600</integer>' "${PLIST}"
+    grep -q '/.config/kb/autosave.sh</string>' "${PLIST}"
+}
+
+@test "apply: hello-run kb templates are deployed" {
+    grep -q '{{issue_url}}' "${TESTHOME}/.config/hello-run/kb-readme.md"
+    grep -q '{{kb_readme}}' "${TESTHOME}/.config/hello-run/prompt-kb.md"
+    grep -q 'config/hello-run/kb-readme.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
+    grep -q 'config/hello-run/prompt-kb.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
+}
+
 @test "apply: gh extensions have a restore path" {
     [ -f "${REPO_ROOT}/install/macos/gh-extensions.txt" ]
     # チェーンに繋がっていないと chezmoi apply で走らない

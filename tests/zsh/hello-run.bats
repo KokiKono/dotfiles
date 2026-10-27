@@ -363,3 +363,144 @@ read_task() {
     # scratch は毎回新しい作業。ラベルで既存タブを拾うと別の作業に飛ばされる
     grep -q 'if (( ! scratch )); then' "${HR}"
 }
+
+# --- kb（issue をまたぐナレッジ置き場）-------------------------------------------
+
+setup_kb() {
+    KB="${BATS_TEST_TMPDIR}/kb"
+    SDIR="${BATS_TEST_TMPDIR}/sessions/issue-42"
+    mkdir -p "${KB}/.git" "${SDIR}"
+}
+
+# link_kb <readme template> <name> <issue url>
+link_kb() {
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB="${KB}" HELLO_RUN_KB_README_FILE="$1" zsh -c \
+        "source '${HR}'; __hr_link_kb '${SDIR}' '$2' '$3'"
+}
+
+@test "__hr_link_kb: links kb into the session and writes the issue README" {
+    setup_kb
+    printf '%s\n' '<!-- 書き出されない注意書き -->' '' '- Issueリンク: {{issue_url}}' '# 概要' \
+        >"${BATS_TEST_TMPDIR}/t.md"
+    link_kb "${BATS_TEST_TMPDIR}/t.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    [ -L "${SDIR}/kb" ]
+    [ "$(readlink "${SDIR}/kb")" = "${KB}" ]
+    [ "$(cat "${KB}/issues/r-42/README.md")" = "$(printf '%s\n' '- Issueリンク: https://github.com/o/r/issues/42' '# 概要')" ]
+}
+
+@test "__hr_link_kb: keeps an existing README" {
+    # 同じ issue をやり直したときに、書きためた概要と進捗を消さない
+    setup_kb
+    mkdir -p "${KB}/issues/r-42"
+    echo "書きかけのメモ" >"${KB}/issues/r-42/README.md"
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    [ "$(cat "${KB}/issues/r-42/README.md")" = "書きかけのメモ" ]
+}
+
+@test "__hr_link_kb: falls back to the built-in README without a template" {
+    setup_kb
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 'https://github.com/o/r/issues/42'
+    [ "$status" -eq 0 ]
+    grep -qxF -- '- Issueリンク: https://github.com/o/r/issues/42' "${KB}/issues/r-42/README.md"
+    grep -qxF -- '# 進捗' "${KB}/issues/r-42/README.md"
+}
+
+@test "__hr_link_kb: does nothing when kb is not set up" {
+    # kb.sh を流していないマシンでも hello-run 自体は動くこと
+    KB="${BATS_TEST_TMPDIR}/no-kb"
+    SDIR="${BATS_TEST_TMPDIR}/sessions/issue-42"
+    mkdir -p "${SDIR}"
+    link_kb "${BATS_TEST_TMPDIR}/missing.md" r-42 ''
+    [ "$status" -ne 0 ]
+    [ ! -e "${SDIR}/kb" ]
+}
+
+@test "__hr_render_kb_prompt: fills the readme path from the template" {
+    printf '%s\n' '<!-- 送られない -->' 'メモは' '{{kb_readme}} です。' >"${BATS_TEST_TMPDIR}/p.md"
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB_PROMPT_FILE="${BATS_TEST_TMPDIR}/p.md" zsh -c \
+        "source '${HR}'; __hr_render_kb_prompt kb/issues/r-42/README.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "メモは kb/issues/r-42/README.md です。" ]
+}
+
+@test "hello-run: names the kb dir <repo>-<N> and appends the kb prompt only when linked" {
+    # issue-<N> はリポジトリ間で一意でないので、kb 側はリポジトリ名を前に付ける
+    grep -qF 'kb_name="${repo#*/}-$num"' "${HR}"
+    grep -qF '[[ -n $kb_readme ]] && text+=" $(__hr_render_kb_prompt "$kb_readme")"' "${HR}"
+}
+
+# --- init-kb（既存の作業ディレクトリに kb を繋ぐ）---------------------------------
+
+# init_kb <cwd> <args...>
+init_kb() {
+    local cwd=$1; shift
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB="${KB}" HELLO_RUN_ISSUE_REPO="o/r" \
+        HELLO_RUN_KB_README_FILE="${BATS_TEST_TMPDIR}/missing.md" \
+        zsh -c "source '${HR}'; cd '${cwd}' && init-kb $*"
+}
+
+@test "init-kb: links the session dir from inside a worktree using .issue-url" {
+    # kb より前に作ったセッションに後から繋ぐ。worktree の奥から叩いても session dir に張る
+    setup_kb
+    SDIR="${BATS_TEST_TMPDIR}/root/.sessions/issue-7"
+    mkdir -p "${SDIR}"
+    echo 'https://github.com/o/other/issues/7' >"${SDIR}/.issue-url"
+    mkdir -p "${SDIR}/repo_a/src"
+    init_kb "${SDIR}/repo_a/src"
+    [ "$status" -eq 0 ]
+    [ -L "${SDIR}/kb" ]
+    [ ! -e "${SDIR}/repo_a/src/kb" ]
+    grep -qxF -- '- Issueリンク: https://github.com/o/other/issues/7' "${KB}/issues/other-7/README.md"
+}
+
+@test "init-kb: names a scratch session after its directory" {
+    setup_kb
+    S="${BATS_TEST_TMPDIR}/sessions/.sessions/scratch-fix-login"
+    mkdir -p "${S}"
+    init_kb "${S}"
+    [ "$status" -eq 0 ]
+    [ -L "${S}/kb" ]
+    [ -f "${KB}/issues/scratch-fix-login/README.md" ]
+}
+
+@test "init-kb: links the current dir outside a session and hides it from git" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/work"
+    git init -q "${W}"
+    mkdir -p "${W}/sub"
+    init_kb "${W}/sub" 'https://github.com/o/r/issues/9'
+    [ "$status" -eq 0 ]
+    [ -L "${W}/sub/kb" ]
+    [ -f "${KB}/issues/r-9/README.md" ]
+    grep -qxF '/sub/kb' "${W}/.git/info/exclude"
+    [ -z "$(git -C "${W}" status --porcelain)" ]
+}
+
+@test "init-kb: refuses when no name can be decided" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/plain"
+    mkdir -p "${W}"
+    init_kb "${W}"
+    [ "$status" -eq 2 ]
+    [ ! -e "${W}/kb" ]
+}
+
+@test "init-kb: accepts --name and rejects path-like names" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/plain"
+    mkdir -p "${W}"
+    init_kb "${W}" --name ../escape
+    [ "$status" -eq 2 ]
+    init_kb "${W}" --name spike
+    [ "$status" -eq 0 ]
+    [ -f "${KB}/issues/spike/README.md" ]
+}
+
+@test "init-kb: fails clearly when kb is not set up" {
+    KB="${BATS_TEST_TMPDIR}/no-kb"
+    init_kb "${BATS_TEST_TMPDIR}" --name spike
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"install/macos/kb.sh"* ]] || false
+}
