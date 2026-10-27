@@ -836,3 +836,79 @@ hello-run() {
     tab     "$tab_id  ($panes)" \
     kb      "${kb_readme:-（未接続）}"
 }
+
+# __hr_session_of <dir>: <dir> を含む hello-run のセッションディレクトリ
+# （.sessions 直下の 1 階層）を出す。セッションの外なら非 0。
+__hr_session_of() {
+  emulate -L zsh
+  local dir=${1:A}
+  [[ $dir == */.sessions/* ]] || return 1
+  local rest=${dir#*/.sessions/}
+  print -r -- "${dir%%/.sessions/*}/.sessions/${rest%%/*}"
+}
+
+# init-kb [<issue-url|number>] [--name <name>]
+# いまいる作業ディレクトリに kb を繋ぐ。kb より前に作ったセッションや、hello-run を
+# 通さずに始めた作業向け。hello-run のセッション内（worktree の中でもよい）なら
+# セッションディレクトリに、それ以外ならカレントディレクトリに `kb` を張る。
+# kb 側の名前は、引数の issue → セッションの .issue-url → scratch-<slug> の順に決める。
+init-kb() {
+  emulate -L zsh
+  local issue_arg="" name="" url="" target parsed repo num
+  while (( $# )); do
+    case $1 in
+      --name)
+        [[ -n ${2:-} ]] || { __hr_err "--name には値が必要です"; return 2; }
+        name=$2; shift ;;
+      --name=*) name=${1#--name=} ;;
+      -h|--help)
+        print -r -- "usage: init-kb [<issue-url|number>] [--name <name>]"
+        print -r -- "  hello-run のセッション内ならセッションディレクトリに、それ以外ならカレントに kb を繋ぐ"
+        print -r -- "  --name  kb/issues/ 配下の名前（省略時は issue から <repo>-<N>）"
+        return 0 ;;
+      -*) __hr_err "不明な引数: $1"; return 2 ;;
+      *)
+        [[ -z $issue_arg ]] || { __hr_err "issue は 1 つだけ指定してください"; return 2; }
+        issue_arg=$1 ;;
+    esac
+    shift
+  done
+  [[ -d $HELLO_RUN_KB/.git ]] \
+    || { __hr_err "kb がありません: $HELLO_RUN_KB（bash install/macos/kb.sh で作る）"; return 1; }
+
+  target=$(__hr_session_of "$PWD") || target=$PWD
+  [[ -z $issue_arg && -r $target/.issue-url ]] && issue_arg=$(<"$target/.issue-url")
+  if [[ -n $issue_arg ]]; then
+    parsed=$(__hr_parse_issue "$issue_arg") || { __hr_err "issue を解釈できません: $issue_arg"; return 2; }
+    repo=${parsed%%$'\t'*}
+    num=${parsed##*$'\t'}
+    [[ -n $repo ]] || { __hr_err "リポジトリが分かりません。issue の URL を渡してください"; return 2; }
+    url="https://github.com/$repo/issues/$num"
+    [[ -n $name ]] || name="${repo#*/}-$num"
+  fi
+  [[ -n $name || ${target:t} != scratch-* ]] || name=${target:t}
+  [[ -n $name ]] || { __hr_err "kb での名前が決まりません。issue の URL か --name を渡してください"; return 2; }
+  [[ $name != */* && $name != .* ]] || { __hr_err "--name に / や先頭の . は使えません: $name"; return 2; }
+
+  if [[ -e $target/kb && ! -L $target/kb ]]; then
+    __hr_err "$target/kb が既にあります（symlink ではない）"
+    return 1
+  fi
+  __hr_link_kb "$target" "$name" "$url" || { __hr_err "kb を繋げませんでした: $target"; return 1; }
+
+  # セッション外の git 作業ツリーに張ったときは、未追跡ファイルとして出ないようにする
+  local exclude top pattern
+  if [[ $target != */.sessions/* ]] \
+      && top=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null) \
+      && exclude=$(git -C "$target" rev-parse --path-format=absolute --git-path info/exclude 2>/dev/null); then
+    pattern="${${target:A}#${top:A}}/kb"
+    grep -qxF -- "$pattern" "$exclude" 2>/dev/null \
+      || { mkdir -p "${exclude:h}" && print -r -- "$pattern" >>"$exclude"; }
+  fi
+
+  print -r -- "kb を繋ぎました: ${target/#$HOME/~}/kb"
+  print -r -- "メモ: kb/issues/$name/README.md"
+  print -r -- ""
+  print -r -- "claude に伝えるときは:"
+  print -r -- "$(__hr_render_kb_prompt "kb/issues/$name/README.md")"
+}

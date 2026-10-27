@@ -273,6 +273,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     issue ごとに clone や worktree を持たないのは、並行するセッション同士で知見がすぐ見えるように
     するため。kb の worktree を切ると、ローカルの remote には PR ができないので `wrm` が必ず
     削除候補に出す。kb が無ければ hello-run は繋がずに進み、初期プロンプトにも `prompt-kb.md` を足さない。
+  - **既存の作業ディレクトリには `init-kb` で後から繋ぐ**（hello-run.zsh が定義する）。hello-run の
+    セッション内なら worktree の奥から叩いてもセッションディレクトリに張り、名前は引数の issue →
+    `.issue-url` → `scratch-<slug>` の順に決める。セッション外ではカレントに張り、git の作業ツリー
+    なら `info/exclude` に足して未追跡に出さない。名前が決まらなければ issue の URL か `--name` を求める。
   - **git を操作するのは autosave（launchd、10 分ごと）だけ。** 複数の claude が同じ clone に
     書くので、各セッションに commit させると index を取り合い、他のセッションの変更が自分の
     コミットに入る。目的はロスト防止なのでコミットは `git add -A` の一括でよい。kb の

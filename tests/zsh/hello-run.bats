@@ -430,3 +430,77 @@ link_kb() {
     grep -qF 'kb_name="${repo#*/}-$num"' "${HR}"
     grep -qF '[[ -n $kb_readme ]] && text+=" $(__hr_render_kb_prompt "$kb_readme")"' "${HR}"
 }
+
+# --- init-kb（既存の作業ディレクトリに kb を繋ぐ）---------------------------------
+
+# init_kb <cwd> <args...>
+init_kb() {
+    local cwd=$1; shift
+    run env PATH="${STUB}:${PATH}" HELLO_RUN_KB="${KB}" HELLO_RUN_ISSUE_REPO="o/r" \
+        HELLO_RUN_KB_README_FILE="${BATS_TEST_TMPDIR}/missing.md" \
+        zsh -c "source '${HR}'; cd '${cwd}' && init-kb $*"
+}
+
+@test "init-kb: links the session dir from inside a worktree using .issue-url" {
+    # kb より前に作ったセッションに後から繋ぐ。worktree の奥から叩いても session dir に張る
+    setup_kb
+    SDIR="${BATS_TEST_TMPDIR}/root/.sessions/issue-7"
+    mkdir -p "${SDIR}"
+    echo 'https://github.com/o/other/issues/7' >"${SDIR}/.issue-url"
+    mkdir -p "${SDIR}/repo_a/src"
+    init_kb "${SDIR}/repo_a/src"
+    [ "$status" -eq 0 ]
+    [ -L "${SDIR}/kb" ]
+    [ ! -e "${SDIR}/repo_a/src/kb" ]
+    grep -qxF -- '- Issueリンク: https://github.com/o/other/issues/7' "${KB}/issues/other-7/README.md"
+}
+
+@test "init-kb: names a scratch session after its directory" {
+    setup_kb
+    S="${BATS_TEST_TMPDIR}/sessions/.sessions/scratch-fix-login"
+    mkdir -p "${S}"
+    init_kb "${S}"
+    [ "$status" -eq 0 ]
+    [ -L "${S}/kb" ]
+    [ -f "${KB}/issues/scratch-fix-login/README.md" ]
+}
+
+@test "init-kb: links the current dir outside a session and hides it from git" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/work"
+    git init -q "${W}"
+    mkdir -p "${W}/sub"
+    init_kb "${W}/sub" 'https://github.com/o/r/issues/9'
+    [ "$status" -eq 0 ]
+    [ -L "${W}/sub/kb" ]
+    [ -f "${KB}/issues/r-9/README.md" ]
+    grep -qxF '/sub/kb' "${W}/.git/info/exclude"
+    [ -z "$(git -C "${W}" status --porcelain)" ]
+}
+
+@test "init-kb: refuses when no name can be decided" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/plain"
+    mkdir -p "${W}"
+    init_kb "${W}"
+    [ "$status" -eq 2 ]
+    [ ! -e "${W}/kb" ]
+}
+
+@test "init-kb: accepts --name and rejects path-like names" {
+    setup_kb
+    W="${BATS_TEST_TMPDIR}/plain"
+    mkdir -p "${W}"
+    init_kb "${W}" --name ../escape
+    [ "$status" -eq 2 ]
+    init_kb "${W}" --name spike
+    [ "$status" -eq 0 ]
+    [ -f "${KB}/issues/spike/README.md" ]
+}
+
+@test "init-kb: fails clearly when kb is not set up" {
+    KB="${BATS_TEST_TMPDIR}/no-kb"
+    init_kb "${BATS_TEST_TMPDIR}" --name spike
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"install/macos/kb.sh"* ]] || false
+}
