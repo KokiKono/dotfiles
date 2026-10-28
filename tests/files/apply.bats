@@ -312,7 +312,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
-             learning-code ubiquitous-language dev-server; do
+             learning-code ubiquitous-language dev-server explain-before-shorten; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
