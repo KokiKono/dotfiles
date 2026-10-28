@@ -311,8 +311,8 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 }
 
 @test "apply: local claude skills are deployed with frontmatter" {
-    for s in my-voice optimize-prompt pr-screenshot codebase-memory learning-code \
-             ubiquitous-language dev-server takt-order; do
+    for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
+             learning-code ubiquitous-language dev-server explain-before-shorten takt-order; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -470,14 +470,39 @@ assert lg['command'] == 'lazygit', lg
     grep -q 'Notion' "${TESTHOME}/.config/hello-run/prompt.md"
 }
 
-@test "apply: gh extensions the skills depend on have a restore path" {
-    LIST="${REPO_ROOT}/install/macos/gh-extensions.txt"
-    [ -f "${LIST}" ]
-    # pr-screenshot スキルが gh attach を叩くので、一覧に無いと新マシンで落ちる
-    grep -q 'gh attach' "${TESTHOME}/.claude/skills/pr-screenshot/SKILL.md"
-    grep -q 'gh-attach' "${LIST}"
+@test "apply: kb autosave script and its launchd agent are deployed" {
+    [ -x "${TESTHOME}/.config/kb/autosave.sh" ]
+    PLIST="${TESTHOME}/Library/LaunchAgents/com.kokikono.kb-autosave.plist"
+    [ -f "${PLIST}" ]
+    if command -v plutil >/dev/null 2>&1; then plutil -lint "${PLIST}" >/dev/null; fi
+    grep -q '<integer>600</integer>' "${PLIST}"
+    grep -q '/.config/kb/autosave.sh</string>' "${PLIST}"
+}
+
+@test "apply: hello-run kb templates are deployed" {
+    grep -q '{{issue_url}}' "${TESTHOME}/.config/hello-run/kb-readme.md"
+    grep -q '{{kb_readme}}' "${TESTHOME}/.config/hello-run/prompt-kb.md"
+    grep -q 'config/hello-run/kb-readme.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
+    grep -q 'config/hello-run/prompt-kb.md' "${TESTHOME}/.config/zsh/hello-run.zsh"
+}
+
+@test "apply: gh extensions have a restore path" {
+    [ -f "${REPO_ROOT}/install/macos/gh-extensions.txt" ]
     # チェーンに繋がっていないと chezmoi apply で走らない
     grep -q 'macos/gh.sh' "${REPO_ROOT}/home/.chezmoiscripts/run_onchange_install.sh.tmpl"
+}
+
+@test "apply: attachment skills upload via gh's built-in --attach" {
+    # 放っておくと GitHub Releases に画像を上げて本文からリンクする。標準の --attach に揃える
+    for s in github-attach pr-screenshot; do
+        grep -q -- '--attach' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
+        run grep -qE '^ *gh attach |--url-only|playwright-cli' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
+        [ "$status" -ne 0 ]
+    done
+    # <img src> は --attach が置換しないので、表の画像は Markdown 記法で書く
+    run grep -qE '\| <img ' "${TESTHOME}/.claude/skills/pr-screenshot/SKILL.md"
+    [ "$status" -ne 0 ]
+    [ ! -e "${TESTHOME}/.claude/skills/pr-screenshot/scripts/ensure-gh-attach-patch.sh" ]
 }
 
 @test "apply: app configs are deployed" {

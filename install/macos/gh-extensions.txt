@@ -1,3 +1,2 @@
 dlvhdr/gh-dash
-atani/gh-attach
 github/gh-stack
