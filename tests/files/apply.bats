@@ -312,7 +312,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
-             learning-code ubiquitous-language dev-server explain-before-shorten; do
+             learning-code ubiquitous-language dev-server explain-before-shorten takt-order; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -360,6 +360,22 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # 雛形は空の状態で配られること（個人の学習データは ~/.learning 側にしか置かない）
     python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['domains'] == {}" \
         "${SKILL}/references/skills.template.json"
+}
+
+@test "apply: takt-order skill is deployed with references, scripts and templates" {
+    SKILL="${TESTHOME}/.claude/skills/takt-order"
+    for f in references/design.md references/authoring.md references/kb.md \
+             assets/README.md assets/playbook.md; do
+        [ -f "${SKILL}/${f}" ]
+    done
+    [ -x "${SKILL}/scripts/kb.sh" ]
+    [ -x "${SKILL}/scripts/takt.sh" ]
+    # WF・facet・発注の記録は kb（非追跡）に置く。public なここには雛形しか配らない
+    [ ! -d "${SKILL}/orders" ]
+    [ ! -d "${SKILL}/workflows" ]
+    # 実際の org・repo 名を混ぜない
+    run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
+    [ "$status" -ne 0 ]
 }
 
 @test "apply: ubiquitous-language skill is deployed with its references" {

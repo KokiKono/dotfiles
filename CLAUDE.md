@@ -48,6 +48,7 @@ tests/
 ├── test_helper.bash               # finds REPO_ROOT via .chezmoiroot
 ├── install/macos/*.bats           # unit tests for each install script
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
+├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
@@ -423,6 +424,21 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。
+- **`home/dot_claude/skills/takt-order/`** は issue を読んで [takt](https://github.com/nrslib/takt)
+  に流すワークフロー（WF）を選ぶか組み、発注書・タスク文・YAML を kb に残して実行コマンドを渡すスキル
+  (`/takt-order`)。**takt は実行しない**（コマンドを渡すだけ）。`retro` で `.takt/runs/` の結果を読み、
+  WF の選び方の経験則（`playbook.md`）と再利用できる knowledge を kb に貯める。知っておくこと:
+  - **WF・facet・発注の記録は kb の `takt/` にしか置かない**（`./kb` → `$HELLO_RUN_KB` →
+    `~/git_clone/local/kb`。`scripts/kb.sh` が決めて雛形から作る）。中身は業務 repo の知見なので
+    この PUBLIC なリポジトリには入れない。`~/.takt/` も触らない — hello-run のセッションから
+    `takt --pipeline --skip-git -w <kb のパス>` で流すので、名前で解決させる必要が無い。
+  - **kb の knowledge を builtin の WF に差し込むときは絶対パス。** builtin の WF はコア
+    （`development-core` / `mini-core`）を `workflow_call` で呼んで facet 一覧を引数で渡しているだけで、
+    その引数は呼び出し側のセクションマップの名前・相対パス・`~` を解決しない（v0.71 で確認）。
+    引数は既定値を置き換えるので、builtin の一覧を写してから足す。手順は `references/authoring.md`。
+  - `takt` は mise の shim なので、node が決まらないディレクトリでは落ちる。`scripts/takt.sh` が
+    takt の入った node を探して `mise exec` で呼び直す。`--root` で builtins の場所を出す。
+  - `tests/claude/takt-order.bats` が 2 本のスクリプトを、`apply.bats` が配備と org/repo 名の非混入を見る。
 - **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
   アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
@@ -461,7 +477,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
