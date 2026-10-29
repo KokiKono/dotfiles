@@ -1,6 +1,7 @@
 {
   "awsAuthRefresh": "aws sso login --profile claude",
   "effortLevel": "medium",
+  "language": "japanese",
   "enabledPlugins": {
     "chrome-devtools-mcp@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
