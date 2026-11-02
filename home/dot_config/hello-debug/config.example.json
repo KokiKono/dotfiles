@@ -1,0 +1,17 @@
+{
+  "_readme": "hello-debug の設定の雛形。config.json にコピーして使う（そちらは chezmoi 管理外）。front のアプリ表は ~/.config/dev-server/<front_repo>.json を使う。backend の *_cmd は backend の worktree で評価される。手順が長くなるなら同じディレクトリに補助スクリプトを置いて呼ぶ。url と notes の {{host}} は host_cmd の出力に置き換わる。url は 404 にならないパスにする（404 / 502-504 は未起動とみなす）。",
+  "front_repo": "<front のリポジトリ名>",
+  "front_setup": ["test -d node_modules || <依存を入れるコマンド>"],
+  "backend": {
+    "name": "backend",
+    "repo": "<backend のリポジトリ名>",
+    "setup": ["~/.config/hello-debug/<backend>.sh setup"],
+    "cmd": "~/.config/hello-debug/<backend>.sh logs",
+    "stop_cmd": "~/.config/hello-debug/<backend>.sh stop",
+    "host_cmd": "~/.config/hello-debug/<backend>.sh host",
+    "url": "http://app.{{host}}/",
+    "ready_timeout_ms": 1200000,
+    "failure_regex": "command not found|no such container|cannot connect to the docker daemon",
+    "notes": ["API: http://api.{{host}}"]
+  }
+}

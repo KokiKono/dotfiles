@@ -193,12 +193,20 @@ __ds_find_pane() {
   return 1
 }
 
-# __ds_claim_pane <tab> <cwd> → アプリ用の pane。label の無い pane（作りたてのタブの
-# root pane）があればそれを使い、無ければ最後の pane を割る。
+# __ds_claim_pane <tab> <cwd> [<anchor> <direction>] → アプリ用の pane。
+# anchor を渡されたらその pane を割る（hello-debug は人が使っているタブに足すので、
+# label の無い pane があってもそれは人のシェルであり、乗っ取ってはいけない）。
+# 渡されなければ、label の無い pane（作りたてのタブの root pane）があればそれを使い、
+# 無ければ最後の pane を割る。
 __ds_claim_pane() {
   emulate -L zsh
-  local tab=$1 cwd=$2 line last="" direction
+  local tab=$1 cwd=$2 anchor=${3:-} anchor_dir=${4:-right} line last="" direction
   local -a labeled
+  if [[ -n $anchor ]]; then
+    herdr pane split "$anchor" --direction "$anchor_dir" --ratio 0.5 --cwd "$cwd" --no-focus \
+      | jq -r '.result.pane.pane_id'
+    return
+  fi
   for line in ${(f)"$(__ds_panes "$tab")"}; do
     [[ -n $line ]] || continue
     last=${line%%$'\t'*}
@@ -227,10 +235,11 @@ __ds_http_ok() {
   [[ -n $code && $code != 000 ]]
 }
 
-# __ds_start_app <app-json> <tab> <toplevel> <session> → 1 行 JSON（結果）
+# __ds_start_app <app-json> <tab> <toplevel> <session> [<anchor> <direction>] → 1 行 JSON（結果）
+# anchor / direction は pane を新しく作るときだけ使う（__ds_claim_pane を参照）。
 __ds_start_app() {
   emulate -L zsh
-  local aj=$1 tab=$2 top=$3 session=$4
+  local aj=$1 tab=$2 top=$3 session=$4 anchor=${5:-} anchor_dir=${6:-}
   local name cmd rel base fixed ready url check envs
   local pane="" oldport="" port st="started" detail="" cmdline rx
   integer timeout
@@ -266,7 +275,7 @@ __ds_start_app() {
     herdr pane send-keys "$pane" ctrl+c >/dev/null 2>&1
     __ds_wait_port_free "$oldport" || __ds_err "$name: ポート $oldport を解放できませんでした"
   else
-    pane=$(__ds_claim_pane "$tab" "${top}/${rel}") || {
+    pane=$(__ds_claim_pane "$tab" "${top}/${rel}" "$anchor" "$anchor_dir") || {
       __ds_result "$name" "$port" "" "" failed "pane を用意できませんでした"
       return 1
     }

@@ -34,4 +34,7 @@ export PATH="~/.rd/bin:$PATH"
 
 # worktree ごとに dev サーバーを立てる（dev-server）。アプリ表は ~/.config/dev-server/ に置く
 [ -r "$ZSH_CONF_DIR/dev-server.zsh" ] && source "$ZSH_CONF_DIR/dev-server.zsh"
+
+# hello-run のセッションタブに backend + front を立てる（hello-debug）。設定は ~/.config/hello-debug/ に置く
+[ -r "$ZSH_CONF_DIR/hello-debug.zsh" ] && source "$ZSH_CONF_DIR/hello-debug.zsh"
 unset _m
