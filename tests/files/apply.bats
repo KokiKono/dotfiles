@@ -203,6 +203,29 @@ print(m['panes'][0]['command'][-1])
     [ -f "${PLUGIN}/${output}" ]
 }
 
+@test "apply: skill-create herdr plugin is deployed and runnable" {
+    PLUGIN="${TESTHOME}/.config/herdr/plugins/skill-create"
+    [ -f "${PLUGIN}/herdr-plugin.toml" ]
+    [ -x "${PLUGIN}/pick.zsh" ]
+    [ -f "${PLUGIN}/lib.zsh" ]
+    # 送るプロンプトはプラグインと同じ場所から読む
+    [ -f "${PLUGIN}/prompt.md" ]
+    for f in pick lib; do
+        run zsh -n "${PLUGIN}/${f}.zsh"
+        [ "$status" -eq 0 ]
+    done
+    # slug 推定とテンプレート処理は hello-run.zsh のものを使うので、配備先が一致していること
+    grep -q '\.config/zsh/hello-run\.zsh' "${PLUGIN}/lib.zsh"
+    [ -f "${TESTHOME}/.config/zsh/hello-run.zsh" ]
+    run python3 -c "
+import sys, tomllib
+m = tomllib.load(open(sys.argv[1], 'rb'))
+print(m['panes'][0]['command'][-1])
+" "${PLUGIN}/herdr-plugin.toml"
+    [ "$status" -eq 0 ]
+    [ -f "${PLUGIN}/${output}" ]
+}
+
 @test "apply: herdr keybindings match the plugins that ship here" {
     # config.toml のキーバインドが、配られたマニフェストの id / entrypoint と
     # ずれていないこと（プラグインを足すたびに両方直す必要がある）
