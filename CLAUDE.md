@@ -424,6 +424,17 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   書かず内容を表示するだけなので、発火の調整中はこれを使う。このリポジトリは PUBLIC なので、
   **スキル本文にも references にも社名・プロダクト名・実際の用語を書かない**（例は `○○` / `△△`）。
   `apply.bats` が配備と、32 桁 hex の Notion ID / Notion URL / 社名の非混入を検証する。
+- **`home/dot_claude/skills/hello-search/`** は、指示されたテーマを Slack・Notion・GitHub
+  （`gh search` を org 横断で）・kb にまとめて投げ、読んだ中身を出典リンクと日付付きで 1 つに
+  まとめるスキル。必要なら ubiquitous-language と同じ個人メモ DB に `種別 = イシュー検討メモ` の
+  行として登録する。登録するのは、頼まれたとき（`--save`）と、issue を起点にした調査で結論が
+  出たとき。それ以外は登録を 1 行で提案するだけにする。同じ issue の行があれば新しく作らず
+  `## 追記（日付）` を足す。検索のコツは `references/sources.md`、登録するページの形は
+  `references/notion-memo.md`。**登録先の DB と org 名は追跡しない** —
+  `~/.claude/hello-search.local.json`（非追跡）に `database_url` / `data_source_url` /
+  `template_url` / `github_owner` / `slack_channel_hints` / `kb_path` / `dry_run` を置く。
+  無ければ `setup` モードで作る（org は `~/.pzshrc` の `HELLO_RUN_ISSUE_REPO` から取れる）。
+  Slack・GitHub への書き込みはしない。`apply.bats` が配備と、Notion ID / URL・社名の非混入を見る。
 - **`home/dot_claude/skills/takt-order/`** は issue を読んで [takt](https://github.com/nrslib/takt)
   に流すワークフロー（WF）を選ぶか組み、発注書・タスク文・YAML を kb に残して実行コマンドを渡すスキル
   (`/takt-order`)。**takt は実行しない**（コマンドを渡すだけ）。`retro` で `.takt/runs/` の結果を読み、
@@ -477,7 +488,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -514,6 +525,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   only the empty template ships; see the learning-code entry above),
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
   search hints — workspace-specific, and this repo is PUBLIC),
+  `~/.claude/hello-search.local.json` (the hello-search skill's Notion DB id and GitHub org —
+  same reason),
   `~/git_remote/kb.git` / `~/git_clone/local/kb` (the kb — work knowledge; see the kb entry above),
   `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
   ports, internal URLs — see the dev-server entry above; only the placeholder

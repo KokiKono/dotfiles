@@ -312,7 +312,8 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
-             learning-code ubiquitous-language dev-server explain-before-shorten takt-order; do
+             learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
+             hello-search; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -393,6 +394,22 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # public リポジトリなので、社内の固有名詞・Notion の ID/URL が混入していないこと
     run grep -rniE 'gritinc|progrit|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}' \
         "${TESTHOME}/.claude/skills/ubiquitous-language"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: hello-search skill is deployed with its references" {
+    SKILL="${TESTHOME}/.claude/skills/hello-search"
+    [ -f "${SKILL}/references/sources.md" ]
+    [ -f "${SKILL}/references/notion-memo.md" ]
+    # 登録先の DB と org は追跡外の設定に置く。chezmoi が配ってしまっていないこと
+    [ ! -e "${TESTHOME}/.claude/hello-search.local.json" ]
+    grep -q 'hello-search.local.json' "${SKILL}/SKILL.md"
+}
+
+@test "apply: hello-search skill leaks no workspace identifiers" {
+    # public リポジトリなので、社名・org/repo 名・Notion の ID/URL が混入していないこと
+    run grep -rniE 'hello-ai|auto_reserve|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-' \
+        "${TESTHOME}/.claude/skills/hello-search"
     [ "$status" -ne 0 ]
 }
 
