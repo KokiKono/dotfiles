@@ -313,7 +313,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
-             hello-search; do
+             hello-search hello-manual-test; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -410,6 +410,23 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # public リポジトリなので、社名・org/repo 名・Notion の ID/URL が混入していないこと
     run grep -rniE 'hello-ai|auto_reserve|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-' \
         "${TESTHOME}/.claude/skills/hello-search"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: hello-manual-test skill is deployed with its references" {
+    SKILL="${TESTHOME}/.claude/skills/hello-manual-test"
+    [ -f "${SKILL}/references/notion-page.md" ]
+    # 起票先・触ってよい店舗・環境の URL は追跡外の設定に置く。chezmoi が配ってしまっていないこと
+    [ ! -e "${TESTHOME}/.claude/hello-manual-test.local.json" ]
+    grep -q 'hello-manual-test.local.json' "${SKILL}/SKILL.md"
+    # 店舗名はスキルに書かず設定から引くこと
+    grep -q 'test_stores' "${SKILL}/SKILL.md"
+}
+
+@test "apply: hello-manual-test skill leaks no workspace identifiers" {
+    # public リポジトリなので、社名・org/repo 名・Notion の ID/URL が混入していないこと
+    run grep -rniE 'hello-ai|auto_reserve|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-' \
+        "${TESTHOME}/.claude/skills/hello-manual-test"
     [ "$status" -ne 0 ]
 }
 

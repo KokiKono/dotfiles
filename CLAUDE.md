@@ -435,6 +435,19 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `template_url` / `github_owner` / `slack_channel_hints` / `kb_path` / `dry_run` を置く。
   無ければ `setup` モードで作る（org は `~/.pzshrc` の `HELLO_RUN_ISSUE_REPO` から取れる）。
   Slack・GitHub への書き込みはしない。`apply.bats` が配備と、Notion ID / URL・社名の非混入を見る。
+- **`home/dot_claude/skills/hello-manual-test/`** は、勤務先の issue について手で行う動作確認の
+  手順を組むスキル。環境（PR が無ければローカル、open ならローカルか QA、マージ済みなら staging）を
+  決め、issue と差分から画面を触らないと分からないケースだけを選び（単体テストで足りるものは外す。
+  無ければ根拠を添えて「無い」と返す）、dev-server と Docker で環境を用意し、チェックリストと
+  ケースごとの所感欄つきのページを Notion に起票する。引数のうち URL 以外は動作確認への追加要望として
+  扱う。知っておくこと:
+  - **staging・QA・本番は同じ DB を使っている**ので、ローカル以外では触ってよい店舗だけで
+    確認し、データは作らず作る手順と後片付けの手順を対で提示する。本番でデータを作る手順は書かない
+  - **ユーザーは作業を並行していて中断する前提。** 同じ issue のページが既にあれば新しく作らず、
+    未チェックの項目から再開する。再開に要る worktree・ポート・テストデータはページの「環境」節に残す
+  - **触ってよい店舗名・環境の URL・起票先は追跡しない** — `~/.claude/hello-manual-test.local.json`
+    （非追跡）に `notion_parent_url` / `notion_data_source_url` / `test_stores` / `environments` /
+    `github_owner` / `dry_run` を置く。無ければ `setup` モードで作る。`apply.bats` が配備と非混入を見る。
 - **`home/dot_claude/skills/takt-order/`** は issue を読んで [takt](https://github.com/nrslib/takt)
   に流すワークフロー（WF）を選ぶか組み、発注書・タスク文・YAML を kb に残して実行コマンドを渡すスキル
   (`/takt-order`)。**takt は実行しない**（コマンドを渡すだけ）。`retro` で `.takt/runs/` の結果を読み、
@@ -488,7 +501,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -526,7 +539,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
   search hints — workspace-specific, and this repo is PUBLIC),
   `~/.claude/hello-search.local.json` (the hello-search skill's Notion DB id and GitHub org —
-  same reason),
+  same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
+  parent, test store names and environment URLs — same reason),
   `~/git_remote/kb.git` / `~/git_clone/local/kb` (the kb — work knowledge; see the kb entry above),
   `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
   ports, internal URLs — see the dev-server entry above; only the placeholder
