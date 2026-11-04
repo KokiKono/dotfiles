@@ -49,8 +49,12 @@ cat ~/.claude/hello-manual-test.local.json
 
 ## 2. 中断した続きか確かめる
 
-起票先に同じ issue のページがあるか探す（データベースなら `notion-query-data-sources` で
-issue の URL を、ページなら `notion-search` で issue 番号を引く）。
+起票先に同じ issue のページがあるか探す。データベースなら `notion-query-data-sources` で
+`種別 = '動作確認'` かつ issue の URL で引き、ページなら `notion-search` で issue 番号を引く。
+
+起票先は hello-search や ubiquitous-language と同じ個人メモ DB で、同じ issue の
+イシュー検討メモも入っている。**issue の URL だけで引くと、それを動作確認のページと
+取り違えて再開してしまう**ので、`種別` で必ず絞る。
 
 - **あれば新しく作らない。** ページを読み、チェック済みの項目と「環境」節を確かめて、
   未チェックの項目から再開する。環境の情報が古くなっていたら（サーバーが止まっている、
@@ -131,7 +135,8 @@ issue の本文・コメント・リンク先の仕様（Notion があれば読�
 ## setup モード
 
 1. 起票先の Notion ページかデータベースの URL を聞く。データベースなら fetch して
-   `collection://…` を取り、issue の URL を入れる列があるか確かめる
+   `collection://…` を取り、`種別` 列に `動作確認` の選択肢があるか、issue の URL を入れる列が
+   あるか確かめる。無ければ足してよいか聞く
 2. `test_stores` を聞く（staging / QA / 本番で触ってよい店舗の名前）
 3. 環境の URL は聞けた分だけ `environments` に入れる。空でもよい
 4. `github_owner` は `~/.pzshrc` の `HELLO_RUN_ISSUE_REPO` から取れる:

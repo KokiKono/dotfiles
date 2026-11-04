@@ -445,6 +445,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     確認し、データは作らず作る手順と後片付けの手順を対で提示する。本番でデータを作る手順は書かない
   - **ユーザーは作業を並行していて中断する前提。** 同じ issue のページが既にあれば新しく作らず、
     未チェックの項目から再開する。再開に要る worktree・ポート・テストデータはページの「環境」節に残す
+  - **起票先は hello-search / ubiquitous-language と同じ個人メモ DB で、行は `種別 = 動作確認`。**
+    同じ issue のイシュー検討メモも `Github Issue` を持つので、再開判定を URL だけで引くと
+    それを動作確認のページと取り違える。`apply.bats` が `種別` での絞り込みを見張っている
   - **触ってよい店舗名・環境の URL・起票先は追跡しない** — `~/.claude/hello-manual-test.local.json`
     （非追跡）に `notion_parent_url` / `notion_data_source_url` / `test_stores` / `environments` /
     `github_owner` / `dry_run` を置く。無ければ `setup` モードで作る。`apply.bats` が配備と非混入を見る。
