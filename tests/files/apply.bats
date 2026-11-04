@@ -421,6 +421,8 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     grep -q 'hello-manual-test.local.json' "${SKILL}/SKILL.md"
     # 店舗名はスキルに書かず設定から引くこと
     grep -q 'test_stores' "${SKILL}/SKILL.md"
+    # 起票先は他のスキルと共用の DB なので、再開判定を種別で絞っていること
+    grep -qF "種別 = '動作確認'" "${SKILL}/SKILL.md"
 }
 
 @test "apply: hello-manual-test skill leaks no workspace identifiers" {
