@@ -27,3 +27,9 @@ alias prs='gh dash'
 ############
 alias claudecode="AWS_PROFILE=claude claude"
 alias cw='~/git_clone/github.com/progrit/work-log/scripts/claudework.sh'
+
+############
+# hello
+############
+# 本番の Rails.application.credentials を編集する（edit / set）。本体は kb に置いている
+alias hello-beconfig='~/git_clone/local/kb/issues/scratch-hello-beconfig-rails-credentials/hello-beconfig'
