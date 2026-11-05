@@ -50,6 +50,7 @@ tests/
 ├── install/macos/*.bats           # unit tests for each install script
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
+├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
@@ -543,6 +544,17 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
+- **`hooks/review-before-pr.sh`** は `gh pr create` を、`/simplify` → `/code-review` を済ませるまで止める
+  （hook からスキルは起動できないので、止めて Claude に実行させる）。判定はトランスクリプトの JSONL の
+  Skill ツール呼び出し（`assistant` の `tool_use`、`input.skill`）と、ユーザーが打ったスラッシュコマンド
+  （`<command-name>`）で行う。以前は "simplify" の文字列 grep だったので、スキル一覧に名前が出ているだけで
+  通っていた。`/code-review` は `/simplify` より後、かつ最後の Edit / Write より後に要る（`/simplify` が
+  書き換えた後のコードを見るため）。`docs/` と README だけの差分と、claude を起動した環境の
+  `SKIP_PR_REVIEW=1` は通す。`.md` を拡張子で丸ごと外さないのは、このリポジトリでは SKILL.md などが本体だから。
+  コマンド文字列に書いた `SKIP_PR_REVIEW=1` は見ない（Claude が自分で付けて飛ばせるため）。`gh pr create` は
+  コマンドとして呼ばれたときだけ見る（コミットメッセージに文字列が入っているだけでは止めない）。
+  Edit / Write を使わず Bash で編集した場合は検知できない。
+  `tests/claude/review-before-pr.bats` が判定を見張っている
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
