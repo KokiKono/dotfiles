@@ -1,0 +1,54 @@
+name: review-check
+description: 差分に関係する横断ルールを haiku で選び、paths で当たったルールと合わせて sonnet が差分と照合する
+max_steps: 3
+initial_step: select
+steps:
+  - name: select
+    edit: true
+    instruction: |
+      タスク文の「対象ディレクトリ」で次を行ってください。
+
+      cross-index.json は、ファイル種別に結び付かない横断ルールの一覧（id / section / rule）です。
+      files.txt（変更されたファイル）と diff.patch（差分）を見て、この差分に当てはまりうるルールを選び、
+      id の配列を selected.json に書いてください（例: ["b-1a2b3c4d"]。無ければ []）。
+
+      - 差分の中身に関係する場面があるかで選ぶ。迷ったら入れる（照合は次の step が行う）
+      - diff.patch は全部読まなくてよい。ファイル名と変更の種類が分かれば足りる
+
+      最後に「N 件選んだ」と 1 行で答えてください。
+    rules:
+      - condition: selected.json を書いた
+        next: review
+
+  - name: review
+    edit: true
+    pass_previous_response: false
+    instruction: |
+      タスク文の「対象ディレクトリ」で次を行ってください。
+
+      diff.patch の変更が、次のルールに反していないかを確かめ、結果を findings.md に書いてください。
+      - path-rules.md: 変更されたファイルの種別から当たったルール
+      - cross-index.json のうち、selected.json に id があるルール
+      - pr.md は PR のタイトルと説明文（PR を指定しなかったときは空）。説明文に関するルールはこれと照合する
+
+      - 照合するのはこのルールだけ。一般的な品質の指摘や、ルールに無い観点の指摘はしない
+      - 差分で確かめられないことは「未確認」と書く。推測で違反にしない
+
+      findings.md の形:
+      ```
+      # 個人ルールとの照合
+
+      ## 違反の疑い
+      - [<ルールの id>] <ルール> — `<path>:<line>` <どこがどう反しているか 1〜2 文>
+
+      ## 照合したルール
+      - [<id>] <ルール> — 該当なし / 違反の疑いあり / 未確認
+      ```
+      違反の疑いが無ければ「## 違反の疑い」の下に「なし」と書く。
+
+      書き終えたら「findings.md を書いた」と答えてください。
+    rules:
+      - condition: findings.md を書いた
+        next: COMPLETE
+      - condition: findings.md を書けなかった
+        next: ABORT

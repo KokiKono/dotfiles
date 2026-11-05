@@ -549,6 +549,27 @@ assert lg['command'] == 'lazygit', lg
     grep -q '/.config/kb/autosave.sh</string>' "${PLIST}"
 }
 
+@test "apply: review-insights skill and its daily launchd agent are deployed" {
+    SKILL="${TESTHOME}/.claude/skills/review-insights"
+    [ -f "${SKILL}/SKILL.md" ]
+    [ -f "${SKILL}/references/classify.md" ]
+    for s in daily fetch-comments state stack check; do
+        [ -x "${SKILL}/scripts/${s}.sh" ]
+    done
+    [ -x "${SKILL}/scripts/paths.py" ]
+    for f in review-classify.yaml review-promote.yaml review-check.yaml runtime.yaml; do
+        [ -f "${SKILL}/takt/${f}" ]
+    done
+    PLIST="${TESTHOME}/Library/LaunchAgents/com.kokikono.review-insights.plist"
+    [ -f "${PLIST}" ]
+    if command -v plutil >/dev/null 2>&1; then plutil -lint "${PLIST}" >/dev/null; fi
+    grep -q '/.claude/skills/review-insights/scripts/daily.sh</string>' "${PLIST}"
+    # 対象リポジトリの一覧と backlog は勤務先の情報なので配らない
+    [ ! -e "${TESTHOME}/.claude/review-insights" ]
+    run grep -rniE 'hello-ai|auto_reserve|ai\.hello|otochang' "${SKILL}" "${PLIST}"
+    [ "$status" -ne 0 ]
+}
+
 @test "apply: hello-run kb templates are deployed" {
     grep -q '{{issue_url}}' "${TESTHOME}/.config/hello-run/kb-readme.md"
     grep -q '{{kb_readme}}' "${TESTHOME}/.config/hello-run/prompt-kb.md"

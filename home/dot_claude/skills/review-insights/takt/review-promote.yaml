@@ -1,0 +1,41 @@
+name: review-promote
+description: 昇格候補を、個人ルール（~/.claude/rules/review-insights.md）に載せるか sonnet で判定する
+max_steps: 2
+initial_step: promote
+steps:
+  - name: promote
+    edit: true
+    instruction: |
+      タスク文の「対象ディレクトリ」にある candidates.json（昇格候補）の各エントリについて、
+      個人ルールに載せるかを決め、同じディレクトリの decisions.json に書いてください。
+
+      読むもの:
+      - candidates.json: id / rule / target_file / count / self / excerpts
+        （self が true のものは、自分が出した PR に付いた指摘。1 件しか無くても一般化できるなら載せる）
+      - personal-rules.md: 今の個人ルール。全リポジトリ分がまとまっている
+      - agent-files/: リポジトリの agent ファイルの写し
+
+      adopt にするもの:
+      - 次に同じ領域のコードを書く人が読んで守れる 1 行になっている
+      - agent-files/ にも personal-rules.md にも、同じ意図の記述がまだ無い
+
+      reject にするもの:
+      - その PR 固有の話で、一般化すると意味がぼやける
+      - agent-files/ か personal-rules.md に同じ意図の記述が既にある
+      - 他の候補と同じことを言っている（どちらか 1 つだけを adopt する）
+
+      adopt するときの書き方:
+      - rule は personal-rules.md の文体に合わせた命令形の 1 行。固有名詞は残し、経緯や背景は書かない
+      - section は personal-rules.md の「###」見出しに合うものがあればそれを使い、無ければ
+        「データ取得」「マイグレーション」のような短い領域名にする
+
+      decisions.json の形（candidates.json の全 id をちょうど 1 回ずつ含める）:
+      [{"id": "b-1a2b3c4d", "verdict": "adopt", "section": "データ取得", "rule": "..."},
+       {"id": "b-5e6f7a8b", "verdict": "reject", "reason": "agent-files/.claude/rules/model.md に既出"}]
+
+      書き終えたら「decisions.json を書いた」と答えてください。
+    rules:
+      - condition: decisions.json を書いた
+        next: COMPLETE
+      - condition: decisions.json を書けなかった
+        next: ABORT

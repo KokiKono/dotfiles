@@ -1,0 +1,57 @@
+name: review-classify
+description: レビューコメントのうち規約にならないものを haiku で落とし、残りだけを sonnet で分類する
+max_steps: 4
+initial_step: triage
+knowledge:
+  classify: ../references/classify.md
+steps:
+  - name: triage
+    edit: true
+    instruction: |
+      タスク文の「対象ディレクトリ」にある pending.jsonl（1 行が 1 コメント）を読み、
+      規約にならないことが明らかなコメントだけを選んで、同じディレクトリの triage.json に書いてください。
+
+      noise にするもの:
+      - 質問、仕様の確認、実装の相談
+      - 進捗報告、謝辞、assign の依頼、リリースの調整、Slack への誘導
+      - typo やリンク切れの指摘、lint が機械的に落とす指摘
+      - bot が投稿する「解消済みと判断しました」の確認コメント
+
+      noise にしないもの:
+      - 「〜すべき」「〜しないでほしい」と読める指摘は全部残す。迷ったら残す
+      - in_reply_to_id でつながるスレッドに入っているコメントは、root も返信も残す
+        （返信は、指摘が受け入れられたかを次の step が判断する材料になる）
+
+      triage.json の形（noise が無ければ空配列）:
+      {"noise": [{"id": "inline:123", "reason": "10 字程度の理由"}]}
+
+      最後に、残ったコメントの件数を「残り N 件」と 1 行で答えてください。
+    rules:
+      - condition: 残りが 1 件以上ある
+        next: classify
+      - condition: 残りが 0 件
+        next: COMPLETE
+
+  - name: classify
+    edit: true
+    knowledge: [classify]
+    pass_previous_response: false
+    instruction: |
+      タスク文の「対象ディレクトリ」で次を行ってください。
+
+      pending.jsonl のうち、triage.json の noise に入っていないコメントを、knowledge の分類基準で判定し、
+      classified.json に配列で書いてください。
+
+      - agent ファイルは agent-files/ にある（リポジトリの既定ブランチの写し）。リポジトリ本体は読めないので、
+        既出かどうかはここで判定する。target_file のパスもリポジトリのルートからの相対で書く
+      - 既存の backlog は backlog-brief.json（id / rule / target_file）。同義のルールがあれば merge_into にその id を入れる
+      - triage.json の noise に入っている id は classified.json に入れない（スクリプトが足す）。
+        それ以外の id は、いずれかのエントリの comment_ids にちょうど 1 回現れること
+      - evidence.pr_author はスクリプトが埋めるので書かなくてよい
+
+      書き終えたら「classified.json を書いた」と答えてください。
+    rules:
+      - condition: classified.json を書いた
+        next: COMPLETE
+      - condition: classified.json を書けなかった
+        next: ABORT
