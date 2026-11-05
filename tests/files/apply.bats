@@ -313,7 +313,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
-             hello-search hello-manual-test; do
+             hello-search hello-manual-test writing-retro; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -376,6 +376,27 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ ! -d "${SKILL}/workflows" ]
     # 実際の org・repo 名を混ぜない
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: writing-retro skill and the rules it writes are deployed" {
+    SKILL="${TESTHOME}/.claude/skills/writing-retro"
+    [ -x "${SKILL}/scripts/retro.sh" ]
+    [ -f "${SKILL}/references/lexicon.txt" ]
+    # 書き戻し先は全セッションが自動で読む ~/.claude/rules/ に置く
+    RULES="${TESTHOME}/.claude/rules/writing.md"
+    [ -f "${RULES}" ]
+    grep -qF '.claude/rules/writing.md' "${SKILL}/SKILL.md"
+    # 書き戻したルールを次の apply で消さないよう、re-add の手順が残っていること
+    grep -qF 'chezmoi re-add' "${SKILL}/SKILL.md"
+    # 作業データ（ユーザーの発言の抜き出し）は非追跡。chezmoi が配ってしまっていないこと
+    [ ! -e "${TESTHOME}/.claude/writing-retro" ]
+}
+
+@test "apply: writing rules leak no workspace identifiers" {
+    # 業務のセッションでの指摘から書くので、社名・org/repo 名・URL が混ざりやすい
+    run grep -rniE 'hello-ai|helloincai|auto_reserve|gritinc|progrit|https?://|[0-9a-f]{32}' \
+        "${TESTHOME}/.claude/rules/writing.md" "${TESTHOME}/.claude/skills/writing-retro"
     [ "$status" -ne 0 ]
 }
 
