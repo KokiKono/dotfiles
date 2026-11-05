@@ -5,6 +5,7 @@ tap "gromgit/fuse", trusted: true
 tap "hamed-elfayome/claude-usage", trusted: true
 tap "hashicorp/tap", trusted: true
 tap "hiro-o918/tap", trusted: true
+tap "mobile-dev-inc/tap", trusted: true
 tap "homebrew-ffmpeg/ffmpeg", trusted: true
 tap "ngrok/ngrok", trusted: true
 tap "nodenv/nodenv", trusted: true
@@ -155,6 +156,7 @@ brew "zsh"
 brew "getsentry/tools/sentry-cli", trusted: true
 brew "gromgit/fuse/sshfs-mac", trusted: true
 brew "hiro-o918/tap/rinkaku", trusted: true
+brew "mobile-dev-inc/tap/maestro", trusted: true
 brew "nodenv/nodenv/node-build-update-defs", trusted: true
 brew "rcmdnk/file/brew-file", trusted: true
 brew "satococoa/tap/wtp", trusted: true

@@ -20,9 +20,6 @@ export PATH="$GRIT_INSTALL/bin:$PATH"
 
 export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
 
-# maestro（モバイル E2E）。インストーラが ~/.zshrc に追記するので、こちらへ移してある
-export PATH="$PATH:$HOME/.maestro/bin"
-
 # Ghostty の CLI はアプリバンドルの中にあり、cask は PATH を通さない。
 # `ghostty +list-themes` / `+show-config` を使うために自分で足す。
 [ -d /Applications/Ghostty.app/Contents/MacOS ] &&
