@@ -71,7 +71,9 @@ sc_read_task() {
      ブランチ名の slug もここから推定する。空のまま閉じると中止。 -->
 
 EOF
-  ${=editor} "$file" || return 1
+  # 呼び出し側は $(...) で受けるので stdout がパイプになっている。端末へ向け直さないと
+  # vim は「端末への出力ではありません」で固まり、hx は何も描かずに固まる。
+  ${=editor} "$file" </dev/tty >/dev/tty || return 1
   body=$(__hr_strip_comments "$file" | sed -e '/./,$!d')
   [[ -n ${body//[[:space:]]/} ]] || return 1
   print -r -- "$body"
