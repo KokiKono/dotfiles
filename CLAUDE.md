@@ -470,7 +470,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     引数は既定値を置き換えるので、builtin の一覧を写してから足す。手順は `references/authoring.md`。
   - `takt` は mise の shim なので、node が決まらないディレクトリでは落ちる。`scripts/takt.sh` が
     takt の入った node を探して `mise exec` で呼び直す。`--root` で builtins の場所を出す。
-  - `tests/claude/takt-order.bats` が 2 本のスクリプトを、`apply.bats` が配備と org/repo 名の非混入を見る。
+  - `tests/claude/takt-order.bats` が kb.sh / takt.sh を、`apply.bats` が scripts/ 全部の配備と org/repo 名の非混入を見る。
 - **`home/dot_claude/skills/writing-retro/`** は、1 日の終わりに全セッションの記録
   （`~/.claude/projects/*/*.jsonl`）を読み返し、AI が書いた文章への指摘を一般化して
   `~/.claude/rules/writing.md`（**非追跡**）に書き足すスキル。

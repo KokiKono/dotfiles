@@ -150,14 +150,12 @@ PR の作成・push・指摘への返信まで進める（ユーザーの指示�
      claude-review は次の実行で返信を読み、解決済みにする
    - **人に聞く**: 仕様の判断が要る、発注の範囲を超える、直すと他の決定とぶつかる。
      ループを止めてユーザーに聞く
-5. まとめて push する。返信だけで push が無いときは、ラベルを付け直して再レビューを起こす
+5. push は 1 周に 1 回にまとめる（`synchronize` のたびに claude-review が走り、`cancel-in-progress` で
+   前の実行は止まる）。返信だけで push が無いときは、ラベルを付け直して再レビューを起こす
    （`gh pr edit --remove-label claude-review` → `--add-label claude-review`）
 6. 3 に戻る。**5 周で `clean` にならなければ止めて**、残った指摘と、それぞれをどう判断したかを報告する
 7. 終わったら order.md の §結果 に、CI の待ちで直した回数と、レビューの周回数、指摘ごとの扱い
    （直した / 直さない理由 / 人に聞いた）を書く
-
-`synchronize` のたびに claude-review が走り、`cancel-in-progress` で前の実行は止まる。
-push は 1 周に 1 回にまとめる。
 
 ## やらないこと
 

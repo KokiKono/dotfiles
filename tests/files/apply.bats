@@ -369,8 +369,10 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
              assets/README.md assets/playbook.md; do
         [ -f "${SKILL}/${f}" ]
     done
-    [ -x "${SKILL}/scripts/kb.sh" ]
-    [ -x "${SKILL}/scripts/takt.sh" ]
+    # source にある scripts/ はすべて実行可能な形で配られること（~/.claude にだけ足して取り込み忘れたことがある）
+    for src in "${REPO_ROOT}/home/dot_claude/skills/takt-order/scripts/"executable_*; do
+        [ -x "${SKILL}/scripts/$(basename "${src#*/executable_}")" ]
+    done
     # WF・facet・発注の記録は kb（非追跡）に置く。public なここには雛形しか配らない
     [ ! -d "${SKILL}/orders" ]
     [ ! -d "${SKILL}/workflows" ]

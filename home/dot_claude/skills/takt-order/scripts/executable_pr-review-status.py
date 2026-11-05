@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 
-MARKER = re.compile(r"<!-- claude-review-finding (\S+) -->")
+MARKER = re.compile(r"<!-- claude-review(?:-schema)?-finding (\S+) -->")
 NEW_COUNT = re.compile(r"found (\d+) new potential bug")
 
 QUERY = """
@@ -63,9 +63,12 @@ def main():
     runs = json.loads(gh("run", "list", "-R", repo, "--workflow", "pr-review.yml", "--commit", head, "--json", "status,conclusion,url,databaseId", "-L", "5"))
     running = [r for r in runs if r["status"] != "completed"]
 
-    head_reviews = [r for r in pr["reviews"]["nodes"] if (r.get("commit") or {}).get("oid") == head and NEW_COUNT.search(r.get("body") or "")]
-    latest = head_reviews[-1] if head_reviews else None
-    new_count = int(NEW_COUNT.search(latest["body"]).group(1)) if latest else None
+    head_reviews = [
+        (r, int(m.group(1)))
+        for r in pr["reviews"]["nodes"]
+        if (r.get("commit") or {}).get("oid") == head and (m := NEW_COUNT.search(r.get("body") or ""))
+    ]
+    latest, new_count = head_reviews[-1] if head_reviews else (None, None)
 
     threads = []
     for t in pr["reviewThreads"]["nodes"]:
