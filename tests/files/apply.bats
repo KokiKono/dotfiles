@@ -68,7 +68,7 @@ setup() {
 
 @test "apply: mise config.toml is deployed with pinned tools" {
     [ -f "${TESTHOME}/.config/mise/config.toml" ]
-    grep -q 'node = "22.16.0"' "${TESTHOME}/.config/mise/config.toml"
+    grep -q 'node = "24.22.2"' "${TESTHOME}/.config/mise/config.toml"
     grep -q 'python = "3.11.6"' "${TESTHOME}/.config/mise/config.toml"
     grep -q 'java = "temurin-11"' "${TESTHOME}/.config/mise/config.toml"
 }
