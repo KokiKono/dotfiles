@@ -9,7 +9,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../common" && pwd)/lib.sh"
 
 # ~/.config/herdr/plugins/<name> のうち、ここに列挙したものを link する
 HERDR_PLUGIN_DIR="${HERDR_PLUGIN_DIR:-${HOME}/.config/herdr/plugins}"
-HERDR_PLUGINS=("hello-run" "git-diff")
+HERDR_PLUGINS=("hello-run" "git-diff" "skill-create")
 
 # GitHub から install する外部プラグイン（<owner>/<repo>）。
 # config.toml のキーバインドがこれらのアクションを呼ぶので、入っていないとキーが空振りする。

@@ -1,0 +1,22 @@
+# 新しい Claude Code スキルを dotfiles に足すプラグイン。
+# 実装は pick.zsh（作りたいものを書く → worktree → タブ → claude にプロンプト送信）で、
+# ここは起動方法の宣言だけ。スキル作成から PR・マージ・chezmoi apply までは、
+# 起動した claude が prompt.md の指示に従って行う。
+#
+# placement = "popup" を選ぶ理由は hello-run と同じ。最後に新しいタブへ focus するので、
+# ペイン方式だと閉じたときのフォーカス戻しと競合する。
+id = "kokikono.skill-create"
+name = "skill-create"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "skill-creator でスキルを作り、dotfiles に PR → マージ → chezmoi apply まで流す"
+platforms = ["macos"]
+
+[[panes]]
+id = "new"
+title = "skill-create"
+placement = "popup"
+width = "70%"
+height = "60%"
+# zsh -l で ~/.zprofile（brew shellenv）を読ませ、wt / gh / chezmoi を PATH に乗せる。
+command = ["zsh", "-l", "pick.zsh"]

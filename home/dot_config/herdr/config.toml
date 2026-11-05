@@ -27,6 +27,15 @@ type = "shell"
 command = "herdr plugin pane open --plugin kokikono.git-diff --entrypoint files"
 description = "git-diff: 差分を GitHub の Files changed のように見る"
 
+# skill-create: prefix(Ctrl+B) → Shift+S で、作りたいスキルを書いて claude に作らせる。
+# 自作プラグイン kokikono.skill-create の pane を開くだけ（hello-run と同じ理由で shell 経由）。
+# 起動した claude が skill-creator で作り、PR → マージ → chezmoi apply まで進める。
+[[keys.command]]
+key = "prefix+shift+s"
+type = "shell"
+command = "herdr plugin pane open --plugin kokikono.skill-create --entrypoint new"
+description = "skill-create: スキルを作って dotfiles に PR → マージ → apply"
+
 # editor: prefix(Ctrl+B) → Shift+E で、今のペインの cwd を Helix で開く。
 # type = "pane" は一時的なズームペインを開き、コマンドが終了したら閉じる。
 # 常設の editor ペインにしなかったのは、herdr に「pane を id 指定で focus する」API が

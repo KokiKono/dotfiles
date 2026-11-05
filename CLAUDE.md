@@ -379,6 +379,20 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     判定せず、中身が変わっていないファイルが「全行追加」に見える。
   - `fzf` の絞り込みは切らない（hello-run と違い候補が数十件になる）。`ctrl-r` で取り直し、
     `enter` で全画面（delta のページャ）。登録と `config.toml` の扱いは hello-run と同じ。
+- **`home/dot_config/herdr/plugins/skill-create/`** は自作の herdr プラグイン
+  (`kokikono.skill-create`)。`prefix+Shift+S` の popup で作りたいスキルを `$EDITOR` に書くと、
+  dotfiles に `skills/<slug>` の worktree を切り、新しいタブで claude を起動して `prompt.md` を送る。
+  claude は skill-creator でスキルを作り、PR → CI 待ち → マージ → chezmoi のソースを pull →
+  `chezmoi apply ~/.claude/skills/<name>` まで進める。知っておくこと:
+  - **プラグインがやるのは claude を起動するところまで。** スキル名も PR 本文も中身が決まるまで
+    決まらないので、PR 以降はプロンプトで指示する。文面は `prompt.md`（プラグインと同じ場所。
+    `SKILL_CREATE_PROMPT_FILE` で差し替え可）にあり、書式は hello-run のテンプレートと同じ。
+  - **apply はスキルのディレクトリに絞る。** 素の `chezmoi apply` はアプリが書き換えた
+    `settings.json` などを追跡側の内容で潰す。pull もソースのチェックアウトが既定ブランチで
+    クリーンなときだけ（`chezmoi source-path` から辿るので、`~/.local/share/chezmoi` の symlink 先）。
+  - slug 推定・テンプレート処理・claude 起動は `hello-run.zsh` の `__hr_*` を source して使う。
+    worktree の置き場は wt の既定（兄弟の `dotfiles.skills-<slug>`）に任せ、パスは
+    `git worktree list` から引く。既存のブランチ名とぶつかったら `-2`, `-3` を振る。
 - **`dot_zshrc` is a thin loader.** It bootstraps oh-my-zsh, then sources `~/.config/zsh/{options,aliases,tools}.zsh`
   (in that order — `options.zsh` runs `compinit` before `tools.zsh`'s `compdef`), then `~/.pzshrc`, then
   `git-worktree.zsh`, then `hello-run.zsh`. `options.zsh`=shell opts/history/keybinds, `aliases.zsh`=aliases,
