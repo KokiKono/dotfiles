@@ -81,8 +81,12 @@ def main():
         print(f"usage.py: セッション記録が見つかりません: {project_dir}", file=sys.stderr)
         return 1
 
+    logs = glob.glob(os.path.join(run, "logs", "*.jsonl"))
+    if not logs:
+        print(f"usage.py: takt のログが見つかりません: {run}/logs", file=sys.stderr)
+        return 1
     phases = {}
-    for e in load_jsonl(glob.glob(os.path.join(run, "logs", "*.jsonl"))[0]):
+    for e in load_jsonl(logs[0]):
         if e["type"] == "phase_start":
             k = e["phaseExecutionId"]
             phases[k] = {"step": e["step"], "it": e.get("iteration"), "s": ts(e["timestamp"]), "e": None}
