@@ -167,10 +167,20 @@ EOF
     [ "$status" -eq 0 ]
 }
 
-@test "retro: the shipped rules file stays within the budget" {
-    export RETRO_RULES="${REPO_ROOT}/home/dot_claude/rules/writing.md"
+@test "retro: init creates the rules file from the template and keeps an existing one" {
+    export RETRO_RULES="${BATS_TEST_TMPDIR}/rules/writing.md"
+    run bash "${RETRO}" init
+    [ "$status" -eq 0 ]
+    [[ "$output" == created:* ]] || false
+    diff "${REPO_ROOT}/home/dot_claude/skills/writing-retro/references/rules.template.md" "${RETRO_RULES}"
+    # 雛形はルールを持たない
     run bash "${RETRO}" budget
+    run jq -e '.rules == 0' <<<"$output"
     [ "$status" -eq 0 ]
-    run jq -e '.over == false' <<<"$output"
+    # 書き足したルールを雛形で上書きしない
+    echo '- 書き足したルール' >>"${RETRO_RULES}"
+    run bash "${RETRO}" init
     [ "$status" -eq 0 ]
+    [[ "$output" == exists:* ]] || false
+    grep -qF '書き足したルール' "${RETRO_RULES}"
 }
