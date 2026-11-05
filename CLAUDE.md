@@ -103,7 +103,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 146 `brew`, 34 `cask`,
+- **`Brewfile`** is the source of truth for installed packages: 15 `tap`, 147 `brew`, 34 `cask`,
   3 `go`, 56 `vscode` (`mas` entries were dropped in c8bb43a; `npm "corepack"` was dropped because
   corepack shims `/opt/homebrew/bin/pnpm` and collides with the `pnpm` formula — see below).
   `chezmoi` and `bats-core` are included. Regenerate with:

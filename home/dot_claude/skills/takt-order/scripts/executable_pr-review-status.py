@@ -4,7 +4,9 @@
 claude-review（.github/workflows/pr-review.yml）のレビュー状況を JSON で出す。
 
 - state
-  - "reviewing": 今の head に対するレビューがまだ終わっていない（workflow が実行中・待ち、またはレビュー未投稿）
+  - "reviewing": 今の head に対するレビューがまだ終わっていない（workflow が実行中・待ち、またはまだ起動していない）
+  - "no_review": 今の head の workflow は全部終わったのに、レビューが投稿されていない（失敗・キャンセルなど）。
+    待っても変わらないので、workflow_runs の結果を見て人に聞く
   - "clean": 今の head へのレビューが「0 new」で、未解決の指摘スレッドも無い。ループを終えてよい
   - "has_findings": 未解決の指摘スレッドがある。threads を見て直すか返信する
 - threads: 未解決の claude-review 指摘。thread_id（返信と resolve に使う）、comment_id、path、severity、title、body
@@ -91,8 +93,11 @@ def main():
             "outdated": t["isOutdated"],
         })
 
-    if running or latest is None:
+    if running:
         state = "reviewing"
+    elif latest is None:
+        # ラベルを付ける前の push で走った実行は skipped で終わる。それを数えると、付けた直後に no_review になる
+        state = "no_review" if any(r["conclusion"] != "skipped" for r in runs) else "reviewing"
     elif threads:
         state = "has_findings"
     else:
