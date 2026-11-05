@@ -182,14 +182,20 @@ cmd_commit() {
     echo "since: ${until}"
 }
 
-# 判定結果（JSON 配列のファイル）を log.jsonl に追記する。日付はここで付ける
+# 判定結果（JSON 配列）を log.jsonl に追記する。日付はここで付ける。
+# - を渡すと標準入力から読む。自動実行ではファイルを書く権限を渡さずに済む
 cmd_log() {
-    local f="${1:?usage: log <entries.json>}"
-    jq -e 'type == "array" and all(.[]; has("quote") and has("action"))' "$f" >/dev/null \
+    local f="${1:?usage: log <entries.json|->}" entries
+    if [[ "$f" == "-" ]]; then
+        entries="$(cat)"
+    else
+        entries="$(cat "$f")"
+    fi
+    jq -e 'type == "array" and all(.[]; has("quote") and has("action"))' <<<"${entries}" >/dev/null \
         || die "entries must be an array of objects with quote and action"
     mkdir -p "${RETRO_HOME}"
-    jq -c --arg d "$(date +%Y-%m-%d)" '.[] | {date: $d} + .' "$f" >>"${LOG}"
-    echo "logged: $(jq 'length' "$f")"
+    jq -c --arg d "$(date +%Y-%m-%d)" '.[] | {date: $d} + .' <<<"${entries}" >>"${LOG}"
+    echo "logged: $(jq 'length' <<<"${entries}")"
 }
 
 # ルールごとの指摘回数。2 回以上あるものはルールが効いていない
@@ -228,7 +234,7 @@ usage: retro.sh <command>
                              （--all は全件。cursor は進めない）
   list [--short]             pending を「id 時刻 媒体 リポジトリ 発言」と直前の AI の発話で出す
   context <id> [n]           その発言の直前の assistant 発話を n 件、切らずに出す
-  log <entries.json>         判定結果を log.jsonl に追記する
+  log <entries.json|->       判定結果を log.jsonl に追記する（- は標準入力）
                              [{"quote","action":"added|strengthened|skipped","rule","reason","session"}]
   commit                     cursor を extract 時点まで進める
   stats                      ルールごとの指摘回数

@@ -146,6 +146,14 @@ EOF
     [ "$status" -eq 0 ]
 }
 
+@test "retro: log reads entries from stdin" {
+    run bash "${RETRO}" log - <<<'[{"quote":"省略しないで","action":"added","rule":"略記を使わない"}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == "logged: 1" ]] || false
+    run jq -e '.rule == "略記を使わない" and .date != null' "${RETRO_HOME}/log.jsonl"
+    [ "$status" -eq 0 ]
+}
+
 @test "retro: log rejects entries without quote or action" {
     E="${BATS_TEST_TMPDIR}/bad.json"
     echo '[{"rule":"x"}]' >"${E}"

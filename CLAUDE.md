@@ -27,6 +27,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/hello-run/{prompt-kb,kb-readme}.md # → ~/.config/hello-run/ (kb を繋いだときに足す文と、kb の issue README の雛形)
 ├── dot_config/kb/executable_autosave.sh # → ~/.config/kb/autosave.sh (kb を全部コミットして push。launchd が 10 分ごとに呼ぶ)
 ├── Library/LaunchAgents/com.kokikono.kb-autosave.plist.tmpl # → ~/Library/LaunchAgents/ (autosave の launchd 定義)
+├── Library/LaunchAgents/com.kokikono.writing-retro.plist.tmpl # → ~/Library/LaunchAgents/ (writing-retro を毎日 19 時に回す)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
@@ -39,7 +40,7 @@ home/                              # chezmoi source (rendered into $HOME)
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro}.sh
 install/macos/kb-seed/              # kb を初めて作るときに置く CLAUDE.md と .gitignore
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 install/macos/gh-extensions.txt     # one `<owner>/<repo>` per line (used by gh.sh)
@@ -49,7 +50,7 @@ tests/
 ├── install/macos/*.bats           # unit tests for each install script
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
-├── claude/writing-retro.bats      # unit tests for the writing-retro skill's retro.sh
+├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
@@ -94,7 +95,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -485,6 +486,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `retro.sh budget` が数え、超えたら足す前にまとめる。
   - **既にルールがあるのに指摘されたら、ルールが効いていないとみなして書き直す。** 回数は
     `~/.claude/writing-retro/log.jsonl` から `retro.sh stats` で数える。
+  - **毎日 19 時に launchd（`com.kokikono.writing-retro`）が `scripts/auto.sh` を呼び、承認なしで
+    書き込む。** 候補の抜き出しは `auto.sh` が先に行い、0 件なら claude を起動しない。候補があれば
+    `claude -p "/writing-retro auto" --model sonnet` を、`retro.sh`・Read・ルールファイルへの Edit
+    だけを許して実行する（記録の JSON を標準入力で渡すのは、ファイルを書く権限を渡さないため）。
+    迷うルールは書かずに見送り、既存のルールを消したりまとめたりもしない。何を書いたかは
+    ルールファイルの差分で数えて macOS の通知に出し、claude の出力は `last-run.md`、実行ログは
+    `~/Library/Logs/writing-retro.log` に残す。登録は `install/macos/writing-retro.sh`（kb.sh と同じく、
+    plist より先に走ったら登録をスキップするので、もう一度叩く）。
   - **cursor（`state.json`）は `commit` でしか進めない**。判定が途中で落ちても、次回は同じ範囲を
     読み直すだけになる。
   - **`rules/writing.md` は追跡しない。** 業務のセッションでの指摘から作るので、追跡すると
