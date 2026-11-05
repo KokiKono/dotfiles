@@ -28,6 +28,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/kb/executable_autosave.sh # → ~/.config/kb/autosave.sh (kb を全部コミットして push。launchd が 10 分ごとに呼ぶ)
 ├── Library/LaunchAgents/com.kokikono.kb-autosave.plist.tmpl # → ~/Library/LaunchAgents/ (autosave の launchd 定義)
 ├── Library/LaunchAgents/com.kokikono.writing-retro.plist.tmpl # → ~/Library/LaunchAgents/ (writing-retro を毎日 19 時に回す)
+├── Library/LaunchAgents/com.kokikono.review-insights.plist.tmpl # → ~/Library/LaunchAgents/ (review-insights の毎朝の自動実行)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
 ├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
@@ -40,7 +41,7 @@ home/                              # chezmoi source (rendered into $HOME)
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
 install/
 ├── common/lib.sh                  # shared helpers (REPO_ROOT, log, has)
-└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro}.sh
+└── macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro,review-insights}.sh
 install/macos/kb-seed/              # kb を初めて作るときに置く CLAUDE.md と .gitignore
 install/macos/vscode-extensions.txt # one extension ID per line (used by vscode.sh)
 install/macos/gh-extensions.txt     # one `<owner>/<repo>` per line (used by gh.sh)
@@ -52,6 +53,7 @@ tests/
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
+├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
@@ -96,7 +98,7 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 ```
 
-`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro}.sh`
+`chezmoi apply` runs `run_onchange_install.sh` which chains `install/macos/{brew,gpg,mise,ohmyzsh,nodenv,vscode,gh,skills,herdr,kb,writing-retro,review-insights}.sh`
 (Homebrew + `brew bundle` from `Brewfile`, `mise install`, oh-my-zsh, nodenv-yarn-install plugin, VS Code extensions).
 
 ## Key details when editing
@@ -502,6 +504,41 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     コミットも要らなくなる。このリポジトリが持つのは雛形（`references/rules.template.md`）だけで、
     無ければ `retro.sh init` が作る。`apply.bats` が、chezmoi がルールファイルを配らないことと、
     スキル側の非混入を見る。作業データ（`~/.claude/writing-retro/`）も追跡しない。
+- **`home/dot_claude/skills/review-insights/`** は PR のレビューコメント（他人の PR も含む）を
+  毎朝取り込み、agent ファイルに未記載の指摘を backlog に積み、昇格候補を個人ルール
+  `~/.claude/rules/review-insights.md` に**自動で**書き足すスキル。`/code-review` を含む全セッションが
+  このファイルを読むので、他人と自分の失敗が次のレビューの観点になる。launchd
+  （`com.kokikono.review-insights`、毎朝 9:03）が `scripts/daily.sh` を呼ぶ。知っておくこと:
+  - **LLM を呼ぶのは takt の WF だけ。** 毎朝は `review-classify`（triage → classify）と
+    `review-promote`、手動の `check.sh` は `review-check`（select → review）。モデルは WF に書けない（takt のスキーマが step の `model:` を拒否する）ので、
+    `takt/runtime.yaml` の `provider.targets.steps` で `<WF 名>/<step 名>` ごとに振り分ける。
+    既定（triage・select と、takt が rule 判定に使う内部エージェント）は haiku、classify・promote・review だけ sonnet。
+    `daily.sh` は `~/.cache/review-insights/` を takt の作業ディレクトリにし、そこの
+    `.takt/runtime.yaml` をスキル側の版へ symlink する。WF や step を改名したら runtime.yaml も直すこと
+    （直さないと黙って haiku に落ちる。`tests/claude/review-insights.bats` が対応を見張っている）
+  - **takt の step は作業ディレクトリの外を読めず、`~/.claude` の下には書けない**（claude-headless で確認。
+    `~/.claude` は Claude Code が設定ディレクトリとして保護している）。そのため backlog の本体は
+    `~/.claude/review-insights/` に置いたまま、LLM に渡す入力（pending・backlog の要約・agent ファイル・
+    今の個人ルール）を `daily.sh` が `~/.cache/review-insights/<repo>/` に写し、出力もそこに書かせて読み戻す。
+    業務リポジトリの agent ファイルは `git show origin/<既定ブランチ>:…` で写す。working tree は触らない
+  - 取得・検証・backlog の更新・cursor の確定はスクリプト側。分類結果が pending の全件を
+    ちょうど 1 回ずつ網羅していなければ backlog に反映せず、cursor も進めずに翌日に回す
+    （反映してから取り直すと count が水増しされる）。`pr_author` も LLM に写させず pending から埋める
+  - 昇格候補は `count >= promote_min`（既定 3）と、**`self_login` の PR に付いた指摘（1 件でよい）**。
+    自分の失敗は 2 回目を待たずに防ぎたいので閾値を分けている
+  - **個人ルールは適用範囲ごとのファイルに分ける**（`~/.claude/rules/review-insights/auto-<repo>-*.md`）。
+    1 ファイルに足していくと全セッションの常時読み込みが毎日太るため。Claude Code の rules は frontmatter の
+    `paths:` があると該当ファイルを Read / Write / Edit したときだけ読み込まれ、ユーザーレベルでも効く
+    （glob はセッションの作業ディレクトリ基準）。`paths` は LLM に決めさせず、`paths.py` が分類先の
+    ルールファイルの `paths:` を写して先頭に `**/` を付ける（hello-run のセッションは worktree が 1 段深いので）。
+    ルート向けの横断ルールだけは `auto-<repo>-common.md` に `always_max` 件まで常時読ませ、残りは
+    `check.sh` の select（haiku）が差分を見て選ぶ。`auto-` 以外のファイルには触らない。毎回 backlog から
+    作り直すので、外すときは `stack.sh promote <repo> <id> rejected` → `stack.sh rules <repo>`。
+    日ごとの差分はログの末尾、変更前の写しは `~/.claude/review-insights/history/` に残る
+  - `paths:` 付きのルールは、ファイル本体を開かずに `gh pr diff` だけを読むレビューでは読み込まれない。
+    そのため `check.sh` は glob の照合を自前（`paths.py match`）で行い、セッションの読み込みに頼らない
+  - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。
+    勤務先の org・リポジトリ名と、レビューの中身そのものだから。`apply.bats` が配備と非混入を見る
 - **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
   アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
@@ -540,7 +577,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `writing-retro`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `writing-retro`, `review-insights`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -595,6 +632,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `~/.claude/rules/` (`writing.md` written by the writing-retro skill and `review-insights.md` —
   rules distilled from work sessions and reviews; only the empty `rules.template.md` ships),
   `~/git_remote/kb.git` / `~/git_clone/local/kb` (the kb — work knowledge; see the kb entry above),
+  `~/.claude/review-insights/` (the review-insights skill's repo list, backlog and logs — see its entry above),
+  `~/.claude/rules/review-insights{.md,/}` (personal rules grown by review-insights — names work repos),
   `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
   ports, internal URLs — see the dev-server entry above; only the placeholder
   `apps.example.json` ships), and `~/Library/Preferences/com.googlecode.iterm2.plist`

@@ -1,0 +1,25 @@
+# daily.sh が ~/.claude/review-insights/.takt/runtime.yaml に symlink する。
+# WF の YAML には step ごとの model を書けない（スキーマが拒否する）ので、ここで振り分ける。
+# 既定（triage と、takt が rule の判定に使う内部エージェント）は haiku にして、
+# 規約かどうかの判断が要る step だけ sonnet にする。
+version: 1
+companion:
+  enabled: false
+provider:
+  defaults:
+    profile: haiku
+  profiles:
+    haiku:
+      provider: claude-headless
+      model: haiku
+    sonnet:
+      provider: claude-headless
+      model: sonnet
+  targets:
+    steps:
+      review-classify/classify:
+        profile: sonnet
+      review-promote/promote:
+        profile: sonnet
+      review-check/review:
+        profile: sonnet
