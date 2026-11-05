@@ -26,6 +26,7 @@ PREV_CHARS="${RETRO_PREV_CHARS:-600}"
 # 指摘は長くても 300 字程度に収まる
 MAX_CHARS="${RETRO_MAX_CHARS:-600}"
 LEXICON="${RETRO_LEXICON:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../references/lexicon.txt}"
+RULES_TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../references/rules.template.md"
 
 die() { echo "retro: $*" >&2; exit 1; }
 
@@ -199,6 +200,18 @@ cmd_stats() {
         | sort_by(-.count)' "${LOG}"
 }
 
+# ルールファイルが無ければ雛形から作る。中身は業務の指摘なので dotfiles は雛形しか持たない
+cmd_init() {
+    if [[ -f "${RULES}" ]]; then
+        echo "exists: ${RULES}"
+        return 0
+    fi
+    [[ -f "${RULES_TEMPLATE}" ]] || die "template not found: ${RULES_TEMPLATE}"
+    mkdir -p "$(dirname "${RULES}")"
+    cp "${RULES_TEMPLATE}" "${RULES}"
+    echo "created: ${RULES}"
+}
+
 # ルールの件数と文字数。over が true なら、足す前に似たルールをまとめる
 cmd_budget() {
     [[ -f "${RULES}" ]] || die "rules not found: ${RULES}"
@@ -219,6 +232,7 @@ usage: retro.sh <command>
                              [{"quote","action":"added|strengthened|skipped","rule","reason","session"}]
   commit                     cursor を extract 時点まで進める
   stats                      ルールごとの指摘回数
+  init                       rules/writing.md が無ければ雛形から作る
   budget                     rules/writing.md のルール件数と上限
 EOF
 }
@@ -234,6 +248,7 @@ main() {
         commit) cmd_commit ;;
         log) cmd_log "$@" ;;
         stats) cmd_stats ;;
+        init) cmd_init ;;
         budget) cmd_budget ;;
         *) usage; [[ -z "${cmd}" ]] || exit 1 ;;
     esac

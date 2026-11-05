@@ -379,24 +379,23 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ "$status" -ne 0 ]
 }
 
-@test "apply: writing-retro skill and the rules it writes are deployed" {
+@test "apply: writing-retro skill is deployed without the rules it writes" {
     SKILL="${TESTHOME}/.claude/skills/writing-retro"
     [ -x "${SKILL}/scripts/retro.sh" ]
     [ -f "${SKILL}/references/lexicon.txt" ]
-    # 書き戻し先は全セッションが自動で読む ~/.claude/rules/ に置く
-    RULES="${TESTHOME}/.claude/rules/writing.md"
-    [ -f "${RULES}" ]
+    [ -f "${SKILL}/references/rules.template.md" ]
+    # ルールは業務の指摘から作るので追跡しない。chezmoi が配ると、書き足したルールを
+    # 次の apply で雛形に戻してしまう
+    [ ! -e "${TESTHOME}/.claude/rules/writing.md" ]
     grep -qF '.claude/rules/writing.md' "${SKILL}/SKILL.md"
-    # 書き戻したルールを次の apply で消さないよう、re-add の手順が残っていること
-    grep -qF 'chezmoi re-add' "${SKILL}/SKILL.md"
-    # 作業データ（ユーザーの発言の抜き出し）は非追跡。chezmoi が配ってしまっていないこと
+    grep -qF 'retro.sh init' "${SKILL}/SKILL.md"
+    # 作業データ（ユーザーの発言の抜き出し）も非追跡
     [ ! -e "${TESTHOME}/.claude/writing-retro" ]
 }
 
-@test "apply: writing rules leak no workspace identifiers" {
-    # 業務のセッションでの指摘から書くので、社名・org/repo 名・URL が混ざりやすい
+@test "apply: writing-retro skill leaks no workspace identifiers" {
     run grep -rniE 'hello-ai|helloincai|auto_reserve|gritinc|progrit|https?://|[0-9a-f]{32}' \
-        "${TESTHOME}/.claude/rules/writing.md" "${TESTHOME}/.claude/skills/writing-retro"
+        "${TESTHOME}/.claude/skills/writing-retro"
     [ "$status" -ne 0 ]
 }
 

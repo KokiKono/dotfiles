@@ -29,7 +29,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── Library/LaunchAgents/com.kokikono.kb-autosave.plist.tmpl # → ~/Library/LaunchAgents/ (autosave の launchd 定義)
 ├── dot_config/zsh/dev-server.zsh  # → ~/.config/zsh/... (worktree ごとの dev サーバー CLI)
 ├── dot_config/dev-server/apps.example.json # → ~/.config/dev-server/ (アプリ表の雛形。実表は <repo>.json で非追跡)
-├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/, rules/)
+├── dot_claude/                    # → ~/.claude/ (CLAUDE.md→AGENTS.md, settings.json, .mcp.json, statusline, hooks/, scripts/, skills/)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,ghostty,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
 ├── dot_config/helix/config.toml   # → ~/.config/helix/config.toml (TUI エディタ。herdr の prefix+Shift+E から開く)
@@ -469,7 +469,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - `tests/claude/takt-order.bats` が 2 本のスクリプトを、`apply.bats` が配備と org/repo 名の非混入を見る。
 - **`home/dot_claude/skills/writing-retro/`** は、1 日の終わりに全セッションの記録
   （`~/.claude/projects/*/*.jsonl`）を読み返し、AI が書いた文章への指摘を一般化して
-  **`home/dot_claude/rules/writing.md`**（→ `~/.claude/rules/writing.md`）に書き足すスキル。
+  `~/.claude/rules/writing.md`（**非追跡**）に書き足すスキル。
   `~/.claude/rules/` は Claude Code が全セッションで自動で読むので、AGENTS.md から `@` で
   読み込まなくても翌日から効く。知っておくこと:
   - **機械的に決められることは `scripts/retro.sh`、Claude は候補の判定と一般化だけ。** 毎日の
@@ -482,15 +482,16 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     （`entrypoint: sdk-cli`）・コンパクションの要約（`isCompactSummary`）は除く。記録は全体で
     1GB を超えるので、更新時刻で先にファイルを絞る。
   - **`rules/writing.md` は全セッションで読み込まれるので、ルールの件数に上限（40）を置く。**
-    `retro.sh budget` が数え、超えたら足す前にまとめる。`writing-retro.bats` が配布時点の件数を見る。
+    `retro.sh budget` が数え、超えたら足す前にまとめる。
   - **既にルールがあるのに指摘されたら、ルールが効いていないとみなして書き直す。** 回数は
     `~/.claude/writing-retro/log.jsonl` から `retro.sh stats` で数える。
   - **cursor（`state.json`）は `commit` でしか進めない**。判定が途中で落ちても、次回は同じ範囲を
     読み直すだけになる。
-  - **スキルはデプロイ先の `~/.claude/rules/writing.md` を直接書き換え、`chezmoi re-add` で
-    ソースへ戻す。** 戻さないと次の `chezmoi apply` で消える。コミットは人がする。
-  - ルールは業務のセッションでの指摘から作るので、**固有名詞・URL は `○○` に置き換える**。
-    `apply.bats` が非混入を見る。作業データ（`~/.claude/writing-retro/`）は追跡しない。
+  - **`rules/writing.md` は追跡しない。** 業務のセッションでの指摘から作るので、追跡すると
+    例を `○○` に伏せることになり、ルールがぼやけて効きにくくなる。毎回の `chezmoi re-add` と
+    コミットも要らなくなる。このリポジトリが持つのは雛形（`references/rules.template.md`）だけで、
+    無ければ `retro.sh init` が作る。`apply.bats` が、chezmoi がルールファイルを配らないことと、
+    スキル側の非混入を見る。作業データ（`~/.claude/writing-retro/`）も追跡しない。
 - **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
   アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
@@ -570,7 +571,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
   parent, test store names and environment URLs — same reason),
   `~/.claude/writing-retro/` (the writing-retro skill's cursor and log — quotes from work sessions),
-  `~/.claude/rules/review-insights.md` (only `rules/writing.md` is tracked),
+  `~/.claude/rules/` (`writing.md` written by the writing-retro skill and `review-insights.md` —
+  rules distilled from work sessions and reviews; only the empty `rules.template.md` ships),
   `~/git_remote/kb.git` / `~/git_clone/local/kb` (the kb — work knowledge; see the kb entry above),
   `~/.config/dev-server/<repo>.json` (the dev-server CLI's per-repo app table: start commands,
   ports, internal URLs — see the dev-server entry above; only the placeholder
