@@ -101,10 +101,12 @@ AskUserQuestion の multiSelect で採否を 1 回で聞く。案が 4 件を超
 
 ### 7. 記録して既読にする
 
-判定した指摘を JSON 配列でスクラッチに書き、log に残してから cursor を進める。
+判定した指摘を JSON 配列にして標準入力から log に渡し、そのあと cursor を進める。
 
 ```bash
-~/.claude/skills/writing-retro/scripts/retro.sh log /path/to/entries.json
+~/.claude/skills/writing-retro/scripts/retro.sh log - <<'JSON'
+[{"quote": "...", "action": "added", "rule": "..."}]
+JSON
 ~/.claude/skills/writing-retro/scripts/retro.sh commit
 ```
 
@@ -119,6 +121,26 @@ entries の要素は `{"quote": 元の発言, "action": "added|strengthened|skip
 
 「読んだ発言 N 件（候補 N 件）/ 指摘 N 件 / 追加 N 件 / 書き直し N 件 / 見送り N 件」を 1 行で出し、
 書き直したルールがあれば、何回目の指摘だったかを添える。
+
+## 自動実行（引数 `auto`）
+
+launchd が毎日 19 時に `scripts/auto.sh` を呼び、候補があるときだけ
+`claude -p "/writing-retro auto"` を実行する。誰も承認に答えられないので、手順を次のように変える。
+
+- 1 の `extract` は `auto.sh` が済ませている。`list` から始める（`extract` をやり直さない）
+- 5 の承認は取らない。added と strengthened を自分で採否まで決めて書き込む
+- 迷うものは書かずに `skipped`（reason: 自動実行では見送り）にする。書いたルールは翌日から
+  全セッションに効くので、一般化に自信がないものを入れるより、次に同じ指摘が来るのを待つほうがよい
+- 既存のルールを消したり、まとめたりしない。`budget` の `over` が true なら新しいルールは足さず、
+  `skipped`（reason: 上限）にする。strengthened の書き直しだけは行う
+- ルールファイルは Edit の前に必ず Read ツールで読む（読まずに Edit すると失敗する）。
+  **Edit が成功したことを確かめてから 7 に進む。** Edit が通らないまま log と commit をすると、
+  書いていないルールを書いたことにして既読にしてしまう。Edit がどうしても通らなければ、
+  log も commit もせずに終える（翌日に同じ範囲を読み直す）
+- 7 の log と commit まで済ませる。8 の報告は「追加 N 件 / 書き直し N 件 / 見送り N 件」の 1 行と、
+  書いたルールの文を並べるだけにする。`auto.sh` がこれを `~/.claude/writing-retro/last-run.md` に残す
+
+使えるツールは `retro.sh`（Bash）、Read、`~/.claude/rules/writing.md` への Edit だけに絞られている。
 
 ## 漏れの点検
 

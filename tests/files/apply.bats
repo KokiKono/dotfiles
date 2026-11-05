@@ -393,6 +393,20 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ ! -e "${TESTHOME}/.claude/writing-retro" ]
 }
 
+@test "apply: writing-retro runs daily from launchd" {
+    [ -x "${TESTHOME}/.claude/skills/writing-retro/scripts/auto.sh" ]
+    PLIST="${TESTHOME}/Library/LaunchAgents/com.kokikono.writing-retro.plist"
+    [ -f "${PLIST}" ]
+    plutil -lint "${PLIST}" >/dev/null
+    # 配備先の auto.sh を指していて、テンプレートが展開済みであること
+    # （homeDir はテスト用の HOME ではなく実行ユーザーのホームに展開される）
+    grep -qE '<string>/.+/\.claude/skills/writing-retro/scripts/auto\.sh</string>' "${PLIST}"
+    run grep -F '{{' "${PLIST}"
+    [ "$status" -ne 0 ]
+    # claude は Homebrew にあるので、launchd の素の PATH では見つからない
+    grep -qF '/opt/homebrew/bin' "${PLIST}"
+}
+
 @test "apply: writing-retro skill leaks no workspace identifiers" {
     run grep -rniE 'hello-ai|helloincai|auto_reserve|gritinc|progrit|https?://|[0-9a-f]{32}' \
         "${TESTHOME}/.claude/skills/writing-retro"
