@@ -66,7 +66,7 @@ Node / Python / Java は [mise](https://mise.jdx.dev) に統合している。�
 
 ```toml
 [tools]
-node = "22.16.0"
+node = "24.22.2"
 python = "3.11.6"
 java = "temurin-11"
 ```
