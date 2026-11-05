@@ -65,7 +65,7 @@ grep -ril '<キーワード>' "$TK/orders" "$TK/../issues" | head -20
 （§5 のコマンドをそのまま）
 
 ## 結果
-（retro で書く）
+（retro で書く。`scripts/usage.py` の出力を「### 所要とトークン」として貼る）
 
 ## 振り返り
 （retro で書く）
