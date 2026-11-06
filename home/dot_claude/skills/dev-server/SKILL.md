@@ -66,6 +66,12 @@ dev-server restart --json <app>...   # start と同じ
 
   **この表はリポジトリごとに1回書けば済む。** 書いたら次回からは CLI が全部やる。
 
+## BE と組み合わせるときは kb の hello-debug
+
+`dev-server` はフロント単体を立てるだけで、接続先は既定（多くは共有の BE か staging）のまま。
+フロントをこの worktree の BE に繋いで確かめたいときは、セッションディレクトリに
+`kb/env/hello-debug` があればそれを使う（使い方は `--help`）。無ければこの節は飛ばす。
+
 ## 範囲
 
 サーバーを立てるところまでがこのスキルの仕事。撮影は `pr-screenshot`、ブラウザ操作は
