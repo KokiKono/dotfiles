@@ -105,6 +105,8 @@ issue の本文・コメント・リンク先の仕様（Notion があれば読�
 
 ### ローカル
 
+- **セッションディレクトリに `kb/env/hello-debug` があれば、BE とフロントはそれで立てる**
+  （dev-server スキルの「BE と組み合わせるときは kb の hello-debug」の節）。無ければ以下の手順で立てる
 - **フロントの dev サーバーは dev-server スキルに任せる**（`dev-server --json <app>`）。
   同じ worktree で既に動いていれば CLI が再利用する。`conflict` が返ったら起動せずユーザーに渡す
 - **BE は Docker。** worktree のリポジトリの README / `compose.yml` から起動方法を読む。
