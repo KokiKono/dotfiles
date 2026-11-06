@@ -35,7 +35,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,ghostty,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
 ├── dot_config/helix/config.toml   # → ~/.config/helix/config.toml (TUI エディタ。herdr の prefix+Shift+E から開く)
-├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (cargo env)
+├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (rustup の PATH)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
     └── run_onchange_install.sh.tmpl   # on `apply`, runs install/macos/*.sh (re-runs when they change)
@@ -103,7 +103,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 146 `brew`, 34 `cask`,
+- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 148 `brew`, 34 `cask`,
   3 `go`, 56 `vscode` (`mas` entries were dropped in c8bb43a; `npm "corepack"` was dropped because
   corepack shims `/opt/homebrew/bin/pnpm` and collides with the `pnpm` formula — see below).
   `chezmoi` and `bats-core` are included. Regenerate with:

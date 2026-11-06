@@ -63,3 +63,9 @@ STUBEOF
         grep -q "^brew \"${f}\"" "${REPO_ROOT}/Brewfile"
     done
 }
+
+@test "brew.sh: rustup is keg-only, so zshenv puts it on PATH" {
+    # zshenv が足さないと、Brewfile に入っていても cargo が見つからない
+    grep -q '^brew "rustup"' "${REPO_ROOT}/Brewfile" || skip "rustup is not in the Brewfile"
+    grep -q '/opt/homebrew/opt/rustup/bin' "${REPO_ROOT}/home/dot_zshenv"
+}

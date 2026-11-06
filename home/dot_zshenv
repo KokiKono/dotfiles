@@ -1,1 +1,3 @@
-[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
+# Rust は brew の rustup で入れる。rustup は rust と衝突するので keg-only で、brew は PATH を通さない。
+# git hook や launchd などの非対話シェルからも cargo が見えるよう、zshenv で足す。
+export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
