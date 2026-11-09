@@ -470,6 +470,14 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **触ってよい店舗名・環境の URL・起票先は追跡しない** — `~/.claude/hello-manual-test.local.json`
     （非追跡）に `notion_parent_url` / `notion_data_source_url` / `test_stores` / `environments` /
     `github_owner` / `dry_run` を置く。無ければ `setup` モードで作る。`apply.bats` が配備と非混入を見る。
+- **`home/dot_claude/skills/hello-issue/`** は、Slack のスレッドや Notion などの材料から勤務先の
+  GitHub issue を起票するスキル。本文は要求と要件（と背景・スコープ外・未確定事項・参考リンク）だけに絞り、
+  実装方法は書かない — 起票時点ではコードを読んでおらず、書いた方針が着手時の判断を縛るため。
+  起票は他人に見える操作なので、下書きを見せて承認を得てから作り、自分にアサインして GitHub Project に
+  紐づける。**起票先のリポジトリと Project は追跡しない** —
+  `~/.claude/hello-issue.local.json`（非追跡）に `repo` / `project_owner` / `project_number` /
+  `labels` / `dry_run` を置き、無ければ `setup` モードで作る。`apply.bats` が配備と、
+  org・Project 名の非混入を見る。
 - **`home/dot_claude/skills/takt-order/`** は issue を読んで [takt](https://github.com/nrslib/takt)
   に流すワークフロー（WF）を選ぶか組み、発注書・タスク文・YAML を kb に残して実行コマンドを渡すスキル
   (`/takt-order`)。**takt は実行しない**（コマンドを渡すだけ）。`retro` で `.takt/runs/` の結果を読み、
@@ -591,7 +599,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `writing-retro`, `review-insights`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -640,6 +648,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `~/.claude/ubiquitous-language.local.json` (the ubiquitous-language skill's Notion DB id and
   search hints — workspace-specific, and this repo is PUBLIC),
   `~/.claude/hello-search.local.json` (the hello-search skill's Notion DB id and GitHub org —
+  same reason), `~/.claude/hello-issue.local.json` (the hello-issue skill's target repo and GitHub Project —
   same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
   parent, test store names and environment URLs — same reason),
   `~/.claude/writing-retro/` (the writing-retro skill's cursor and log — quotes from work sessions),
