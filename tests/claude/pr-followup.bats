@@ -71,7 +71,7 @@ EOF
 pr_json() {
     # $1: reviewThreads の nodes, $2: comments の nodes
     cat <<EOF
-{"data":{"repository":{"pullRequest":{
+{"data":{"repository":{"workflow":${3:-{\"id\":\"w\"\}},"pullRequest":{
   "headRefOid":"abc","isDraft":true,"labels":{"nodes":[]},
   "reviews":{"nodes":[{"author":{"login":"claude"},"body":"found 0 new potential bugs","state":"COMMENTED","commit":{"oid":"abc"},"submittedAt":"","url":"u"}]},
   "comments":{"nodes":$2},
@@ -116,4 +116,13 @@ human() { printf '{"login":"%s","__typename":"User"}' "$1"; }
     pr_json "[]" "[{\"databaseId\":2,\"body\":\"i18n\",\"url\":\"u2\",\"isMinimized\":false,\"author\":$(bot other-bot)}]" >"${BATS_TEST_TMPDIR}/graphql.json"; stub_gh
     run python3 "$STATUS" o/r 12
     [ "$(jq '.i18n | length' <<<"$output")" -eq 0 ]
+}
+
+@test "pr-review-status: repos without the claude-review workflow are no_review" {
+    # gh run list は存在しない workflow で失敗するので、呼ぶ前に抜けること
+    pr_json "[]" "[]" null >"${BATS_TEST_TMPDIR}/graphql.json"; stub_gh
+    printf '#!/bin/bash\n[ "$1 $2" = "api graphql" ] && exec cat "%s/graphql.json"\nexit 1\n' "${BATS_TEST_TMPDIR}" >"${BATS_TEST_TMPDIR}/bin/gh"
+    run python3 "$STATUS" o/r 12
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .state <<<"$output")" = "no_review" ]
 }

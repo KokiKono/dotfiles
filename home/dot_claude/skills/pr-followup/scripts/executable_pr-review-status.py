@@ -4,6 +4,7 @@
 claude-review（.github/workflows/pr-review.yml）のレビュー状況と、bot が付けた i18n の警告を JSON で出す。
 
 - state
+  - "no_review": 既定ブランチに pr-review.yml が無い。claude-review は走らないので、待たずに終えてよい
   - "reviewing": 今の head に対するレビューがまだ終わっていない（workflow が実行中・待ち、またはレビュー未投稿）
   - "clean": 今の head へのレビューが「0 new」で、未解決の指摘スレッドも i18n の警告スレッドも無い。ループを終えてよい
   - "has_findings": 未解決の指摘か i18n の警告スレッドがある。threads / i18n を見て直すか返信する
@@ -30,6 +31,7 @@ DEFAULT_I18N_PATTERN = r"i18n|translat|翻訳|locale|ロケール"
 QUERY = """
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
+    workflow: object(expression: "HEAD:.github/workflows/pr-review.yml") { id }
     pullRequest(number: $number) {
       headRefOid isDraft
       labels(first: 30) { nodes { name } }
@@ -97,8 +99,14 @@ def main():
         }
 
     data = json.loads(gh("api", "graphql", "-f", f"query={QUERY}", "-F", f"owner={owner}", "-F", f"name={name}", "-F", f"number={number}"))
-    pr = data["data"]["repository"]["pullRequest"]
+    repository = data["data"]["repository"]
+    pr = repository["pullRequest"]
     head = pr["headRefOid"]
+
+    # gh run list は存在しない workflow を渡すと失敗するので、先に抜ける
+    if repository["workflow"] is None:
+        print(json.dumps({"state": "no_review", "head": head, "draft": pr["isDraft"]}, ensure_ascii=False, indent=2))
+        return 0
 
     runs = json.loads(gh("run", "list", "-R", repo, "--workflow", "pr-review.yml", "--commit", head, "--json", "status,conclusion,url,databaseId", "-L", "5"))
     running = [r for r in runs if r["status"] != "completed"]

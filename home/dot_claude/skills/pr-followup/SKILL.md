@@ -24,6 +24,7 @@ Ready for review への変更、マージはしない。人が書いたコメン
    ```
 
    `draft` と `labels` を 3 で、`i18n` を 2 で、`state` と `threads` を 4 で使う
+   - `state` が `no_review`（claude-review の workflow が無いリポジトリ）なら、1 の CI を待って直すだけで 5 に進む
 
 関係ないコメントを i18n の警告として拾う、または拾い漏らすことが続いたら、`~/.claude/pr-followup.local.json`
 （**追跡外**）の `i18n_bots` / `i18n_pattern` で絞る。キーの意味と既定値はスクリプト冒頭にある。
