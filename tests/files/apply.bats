@@ -311,10 +311,12 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 }
 
 @test "apply: claude hooks and scripts are deployed executable" {
-    for h in review-before-pr.sh herdr-agent-state.sh cbm-code-discovery-gate \
+    for h in review-before-pr.sh pr-followup.sh herdr-agent-state.sh cbm-code-discovery-gate \
              cbm-session-reminder cbm-subagent-reminder; do
         [ -x "${TESTHOME}/.claude/hooks/${h}" ]
     done
+    # 2 つの PR hook が source する判定（無いと両方とも set -e で落ちる）
+    [ -f "${TESTHOME}/.claude/hooks/lib/gh-pr-create.sh" ]
     # permissions マージ用スクリプトは python3 で構文が通ること
     for s in merge-local-permissions.py merge-worktree-permissions.py; do
         [ -f "${TESTHOME}/.claude/scripts/${s}" ]
@@ -324,7 +326,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 
 @test "apply: settings.json hooks point at deployed files" {
     # settings.json が参照するフック/スクリプトが実際に配置されていること
-    for f in .claude/hooks/review-before-pr.sh .claude/hooks/herdr-agent-state.sh \
+    for f in .claude/hooks/review-before-pr.sh .claude/hooks/pr-followup.sh .claude/hooks/herdr-agent-state.sh \
              .claude/hooks/cbm-code-discovery-gate .claude/hooks/cbm-session-reminder \
              .claude/hooks/cbm-subagent-reminder .claude/scripts/merge-local-permissions.py \
              .claude/scripts/merge-worktree-permissions.py .claude/statusline-command.sh; do
@@ -336,7 +338,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
-             hello-search hello-manual-test hello-issue writing-retro; do
+             hello-search hello-manual-test hello-issue writing-retro pr-followup; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -401,6 +403,19 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ ! -d "${SKILL}/workflows" ]
     # 実際の org・repo 名を混ぜない
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: pr-followup skill is deployed with its status script" {
+    SKILL="${TESTHOME}/.claude/skills/pr-followup"
+    [ -x "${SKILL}/scripts/pr-review-status.py" ]
+    python3 -m py_compile "${SKILL}/scripts/pr-review-status.py"
+    # 旧置き場から移したので、takt-order 側に取り残していないこと
+    [ ! -e "${TESTHOME}/.claude/skills/takt-order/scripts/pr-review-status.py" ]
+    grep -qF 'pr-followup' "${TESTHOME}/.claude/skills/takt-order/SKILL.md"
+    # i18n の bot 名は非追跡の設定に置く。実際の org・repo 名を混ぜない
+    [ ! -e "${TESTHOME}/.claude/pr-followup.local.json" ]
+    run grep -rniE 'hello-ai|auto_reserve' "${SKILL}" "${TESTHOME}/.claude/hooks/pr-followup.sh"
     [ "$status" -ne 0 ]
 }
 

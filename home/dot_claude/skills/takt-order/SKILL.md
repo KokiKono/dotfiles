@@ -131,30 +131,10 @@ PR の作成・push・指摘への返信まで進める（ユーザーの指示�
    - 本文は repo の PR テンプレートに沿い、yomiyasu の書き方で書く。末尾の署名は repo の規約に従う
      （`🤖 Generated with AI` のように repo ごとに決まっている）
    - `gh pr create --draft`。**ラベルはまだ付けない**
-2. CI が通るのを待ってから `gh pr edit <番号> --add-label claude-review` を付ける。
-   CI が落ちたまま AI レビューを回すと、落ちた原因の指摘で 1 周を使い、直した push でもう 1 周走る
-   - `gh pr checks <番号> --watch --fail-fast` で待つ（Monitor の until ループで回してよい）
-   - 落ちたら、ログ（`gh run view <run-id> --log-failed`）から原因を切り分ける。発注の範囲の失敗は
-     直して push し、待ち直す。flaky や発注と無関係の失敗（main でも落ちている等）は、ユーザーに聞く
-   - 3 回直しても通らなければ止めて報告する
-3. レビューを待つ。`scripts/pr-review-status.py <owner/repo> <番号>` を Monitor の until ループで回し、
-   `state` が `reviewing` 以外になるまで待つ（30 秒間隔）
-   - `clean`: 今の head へのレビューが「0 new」で、未解決の指摘も無い。§7 を終える
-   - `has_findings`: `threads` の各指摘を 4 に回す
-4. 指摘ごとに、次のどれかを決める
-   - **直す**: 指摘が正しく、発注の範囲に収まる。先に spec を足して落ちることを確かめ、直し、
-     関係する spec と rubocop を通し、指摘ごとに commit（本文に Why）。返信は書かない。
-     push すると claude-review が差分を読んで、自分で返信して解決済みにする
-   - **直さない**: 誤検知、または発注で決めた仕様どおり。スレッドに理由を 1〜3 文で返信する
-     （`gh api repos/<owner>/<repo>/pulls/<番号>/comments/<comment_id>/replies -f body=...`）。
-     claude-review は次の実行で返信を読み、解決済みにする
-   - **人に聞く**: 仕様の判断が要る、発注の範囲を超える、直すと他の決定とぶつかる。
-     ループを止めてユーザーに聞く
-5. push は 1 周に 1 回にまとめる（`synchronize` のたびに claude-review が走り、`cancel-in-progress` で
-   前の実行は止まる）。返信だけで push が無いときは、ラベルを付け直して再レビューを起こす
-   （`gh pr edit --remove-label claude-review` → `--add-label claude-review`）
-6. 3 に戻る。**5 周で `clean` にならなければ止めて**、残った指摘と、それぞれをどう判断したかを報告する
-7. 終わったら order.md の §結果 に、CI の待ちで直した回数と、レビューの周回数、指摘ごとの扱い
+2. 作ると hook が pr-followup スキルの実行を促すので（既にあった PR なら自分で呼ぶ）、その手順で CI の修正・i18n の警告・claude-review の
+   指摘への対応を回す。**直すか直さないかの判断は「PR の範囲」を「発注の範囲」に読み替える**
+   （spec と rubocop を通してから commit する）
+3. 終わったら order.md の §結果 に、CI の待ちで直した回数と、レビューの周回数、指摘ごとの扱い
    （直した / 直さない理由 / 人に聞いた）を書く
 
 ## やらないこと

@@ -52,6 +52,7 @@ tests/
 ├── claude/skills-db.bats          # unit tests for the learning-code skill's skills-db.sh
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
+├── claude/pr-followup.bats        # unit tests for the after-PR hook and pr-followup's status script
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
@@ -595,11 +596,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
   Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
   `settings.json` (permissions /
-  hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`,
+  hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`, `pr-followup.sh`,
   `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -614,6 +615,19 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   コマンドとして呼ばれたときだけ見る（コミットメッセージに文字列が入っているだけでは止めない）。
   Edit / Write を使わず Bash で編集した場合は検知できない。
   `tests/claude/review-before-pr.bats` が判定を見張っている
+- **`hooks/pr-followup.sh`（PostToolUse）は `gh pr create` が PR を作ったら、`pr-followup` スキルを
+  その URL で実行するよう `additionalContext` で伝える**。スキル（`home/dot_claude/skills/pr-followup/`）は
+  CI を待って落ちたら直し、bot の i18n 警告を消し、Draft なら会話に残タスクが無いときだけ `claude-review`
+  ラベルを付け、claude-review の指摘を直すか理由を返信して「0 new」になるまで回す。知っておくこと:
+  - **Stop hook で止めさせない方針。** 人に聞くべき場面（範囲外の CI 失敗、仕様判断）でも止まれなくなるため、
+    hook は指示を差し込むだけにしている。止まったら人が `/pr-followup` で再開する
+  - レビュー状態は `scripts/pr-review-status.py`（takt-order から移した）。i18n の警告は「bot が書いた、
+    本文が i18n の語に当たるコメント」で拾う。bot 名と語は `~/.claude/pr-followup.local.json`（非追跡）の
+    `i18n_bots` / `i18n_pattern` で絞る。PR への普通のコメントは解決済みを持たないので `state` に数えない
+    （数えるとループが終わらない）
+  - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
+  - `gh pr create` を呼んだかの判定は `hooks/lib/gh-pr-create.sh` にあり、`review-before-pr.sh` と共有している。
+    片方だけ直すと、レビューを求めた PR とフォローする PR がずれる
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
@@ -649,7 +663,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   search hints — workspace-specific, and this repo is PUBLIC),
   `~/.claude/hello-search.local.json` (the hello-search skill's Notion DB id and GitHub org —
   same reason), `~/.claude/hello-issue.local.json` (the hello-issue skill's target repo and GitHub Project —
-  same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
+  same reason), `~/.claude/pr-followup.local.json` (the i18n bot logins pr-followup watches — same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
   parent, test store names and environment URLs — same reason),
   `~/.claude/writing-retro/` (the writing-retro skill's cursor and log — quotes from work sessions),
   `~/.claude/rules/` (`writing.md` written by the writing-retro skill and `review-insights.md` —
