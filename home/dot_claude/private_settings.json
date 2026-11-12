@@ -74,6 +74,16 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/pr-followup.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "command": "if [ -f '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/kokikono/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/kokikono/.orca/agent-hooks/claude-hook.sh'; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",

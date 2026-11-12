@@ -14,10 +14,8 @@ IFS=$'\x1f' read -r command cwd transcript_path < <(
   jq -r '[.tool_input.command, .cwd, .transcript_path] | map(. // "" | gsub("[\n\u001f]"; ";")) | join("\u001f")' <<<"$input"
 )
 
-# コミットメッセージや grep の引数に含まれるだけのものは対象にしない。
-# 先頭の環境変数の代入（GH_TOKEN=x gh pr create など）は越えて見る
-invoke='(^|[;&|])[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+create'
-[[ $command =~ $invoke ]] || exit 0
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gh-pr-create.sh"
+[[ $command =~ $GH_PR_CREATE_RE ]] || exit 0
 
 # 急ぎのときの抜け道。コマンド文字列ではなく、ユーザーが claude を起動した環境でだけ見る
 # （コマンドに書けば通るようにすると、Claude が自分で付けて飛ばせてしまう）
