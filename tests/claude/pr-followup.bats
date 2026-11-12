@@ -69,9 +69,11 @@ EOF
 }
 
 pr_json() {
-    # $1: reviewThreads の nodes, $2: comments の nodes
+    # $1: reviewThreads の nodes, $2: comments の nodes, $3: workflow（null なら pr-review.yml が無い）
+    # 既定値を heredoc の中の ${3:-...} で書かない。macOS の bash 3.2 では } の扱いが違い、JSON が壊れる
+    local workflow=${3:-'{"id":"w"}'}
     cat <<EOF
-{"data":{"repository":{"workflow":${3:-{\"id\":\"w\"\}},"pullRequest":{
+{"data":{"repository":{"workflow":$workflow,"pullRequest":{
   "headRefOid":"abc","isDraft":true,"labels":{"nodes":[]},
   "reviews":{"nodes":[{"author":{"login":"claude"},"body":"found 0 new potential bugs","state":"COMMENTED","commit":{"oid":"abc"},"submittedAt":"","url":"u"}]},
   "comments":{"nodes":$2},
