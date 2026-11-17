@@ -34,13 +34,14 @@ JA_QUOTE = re.compile(r"「[^」\n]*」|『[^』\n]*』")
 # 「英語」「英語に」だけで当てると「英語になってる」のような苦情まで通してしまう。
 # translate も語として当てないと translateText のような識別子に当たる
 ASKED_ENGLISH = re.compile(
-    r"英訳|英語に(訳|直)|英語版|\bin English\b|\btranslate (this|it|into|to)\b", re.I
+    r"英訳|英語に(訳|直|して)|英語で(書いて|お願い)|英語版|\bin English\b|\btranslate (this|it|into|to)\b",
+    re.I,
 )
 # ターンの途中にハーネスが差し込む user 行。ユーザーの入力ではないのでターンの区切りにしない
 INJECTED = ("<task-notification", "<system-reminder")
 
 REASON = (
-    "直前の返答が英語でした。同じ内容を日本語で書き直してください"
+    "このターンの返答に英語で書いた部分がありました。その部分を日本語で書き直してください"
     "（コード・識別子・引用する出力は原文のままでよい）。"
 )
 
@@ -140,6 +141,8 @@ def main():
     try:
         data = json.load(sys.stdin)
     except ValueError:
+        return
+    if not isinstance(data, dict):
         return
     # 書き直させた後にまた止めると、判定を外したときに抜けられなくなる
     if data.get("stop_hook_active"):

@@ -151,6 +151,11 @@ run_hook() {
     run run_hook
     assert_passed
 
+    user "PR 本文は英語で書いて"
+    assistant "This PR adds a stop hook that rewrites English replies."
+    run run_hook
+    assert_passed
+
     # 英語の返答への苦情や識別子は英語の依頼ではない
     for prompt in "英語で返さないで" "また英語になってる" "translateText を直して"; do
         user "$prompt"
@@ -182,6 +187,10 @@ run_hook() {
     assert_passed
 
     run python3 "$HOOK" </dev/null
+    [ "$status" -eq 0 ]
+    assert_passed
+
+    run python3 "$HOOK" <<<'[]'
     [ "$status" -eq 0 ]
     assert_passed
 }

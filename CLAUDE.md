@@ -635,7 +635,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - 判定の条件（除外するもの・冒頭の行・英字の割合）とその理由はスクリプトのコメントにある。
     過去 2 週間のログでは、「日本語で」と送り直した直前の返答 19 件をすべて拾えた
   - `stop_hook_active` のときは止めない（判定を外したときに抜けられなくなるため）。
-    `CLAUDE_CODE_ENTRYPOINT` が `sdk*`（`claude -p` や takt）のときと `SKIP_JAPANESE_REPLY=1` も通す
+    `CLAUDE_CODE_ENTRYPOINT` が `sdk*`（`claude -p` や takt）のときと `SKIP_JAPANESE_REPLY=1` も通す。
+    直前の入力が英語での出力を頼んでいるとき（「英訳」「英語で書いて」など、拾う言い方はスクリプトの
+    `ASKED_ENGLISH`）も通す。前のターンの「以降は英語で」は引き継がないので、そのときは `SKIP_JAPANESE_REPLY=1`
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
