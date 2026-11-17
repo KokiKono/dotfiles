@@ -327,7 +327,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: settings.json hooks point at deployed files" {
     # settings.json が参照するフック/スクリプトが実際に配置されていること
     for f in .claude/hooks/review-before-pr.sh .claude/hooks/pr-followup.sh .claude/hooks/herdr-agent-state.sh \
-             .claude/hooks/cbm-code-discovery-gate .claude/hooks/cbm-session-reminder \
+             .claude/hooks/japanese-reply.py .claude/hooks/cbm-code-discovery-gate .claude/hooks/cbm-session-reminder \
              .claude/hooks/cbm-subagent-reminder .claude/scripts/merge-local-permissions.py \
              .claude/scripts/merge-worktree-permissions.py .claude/statusline-command.sh; do
         grep -qF "$(basename "$f")" "${TESTHOME}/.claude/settings.json"

@@ -224,6 +224,15 @@
       {
         "hooks": [
           {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/japanese-reply.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
             "command": "python3 ~/.claude/scripts/merge-local-permissions.py",
             "statusMessage": "permissions を settings.json にマージ中...",
             "timeout": 10,

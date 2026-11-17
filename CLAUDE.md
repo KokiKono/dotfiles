@@ -53,6 +53,7 @@ tests/
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/pr-followup.bats        # unit tests for the after-PR hook and pr-followup's status script
+├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
@@ -597,7 +598,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
   `settings.json` (permissions /
   hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`, `pr-followup.sh`,
-  `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
+  `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
   `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`). If you add a hook or script referenced from `settings.json`, add it to
@@ -628,6 +629,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
   - `gh pr create` を呼んだかの判定は `hooks/lib/gh-pr-create.sh` にあり、`review-before-pr.sh` と共有している。
     片方だけ直すと、レビューを求めた PR とフォローする PR がずれる
+- **`hooks/japanese-reply.py`（Stop）は、最後のユーザー入力以降の返答が英語なら止めて日本語で書き直させる。**
+  `language: japanese` と `rules/writing.md` で何度指示しても英語の返答が続き、そのたびに「日本語で」と
+  送り直していたため、送り直しを hook に任せている。知っておくこと:
+  - 判定の条件（除外するもの・冒頭の行・英字の割合）とその理由はスクリプトのコメントにある。
+    過去 2 週間のログでは、「日本語で」と送り直した直前の返答 19 件をすべて拾えた
+  - `stop_hook_active` のときは止めない（判定を外したときに抜けられなくなるため）。
+    `CLAUDE_CODE_ENTRYPOINT` が `sdk*`（`claude -p` や takt）のときと `SKIP_JAPANESE_REPLY=1` も通す
 - **外部スキルは lock だけを管理する（本体は vendoring しない）。** `agent-browser` /
   `design-doc-mermaid` / `find-skills` / `grill-me` / `herdr` / `humanizer-ja` / `show-me` は
   [`npx skills`](https://skills.sh/) で入れたもので、台帳は `~/.agents/.skill-lock.json`。その
