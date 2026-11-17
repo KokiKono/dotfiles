@@ -110,8 +110,14 @@ def prompt_text(row):
 def last_turn(transcript_path):
     """最後のユーザー入力の本文と、それより後のアシスタントの text ブロックを返す。"""
     texts = []
+    judged = False
     try:
         for line in reversed_lines(transcript_path):
+            # 前回の Stop より前の返答はそのときに判定済み。差し戻しは isMeta の user 行で区切りにならないので、
+            # これを見ないと書き直し済みの英語で毎回止める
+            if b'"subtype":"stop_hook_summary"' in line:
+                judged = True
+                continue
             # ツールの結果は数 MB になることがあり、全部を解析すると長いターンで hook の時間切れになる
             if b'"type":"tool_result"' in line:
                 continue
@@ -125,7 +131,7 @@ def last_turn(transcript_path):
             if prompt is not None:
                 return prompt, texts
             content = (row.get("message") or {}).get("content")
-            if row.get("type") == "assistant" and isinstance(content, list):
+            if not judged and row.get("type") == "assistant" and isinstance(content, list):
                 texts[:0] = text_blocks(content)
     except OSError:
         pass

@@ -194,3 +194,23 @@ run_hook() {
     [ "$status" -eq 0 ]
     assert_passed
 }
+
+@test "japanese-reply: replies before the previous stop are not judged again" {
+    user "この文言を英訳して"
+    assistant "Checking the wording now before translating."
+    jq -cn '{type: "system", subtype: "stop_hook_summary"}' >>"$TRANSCRIPT"
+    user "<task-notification>done</task-notification>"
+    assistant "There has been a reservation request from a customer."
+    run run_hook
+    # 前回の Stop より前は見ないが、英語の依頼かどうかは元の入力で判断する
+    assert_passed
+
+    : >"$TRANSCRIPT"
+    user "直して"
+    assistant "Next, I'll add tests for these cases."
+    jq -cn '{type: "system", subtype: "stop_hook_summary"}' >>"$TRANSCRIPT"
+    jq -cn '{type: "user", isMeta: true, message: {content: "Stop hook feedback:\n書き直して"}}' >>"$TRANSCRIPT"
+    assistant "書き直しました。"
+    run run_hook
+    assert_passed
+}
