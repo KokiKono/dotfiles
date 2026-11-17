@@ -87,11 +87,18 @@ run_hook() {
     assert_blocked
 }
 
-@test "japanese-reply: english progress note before a japanese summary is blocked" {
+@test "japanese-reply: only the final reply is judged" {
+    # 途中の英語で止めると、日本語の回答全体を出し直させてしまう
     user "調べて"
     assistant "I'm checking the reservation data in the DB."
     tool_result
     assistant "予約データを確認しました。"
+    run run_hook
+    assert_passed
+
+    assistant "Now record results in Notion."
+    tool_result
+    assistant "All four results are recorded in the QA checklist."
     run run_hook
     assert_blocked
 }
@@ -135,12 +142,17 @@ run_hook() {
     assert_passed
 }
 
-@test "japanese-reply: injected notifications do not end the turn" {
+@test "japanese-reply: injected notifications are not taken as the prompt" {
+    user "この文言を英訳して"
+    user "<task-notification>translate it into English</task-notification>"
+    jq -cn '{type: "user", isMeta: true, message: {content: "in English"}}' >>"$TRANSCRIPT"
+    assistant "There has been a reservation request from a customer."
+    run run_hook
+    assert_passed
+
     user "調べて"
-    assistant "I'm launching the agent to check the DB now."
-    user "<task-notification>done</task-notification>"
-    jq -cn '{type: "user", isMeta: true, message: {content: "reminder"}}' >>"$TRANSCRIPT"
-    assistant "DB を確認しました。"
+    user "<task-notification>translate it into English</task-notification>"
+    assistant "The DB check is done and nothing was wrong."
     run run_hook
     assert_blocked
 }

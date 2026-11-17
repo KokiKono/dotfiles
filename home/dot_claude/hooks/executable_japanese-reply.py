@@ -41,7 +41,7 @@ ASKED_ENGLISH = re.compile(
 INJECTED = ("<task-notification", "<system-reminder")
 
 REASON = (
-    "このターンの返答に英語で書いた部分がありました。その部分を日本語で書き直してください"
+    "直前の返答が英語でした。同じ内容を日本語で書き直してください"
     "（コード・識別子・引用する出力は原文のままでよい）。"
 )
 
@@ -157,11 +157,11 @@ def main():
     prompt, texts = last_turn(data.get("transcript_path") or "")
     if ASKED_ENGLISH.search(prompt):
         return
-    # 最後の返答がまだトランスクリプトに書き出されていないことがあるので、入力の分も見る
-    last = data.get("last_assistant_message")
-    if last and last not in texts:
-        texts.append(last)
-    if any(is_english(t) for t in texts):
+    # 判定するのは最後の返答だけ。途中の英語の一言で止めると、日本語で書き終えた回答全体を
+    # 出し直させてしまい、しかも表示済みの英語は消えない。
+    # 最後の返答がまだトランスクリプトに書き出されていないことがあるので、入力の分を優先する
+    last = data.get("last_assistant_message") or (texts[-1] if texts else "")
+    if is_english(last):
         json.dump({"decision": "block", "reason": REASON}, sys.stdout, ensure_ascii=False)
 
 
