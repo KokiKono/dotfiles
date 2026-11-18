@@ -12,14 +12,17 @@ bare_double_brackets() {
     grep -nE '^[[:space:]]*(![[:space:]]*)?\[\[.*\]\][[:space:]]*;?[[:space:]]*(#.*)?$' "$@"
 }
 
-# zsh の path などは PATH と連動する特殊変数。ローカル変数として使うと PATH が書き換わり、
-# 以降のコマンドが command not found になる。見るのはローカル変数としての使い方
-# （local / read / for / printf -v / 文字列の代入）だけで、typeset -U path や
-# path=(... $path) のような PATH の編集は通す。コメント行は除く。
+# zsh の path などは PATH などと連動する特殊変数。ローカル変数として使うと PATH が書き換わり、
+# 以降のコマンドが command not found になる。起動ファイルでの PATH の編集
+# （typeset -U path、自分を参照する path=(... $path)）とコメント行は通す。
 zsh_special_path_vars() {
-    local v='(path|fpath|cdpath|manpath|module_path)' id='[A-Za-z_][A-Za-z0-9_]*'
-    grep -HnE "\b(local|read)\b[^#]*[[:space:]]$v([[:space:]=]|\$)|(^|[^-.A-Za-z0-9_\$])$v=([^(]|\$)|\bfor([[:space:]]+$id)*[[:space:]]+$v([[:space:]]+$id)*[[:space:]]+in\b|-v[[:space:]]+$v\b" "$@" \
-        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'
+    local v='(path|fpath|cdpath|manpath|module_path|mailpath|psvar)' id='[A-Za-z_][A-Za-z0-9_]*' st
+    grep -HnE "\b(local|read|typeset|declare|integer|private)\b[^#;|&]*[[:space:]]$v([[:space:]=]|\$)|(^|[^-.A-Za-z0-9_\$])$v=|\b(for|foreach)([[:space:]]+$id)*[[:space:]]+$v([[:space:]]+$id)*[[:space:]]*(\(|in\b)|-v[[:space:]]+$v\b" "$@" \
+        | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#|\btypeset[[:space:]]+-[A-Za-z]*U[A-Za-z]*[[:space:]]+$v[[:space:]]*\$|$v=\(.*\\$\{?$v\b"
+    st=("${PIPESTATUS[@]}")
+    # 前の grep のエラー（2）を後ろの grep -v の 1 で隠さない
+    [ "${st[0]}" -le 1 ] || return 2
+    return "${st[1]}"
 }
 
 # grep は見つからないとき 1、エラーのとき 2 を返す。2 で通さない
@@ -27,23 +30,31 @@ assert_no_hits() {
     [ "$status" -eq 1 ] || { echo "$output"; false; }
 }
 
-@test "lint: detectors catch the known bad patterns" {
+# 当たった行の行番号を空白区切りで出す
+hit_lines() {
+    printf '%s\n' "${lines[@]}" | sed -E 's/^([^:]+:)?([0-9]+):.*/\2/' | tr '\n' ' ' | sed 's/ $//'
+}
+
+@test "lint: detectors catch the known bad patterns and only those" {
     bad="${BATS_TEST_TMPDIR}/bad"
     printf '%s\n' '    [[ "$output" == *x* ]]' '    [[ -n "$a" ]] || false' '    [[ a ]] # c' '    [[ a ]];' \
         '    ! [[ a ]]' '    [[ a ]] && b' >"$bad.bats"
     run bare_double_brackets "$bad.bats"
-    [ "${#lines[@]}" -eq 4 ]
+    [ "$(hit_lines)" = "1 3 4 5" ]
 
     printf '%s\n' 'local path="$1"' 'local repo path' 'for path in a b; do' 'path=/tmp' 'read -r st path' \
-        'for k path in x; do' 'printf -v path %s x' 'x=$(path=$1; echo)' >"$bad.zsh"
-    run zsh_special_path_vars "$bad.zsh"
-    [ "${#lines[@]}" -eq 8 ]
-
-    printf '%s\n' 'local file_path="$1"' 'echo $path' 'local p="$path"' 'typeset -U path' \
+        'for k path in x; do' 'printf -v path %s x' 'x=$(path=$1; echo)' 'typeset -a path' \
+        'for path ($files); do' 'path=("$1" "$2")' 'local mailpath' \
+        'local file_path="$1"' 'echo $path' 'local p="$path"' 'typeset -U path' \
         'path=(/opt/bin $path)' 'fpath=(~/.zfunc $fpath)' '  # local path は使わない' \
-        'wt --config-set "worktree-path=x"' >"$bad.ok.zsh"
-    run zsh_special_path_vars "$bad.ok.zsh"
-    assert_no_hits
+        'wt --config-set "worktree-path=x"' 'local msg; msg="see path here"' >"$bad.zsh"
+    run zsh_special_path_vars "$bad.zsh"
+    [ "$(hit_lines)" = "1 2 3 4 5 6 7 8 9 10 11 12" ]
+}
+
+@test "lint: a grep error is not reported as no hits" {
+    run zsh_special_path_vars "${BATS_TEST_TMPDIR}/does-not-exist"
+    [ "$status" -eq 2 ]
 }
 
 @test "lint: bats assertions written as a bare [[ ]] line end with || false" {

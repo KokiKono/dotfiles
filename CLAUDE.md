@@ -380,9 +380,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     レコードしか読まないので、一覧が 1 件に化ける。`files.zsh` は間に `tr '\0' '\n'` を挟む。
   - **`path` という変数名を使わない。** zsh の `$path` は `PATH` と連動する特殊変数で、
     ローカル変数に使うと以降の `tr` / `wc` が command not found になる。`fpath` / `cdpath` /
-    `manpath` / `module_path` も同じで、`tests/lint/conventions.bats` が `home/` の zsh を見張っている。
-    見るのはローカル変数としての使い方（`local` / `read` / `for` / `printf -v` / 文字列の代入）だけで、
-    `typeset -U path` や `path=(... $path)` のような PATH の編集は通す。
+    `manpath` などの連動する配列も同じで、`tests/lint/conventions.bats` が `home/` の zsh を見張っている。
   - **rename は旧パスも `show.zsh` に渡す**（一覧の 3 列目）。片方だけだと git が rename と
     判定せず、中身が変わっていないファイルが「全行追加」に見える。
   - `fzf` の絞り込みは切らない（hello-run と違い候補が数十件になる）。`ctrl-r` で取り直し、
