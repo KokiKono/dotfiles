@@ -225,7 +225,7 @@ post_report() {
     --model haiku --tools ToolSearch --allowedTools "mcp__claude_ai_Slack__slack_send_message" \
     --output-format json 2>&1)"
   if jq -e '.is_error == false and (.result | startswith("OK"))' >/dev/null 2>&1 <<<"$out"; then
-    log "Slack に報告を投稿した（$ch）"
+    log "Slack に報告を投稿した（${ch}）"
   else
     log "Slack への投稿に失敗: $( (jq -r '.result' <<<"$out" 2>/dev/null || printf '%s' "$out") | tail -3)"
   fi
@@ -264,7 +264,7 @@ main() {
     log "個人ルールの変更なし"
     rm -rf "$before"
   else
-    log "個人ルールの差分（変更前: $before）"
+    log "個人ルールの差分（変更前: ${before}）"
     (cd "$DATA/history" && diff -ruN "$(basename "$before")" "$(basename "$before").after")
   fi
   rm -rf "$before.after"
