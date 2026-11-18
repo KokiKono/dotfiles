@@ -119,6 +119,12 @@ JSON
     run bash "${STACK}" promote r1 b-hot mechanized
     [ "$status" -ne 0 ]
     bash "${STACK}" promote r1 b-hot
+    # 打ち間違えた status と、機械化の案が無いままの mechanized は受け付けない（ルールが黙って消えるため）
+    run bash "${STACK}" promote r1 b-hot mechanised
+    [ "$status" -ne 0 ]
+    run bash "${STACK}" promote r1 b-hot mechanized
+    [ "$status" -ne 0 ]
+    [ "$(jq -r '.[] | select(.id=="b-hot") | .status' "${REVIEW_INSIGHTS_HOME}/r1/backlog.json")" = "promoted" ]
     run bash "${STACK}" mechanize-set r1 b-hot regex x
     [ "$status" -ne 0 ]
     run bash "${STACK}" mechanize-set r1 b-hot ci ""
@@ -248,19 +254,21 @@ JSON
 @test "review-insights daily: report summarizes per-repo counts, failures and promoted rule changes" {
     export REVIEW_INSIGHTS_WORK="${BATS_TEST_TMPDIR}/work"
     mkdir -p "${REVIEW_INSIGHTS_WORK}"
-    # 実行前に promoted だったもの: b-gone（今回なくなる）、b-lint（チェックに置き換えた）、b-keep（残る）
-    before='[{"id":"b-gone","rule":"外したルール"},{"id":"b-lint","rule":"置き換えたルール"},{"id":"b-keep","rule":"残るルール"}]'
+    # 実行前に promoted だったもの: b-gone（今回なくなる）と b-keep（残る）。
+    # b-lint は前回の実行より後に、b-old はそれより前に、手で mechanized にしたもの
+    before='[{"id":"b-gone","rule":"外したルール"},{"id":"b-keep","rule":"残るルール"}]'
     jq 'map(if .id == "b-mine" then .status = "promoted" | .auto = true | .rule_final = "足したルール"
             | .mechanize = {"kind":"lint","how":"禁止する"} else . end)
         + [{"id":"b-keep","rule":"残るルール","status":"promoted","auto":true,"count":9},
-           {"id":"b-lint","rule":"置き換えたルール","status":"mechanized","auto":true,"count":4}]' \
+           {"id":"b-lint","rule":"置き換えたルール","status":"mechanized","mechanized_at":"2026-11-10T05:00:00Z"},
+           {"id":"b-old","rule":"前に置き換えたルール","status":"mechanized","mechanized_at":"2026-11-08T05:00:00Z"}]' \
         "${REVIEW_INSIGHTS_HOME}/r1/backlog.json" >"${BATS_TEST_TMPDIR}/b" && mv "${BATS_TEST_TMPDIR}/b" "${REVIEW_INSIGHTS_HOME}/r1/backlog.json"
 
     run bash -c "source '${DAILY}'
       : > \"\$REPORT\"
       report --arg r r1 '{repo: \$r, fetched: 60, deferred: 475}'
       report --arg r r1 --argjson a '{\"applied\":48,\"stacked\":9,\"dropped\":39,\"backlog_total\":396}' '{repo: \$r, apply: \$a}'
-      report_rule_changes r1 '$before'
+      report_rule_changes r1 '$before' 2026-11-09T00:03:00Z
       report --arg r r2 '{repo: \$r, fetched: 3, deferred: 0}'
       report_fail r2 '取り込みか分類に失敗した'
       report --arg r r2 --argjson a 'not json' '{repo: \$r, apply: \$a}'
@@ -273,6 +281,8 @@ JSON
     [[ "$output" == *"追加したルール（1 件）**"$'\n'"• [r1] 足したルール"* ]] || false
     [[ "$output" == *"外したルール（1 件）**"$'\n'"• [r1] 外したルール"* ]] || false
     [[ "$output" == *"チェックに置き換えたルール（1 件）**"$'\n'"• [r1] 置き換えたルール"* ]] || false
+    [[ "$output" != *"前に置き換えたルール"* ]] || false
+    [[ "$output" == *"チェックに置き換える候補（未対応）1 件"* ]] || false
     [[ "$output" == *"置き換えられそうなもの（1 件）**"$'\n'"• [r1] 足したルール"$'\n'"    → lint: 禁止する"* ]] || false
     [[ "$output" != *"残るルール"* ]] || false
 }

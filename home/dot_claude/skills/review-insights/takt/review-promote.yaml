@@ -22,6 +22,7 @@ steps:
       reject にするもの:
       - その PR 固有の話で、一般化すると意味がぼやける
       - agent-files/ か personal-rules.md に同じ意図の記述が既にある
+        （personal-rules.md の「チェックに置き換え済み」の節も含む。チェックで防いでいるので文章に戻さない）
       - 他の候補と同じことを言っている（どちらか 1 つだけを adopt する）
 
       adopt するときの書き方:

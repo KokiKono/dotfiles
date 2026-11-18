@@ -166,8 +166,7 @@ case "$cmd" in
       jq -c --arg h "b-$h" '. + {_id: $h}' <<<"$line"
     done | jq -s '.' > "$newsrc"
 
-    tmp="$(mktemp)"
-    jq --slurpfile new "$newsrc" --arg now "$now" '
+    update_bl --slurpfile new "$newsrc" --arg now "$now" '
       . as $bl
       | reduce $new[0][] as $n ($bl;
           ($n.merge_into // $n._id) as $id
@@ -183,7 +182,7 @@ case "$cmd" in
                     status:"stacked", count:1, first_seen:$now, last_seen:$now,
                     occurrences:[$n.evidence + {comment_ids: $n.comment_ids}]}]
             end)
-    ' "$BL" > "$tmp" && mv "$tmp" "$BL"
+    '
 
     render > /dev/null
     jq -nc --slurpfile s "$src" --slurpfile b "$BL" --argjson m "$MIN" --arg me "$ME" "$JQ_DEFS"'
@@ -201,9 +200,8 @@ case "$cmd" in
   decide)
     src="${3:-}"; [ -f "$src" ] || usage
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    tmp="$(mktemp)"
     # stacked でない id への判定は無視する。手で promote / reject 済みのものを cron が上書きしないように。
-    jq --slurpfile d "$src" --arg now "$now" --arg rules "$RULES_DIR" "$JQ_DEFS"'
+    update_bl --slurpfile d "$src" --arg now "$now" --arg rules "$RULES_DIR" "$JQ_DEFS"'
       ($d[0] | map({key: .id, value: .}) | from_entries) as $dec
       | map(if .status == "stacked" and $dec[.id] then
               $dec[.id] as $x
@@ -215,7 +213,7 @@ case "$cmd" in
                 else
                   .status = "rejected" | .auto = true | .reject_reason = $x.reason | .promoted_at = $now
                 end
-            else . end)' "$BL" > "$tmp" && mv "$tmp" "$BL"
+            else . end)'
     render > /dev/null
     render_rules
     jq -c --slurpfile d "$src" '[.[] | select(.id as $i | $d[0] | map(.id) | index($i)) | {id, status}]
@@ -239,8 +237,13 @@ case "$cmd" in
     ;;
   promote)
     id="${3:-}"; st="${4:-promoted}"; [ -n "$id" ] || usage
-    # mechanized は、チェックが入ったので文章のルールを外すという意味。昇格済みのものにだけ付ける
-    [ "$st" != mechanized ] || require_promoted "$id"
+    # すぐに rules を作り直すので、打ち間違えた status でルールが黙って消えないよう値を絞る
+    case "$st" in stacked|promoted|rejected|mechanized) ;; *) usage ;; esac
+    # mechanized は、チェックが入ったので文章のルールを外すという意味。機械化の案が付いた昇格済みのものにだけ付ける
+    if [ "$st" = mechanized ]; then
+      jq -e --arg id "$id" "$JQ_DEFS"'any(.[]; .id == $id and mech_pending)' "$BL" >/dev/null \
+        || { echo "機械化の案が付いた promoted のエントリではない（先に mechanize-set）: $id" >&2; exit 1; }
+    fi
     update_bl --arg id "$id" --arg st "$st" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       'map(if .id == $id then .status = $st | if $st == "mechanized" then .mechanized_at = $now else . end else . end)'
     render > /dev/null
