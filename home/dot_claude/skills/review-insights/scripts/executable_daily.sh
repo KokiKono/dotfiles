@@ -203,7 +203,8 @@ report_rule_changes() {
        mechanize: [$new[] | select(.mechanize) | "\(.rule)\n    → \(.mechanize.kind): \(.mechanize.how)"],
        mech_pending: ($bl | map(select(.status == "promoted" and .mechanize != null)) | length),
        replaced: [$bl[] | select(.status == "mechanized" and (.mechanized_at // "") > $since) | (.rule_final // .rule)],
-       removed: [$b[] | select(.id as $i | $ai | index($i) | not) | .rule]}'
+       removed: [$b[] | select(.id as $i | ($ai | index($i) | not)
+                  and ($bl | any(.id == $i and .status == "mechanized") | not)) | .rule]}'
 }
 
 # REPORT から Slack 向けの報告文を組み立てる。
