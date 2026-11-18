@@ -566,6 +566,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - PR の作者が自分の PR に付けた、スレッドへの返信でないコメント（レビュー用の解説や対応報告）は、
     `fetch-comments.sh` の `noise` で LLM に渡す前に落とす。triage でも noise になるが、量が多く `batch_limit` の枠を
     4 割ほど食っていた。書式ではなく作者で見るのは、解説や報告の書き方が人やツールごとに変わるため
+  - **lint・型・CI・API・テストで防げるルールには、promote が `mechanize`（`kind` / `how`）を付ける。**
+    文章のルールは繰り返し破られる（writing-retro の「日本語で」が文章では止まらず Stop hook にした）ので、
+    防げるものはチェックに置き換えていく。チェックが入るまでは文章のルールとしても載せ、入ったら
+    `stack.sh mechanized` で個人ルールから外す（二重管理をやめる）。候補は backlog.md と Slack の報告に出る
   - `paths:` 付きのルールは、ファイル本体を開かずに `gh pr diff` だけを読むレビューでは読み込まれない。
     そのため `check.sh` は glob の照合を自前（`paths.py match`）で行い、セッションの読み込みに頼らない
   - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。

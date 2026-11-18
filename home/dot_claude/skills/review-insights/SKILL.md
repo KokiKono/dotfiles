@@ -50,6 +50,24 @@ takt の作業ディレクトリは `~/.cache/review-insights/`（`~/.claude` �
   Slack に投稿する。本文は `daily.sh` が各段の結果（`~/.cache/review-insights/report.jsonl`）から組み立て、`claude -p`（haiku）には Slack 連携で投稿させるだけにする
 - 自動で載ったルールを外すときは `stack.sh promote <repo> <id> rejected` → `stack.sh rules <repo>`。
   一度 rejected / promoted にしたエントリは自動実行で上書きされない
+- `promote` は、lint・型・CI・API の設計・テストで機械的に防げるルールに `mechanize`（`kind` と `how`）を付ける。
+  文章のルールは守られないことがあるので、防げるものはチェックに置き換えていく。付いたルールも、チェックが入るまでは
+  個人ルールに載る。候補は backlog.md の「機械化の候補」と Slack の報告に出る
+
+## mechanize（文章のルールをチェックに置き換える）
+
+`/review-insights mechanize` と呼ばれたら、各リポジトリの機械化の候補を見せ、チェックを入れる作業に進む。
+
+```bash
+~/.claude/skills/review-insights/scripts/stack.sh mechanize <repo>
+```
+
+1. 候補ごとに、`how` の方法で本当に防げるか、対象リポジトリの既存の lint 設定や CI を読んで確かめる
+2. 業務リポジトリへの変更は hello-issue で issue にするか、そのリポジトリで PR にする。どちらにするかはユーザーに聞く
+3. チェックが既定ブランチに入ったら `stack.sh mechanized <repo> <id>` を実行する。そのルールは個人ルールから外れる
+   （文章とチェックの二重管理をやめる）。backlog には `mechanized_at` 付きで残る
+
+自動実行より前に昇格したルールには `mechanize` が付いていない。見直すときは `stack.sh mechanize <repo> <id> <kind> <how>` で後から付ける。
 
 ## check（差分を個人ルールに照らす）
 

@@ -14,6 +14,10 @@ usage:
   stack.sh promote <repo> <id> [status]     エントリを promoted（または rejected）にする
   stack.sh decide <repo> <decisions.json>   自動昇格の判定を backlog に反映し rules を再生成
   stack.sh rules <repo>                     個人ルール（~/.claude/rules/review-insights/auto-<repo>-*.md）を再生成
+  stack.sh mechanize <repo> [<id> <kind> <how>]
+                                            機械化の候補（チェックがまだ無いもの）を JSON で表示。
+                                            id を渡すと、昇格済みのルールに機械化の案を付ける
+  stack.sh mechanized <repo> <id>           チェックを入れたので、そのルールを個人ルールから外す
   stack.sh status <repo>                    件数サマリ
 
 昇格候補は count が promote_min（既定 3）以上のもの。self_login の PR に付いた指摘は 1 件で候補になる。
@@ -29,8 +33,10 @@ classified.json の形（配列）:
 
 decisions.json の形（配列）:
   {"id":"b-1a2b3c4d", "verdict":"adopt"|"reject", "section":"データ取得", "rule":"整えたルール 1 行",
-   "paths":["**/app/models/**/*.rb"], "reason":"reject の理由"}
+   "paths":["**/app/models/**/*.rb"], "reason":"reject の理由",
+   "mechanize":{"kind":"lint"|"type"|"ci"|"api"|"test", "how":"何を検出・禁止するか 1 行"}}
   paths が空のルールは横断ルールとして auto-<repo>-common.md に入る（always_max 件まで）。
+  mechanize は任意。付いたルールも、mechanized にするまでは個人ルールに載る。
 USAGE
   exit 2
 }
@@ -70,7 +76,11 @@ render() {
       (map(select(ready($m; $me))) | sort_by(-.count)) as $hot
       | (map(select(.status == "stacked" and (ready($m; $me) | not))) | sort_by(-.count)) as $cold
       | (map(select(.status == "promoted")) | sort_by(.rule)) as $done
+      | (map(select(.status == "promoted" and .mechanize and (.mechanized_at | not)))) as $mech
       | "## 昇格候補（" + ($m|tostring) + " 件以上、または自分の PR への指摘）\n\n" + (if ($hot|length) == 0 then "なし\n" else ($hot | map(fmt) | join("\n")) end)
+      + "\n## 機械化の候補（チェックを入れたら `stack.sh mechanized` で個人ルールから外す）\n\n"
+      + (if ($mech|length) == 0 then "なし\n" else ($mech | map("- `" + .id + "` " + (.rule_final // .rule)
+          + "\n  - " + .mechanize.kind + ": " + .mechanize.how) | join("\n") + "\n") end)
       + "\n## 観測中\n\n" + (if ($cold|length) == 0 then "なし\n" else ($cold | map(fmt) | join("\n")) end)
       + "\n## 昇格済み\n\n" + (if ($done|length) == 0 then "なし\n" else ($done | map("- " + .rule + " → `" + (.target_file // "?") + "`") | join("\n") + "\n") end)
     ' "$BL"
@@ -87,7 +97,7 @@ render_rules() {
   mkdir -p "$RULES_DIR"
   rm -f "$RULES_DIR/auto-$repo-"*.md
   jq -c --argjson max "$ALWAYS_MAX" '
-    map(select(.status == "promoted" and .auto == true))
+    map(select(.status == "promoted" and .auto == true and (.mechanized_at | not)))
     | (map(select((.paths // []) | length > 0)) | group_by(.paths | sort)
        | map({paths: .[0].paths, rules: .})) as $scoped
     | (map(select((.paths // []) | length == 0)) | sort_by(-.count, .promoted_at) | .[0:$max]) as $common
@@ -183,6 +193,7 @@ case "$cmd" in
               | if $x.verdict == "adopt" then
                   .status = "promoted" | .auto = true | .section = $x.section | .paths = ($x.paths // [])
                   | .rule_final = ($x.rule // .rule) | .promoted_to = $rules | .promoted_at = $now
+                  | if $x.mechanize then .mechanize = $x.mechanize else . end
                 else
                   .status = "rejected" | .auto = true | .reject_reason = $x.reason | .promoted_at = $now
                 end
@@ -193,6 +204,34 @@ case "$cmd" in
       | {promoted: map(select(.status=="promoted"))|length, rejected: map(select(.status=="rejected"))|length}' "$BL"
     ;;
   rules) render_rules; echo "$RULES_DIR" ;;
+  mechanize)
+    # 引数があれば、昇格済みのルールに機械化の案を後から付ける（自動実行より前に昇格したもの向け）
+    if [ -n "${3:-}" ]; then
+      id="$3"; kind="${4:-}"; how="${5:-}"
+      case "$kind" in lint|type|ci|api|test) ;; *) usage ;; esac
+      [ -n "$how" ] || usage
+      jq -e --arg id "$id" 'any(.[]; .id == $id and .status == "promoted")' "$BL" >/dev/null \
+        || { echo "promoted のエントリではない: $id" >&2; exit 1; }
+      tmp="$(mktemp)"
+      jq --arg id "$id" --arg k "$kind" --arg h "$how" \
+        'map(if .id == $id then .mechanize = {kind: $k, how: $h} else . end)' "$BL" > "$tmp" && mv "$tmp" "$BL"
+      render > /dev/null
+    fi
+    jq '[.[]| select(.status == "promoted" and .mechanize and (.mechanized_at | not))
+         | {id, rule: (.rule_final // .rule), target_file, paths, mechanize, count,
+            urls: (.occurrences | sort_by(.date) | reverse | .[0:3] | map(.url))}]' "$BL"
+    ;;
+  mechanized)
+    id="${3:-}"; [ -n "$id" ] || usage
+    jq -e --arg id "$id" 'any(.[]; .id == $id and .status == "promoted")' "$BL" >/dev/null \
+      || { echo "promoted のエントリではない: $id" >&2; exit 1; }
+    tmp="$(mktemp)"
+    jq --arg id "$id" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      'map(if .id == $id then .mechanized_at = $now else . end)' "$BL" > "$tmp" && mv "$tmp" "$BL"
+    render > /dev/null
+    render_rules
+    jq -c --arg id "$id" '.[] | select(.id == $id) | {id, status, mechanized_at, rule: (.rule_final // .rule)}' "$BL"
+    ;;
   promote)
     id="${3:-}"; st="${4:-promoted}"; [ -n "$id" ] || usage
     tmp="$(mktemp)"
@@ -206,6 +245,8 @@ case "$cmd" in
        stacked: (map(select(.status=="stacked"))|length),
        promote_ready: (map(select(ready($m; $me)))|length),
        promoted: (map(select(.status=="promoted"))|length),
+       mechanize_ready: (map(select(.status=="promoted" and .mechanize and (.mechanized_at | not)))|length),
+       mechanized: (map(select(.mechanized_at))|length),
        rejected: (map(select(.status=="rejected"))|length)}' "$BL"
     ;;
   *) usage ;;
