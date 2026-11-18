@@ -559,6 +559,13 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `check.sh` の select（haiku）が差分を見て選ぶ。`auto-` 以外のファイルには触らない。毎回 backlog から
     作り直すので、外すときは `stack.sh promote <repo> <id> rejected` → `stack.sh rules <repo>`。
     日ごとの差分はログの末尾、変更前の写しは `~/.claude/review-insights/history/` に残る
+  - **毎朝の結果は Slack に投稿する**（config.json の `slack_report_channel`。無ければ投稿しない）。
+    launchd からは Slack の token を持たないので、claude.ai の Slack 連携を `claude -p` 経由で使う。
+    件数を LLM に要約させると数字が変わりうるので、各段の結果を `$WORK/report.jsonl` に溜めて `format_report` が
+    jq で組み立て、claude には投稿だけをさせる。ログの文面を読み直さないので、ログの言い回しを変えても報告は壊れない
+  - PR の作者が自分の PR に付けた、スレッドへの返信でないコメント（レビュー用の解説や対応報告）は、
+    `fetch-comments.sh` の `noise` で LLM に渡す前に落とす。triage でも noise になるが、量が多く `batch_limit` の枠を
+    4 割ほど食っていた。書式ではなく作者で見るのは、解説や報告の書き方が人やツールごとに変わるため
   - `paths:` 付きのルールは、ファイル本体を開かずに `gh pr diff` だけを読むレビューでは読み込まれない。
     そのため `check.sh` は glob の照合を自前（`paths.py match`）で行い、セッションの読み込みに頼らない
   - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。

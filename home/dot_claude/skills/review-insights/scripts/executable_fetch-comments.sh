@@ -45,6 +45,11 @@ def noise:
   or ((.body // "") | test("Expo preview is ready"))
   or ((.body // "") | test("翻訳自動修正レポート|翻訳ファイルのテストが失敗しています"))
   or ((.body // "") | test("<!-- (auto-close-issues|dependencies-pr-|projectId:)"))
+  # 作者が自分の PR に付けた、インラインのスレッドへの返信でないコメント（レビュー用の解説や対応報告）。
+  # triage でも noise になるが、量が多く batch_limit の枠を食うので LLM に渡す前に落とす。
+  # 書式で拾わないのは、解説や報告の書き方が人やツールごとに変わるため。PR 全体へのコメントは
+  # in_reply_to_id を持たず分類でもスレッドに束ねられないので、作者の返信でも落とす
+  or (.pr_author != null and .author == .pr_author and .in_reply_to_id == null)
   or ((.body // "") | gsub("\\s";"") | length) < 10
   or ((.body // "") | test("^\\s*(lgtm|\\+1|:\\+1:|👍|🙏|🎉|ok|okです|ありがとうございます|ありがとうございました|確認しました|承知しました|対応しました|修正しました|なるほど|了解です)[。．!！~〜\\s]*$"; "i"));
 '
@@ -105,7 +110,7 @@ export -f fetch_pr
 cat "$tmp"/meta_*.json 2>/dev/null > "$tmp/prmeta.jsonl" || : > "$tmp/prmeta.jsonl"
 cat "$tmp"/rv_*.jsonl 2>/dev/null > "$tmp/review.jsonl" || : > "$tmp/review.jsonl"
 
-# 4) bot 除外 / ノイズ除去 / 既読除外 / PR メタ付与 / 時系列ソート
+# 4) bot 除外 / 既読除外 / PR メタ付与 / ノイズ除去 / 時系列ソート
 seen="$("$HERE/state.sh" get "$repo" | jq -c '.seen_ids')"
 excl="$(jq -c '.exclude_authors' "$CONF")"
 
@@ -114,12 +119,12 @@ cat "$tmp/inline.jsonl" "$tmp/issue.jsonl" "$tmp/review.jsonl" \
        --slurpfile meta <(jq -s 'unique_by(.pr)' "$tmp/prmeta.jsonl") "$jqlib"'
   select((.author as $a | $excl | index($a)) == null)
   | select((.id as $i | $seen | index($i)) == null)
-  | select(noise | not)
-  | .source = (if .author == $bot then "claude-review" else "human" end)
   | . as $c
   | . + (($meta[0] // []) | map(select(.pr == $c.pr)) | first // {pr_author:null, pr_title:null})
   | del(.pr)
   | .pr = $c.pr
+  | select(noise | not)
+  | .source = (if .author == $bot then "claude-review" else "human" end)
 ' | jq -s 'sort_by(.updated_at)' > "$tmp/all.json"
 
 total="$(jq 'length' "$tmp/all.json")"
