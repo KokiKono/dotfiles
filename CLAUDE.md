@@ -557,7 +557,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     ルールファイルの `paths:` を写して先頭に `**/` を付ける（hello-run のセッションは worktree が 1 段深いので）。
     ルート向けの横断ルールだけは `auto-<repo>-common.md` に `always_max` 件まで常時読ませ、残りは
     `check.sh` の select（haiku）が差分を見て選ぶ。`auto-` 以外のファイルには触らない。毎回 backlog から
-    作り直すので、外すときは `stack.sh promote <repo> <id> rejected` → `stack.sh rules <repo>`。
+    作り直すので、外すときは `stack.sh promote <repo> <id> rejected`（個人ルールのファイルも作り直す）。
     日ごとの差分はログの末尾、変更前の写しは `~/.claude/review-insights/history/` に残る
   - **毎朝の結果は Slack に投稿する**（config.json の `slack_report_channel`。無ければ投稿しない）。
     launchd からは Slack の token を持たないので、claude.ai の Slack 連携を `claude -p` 経由で使う。
@@ -569,7 +569,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **lint・型・CI・API・テストで防げるルールには、promote が `mechanize`（`kind` / `how`）を付ける。**
     文章のルールは繰り返し破られる（writing-retro の「日本語で」が文章では止まらず Stop hook にした）ので、
     防げるものはチェックに置き換えていく。チェックが入るまでは文章のルールとしても載せ、入ったら
-    `stack.sh mechanized` で個人ルールから外す（二重管理をやめる）。候補は backlog.md と Slack の報告に出る
+    `stack.sh promote <repo> <id> mechanized` で個人ルールから外す（二重管理をやめる）。候補は backlog.md と Slack の報告に出る
   - `paths:` 付きのルールは、ファイル本体を開かずに `gh pr diff` だけを読むレビューでは読み込まれない。
     そのため `check.sh` は glob の照合を自前（`paths.py match`）で行い、セッションの読み込みに頼らない
   - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。

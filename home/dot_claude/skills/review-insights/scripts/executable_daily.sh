@@ -111,9 +111,6 @@ validate_decisions() {
   jq -e -n --slurpfile c "$cand" --slurpfile d "$dec" '
     ($d[0] | type) == "array"
     and ($d[0] | all(.verdict == "adopt" or .verdict == "reject"))
-    and ($d[0] | all(.mechanize == null
-                     or ((.mechanize.kind | IN("lint", "type", "ci", "api", "test"))
-                         and (.mechanize.how | type) == "string")))
     and (($d[0] | map(.id) | sort) == ($c[0] | map(.id) | sort))' >/dev/null
 }
 
@@ -181,20 +178,23 @@ promote_repo() {
 # 書き出したルールファイルを比べないのは、common が always_max で切られて押し出されたルールまで
 # 「外した」と数えてしまうため
 promoted_rules() {
-  jq -c '[.[] | select(.status == "promoted" and .auto == true and (.mechanized_at | not))
-          | {id, rule: (.rule_final // .rule), mechanize}]' \
+  jq -c '[.[] | select(.status == "promoted" and .auto == true) | {id, rule: (.rule_final // .rule), mechanize}]' \
     "$DATA/$1/backlog.json" 2>/dev/null || echo '[]'
 }
 
+# 外れたルールは、チェックに置き換えたもの（mechanized）とそれ以外に分けて報告する
 report_rule_changes() {
-  local repo="$1" before="$2"
-  report --arg r "$repo" --argjson b "$before" --argjson a "$(promoted_rules "$repo")" '
+  local repo="$1" before="$2" mz
+  mz="$(jq -c '[.[] | select(.status == "mechanized") | .id]' "$DATA/$repo/backlog.json" 2>/dev/null || echo '[]')"
+  report --arg r "$repo" --argjson b "$before" --argjson a "$(promoted_rules "$repo")" --argjson mz "$mz" '
     ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
     | [$a[] | select(.id as $i | $bi | index($i) | not)] as $new
+    | [$b[] | select(.id as $i | $ai | index($i) | not)] as $gone
     | {repo: $r,
        added: [$new[] | .rule],
        mechanize: [$new[] | select(.mechanize) | "\(.rule)\n    → \(.mechanize.kind): \(.mechanize.how)"],
-       removed: [$b[] | select(.id as $i | $ai | index($i) | not) | .rule]}'
+       replaced: [$gone[] | select(.id as $i | $mz | index($i)) | .rule],
+       removed: [$gone[] | select(.id as $i | $mz | index($i) | not) | .rule]}'
 }
 
 # REPORT から Slack 向けの報告文を組み立てる。
@@ -209,10 +209,12 @@ format_report() {
       else empty end;
     def bullets($k): [.[] | .repo as $r | (.[$k] // [])[] | "• [\($r)] \(.)"];
     bullets("added") as $add | bullets("removed") as $rem | bullets("mechanize") as $mech
+    | bullets("replaced") as $rep
     | "**review-insights 日次レポート**" + (if any(.[]; .error) then " :warning: 失敗あり" else "" end),
       (group_by(.repo)[] | "\n**\(.[0].repo)**" + ([.[] | line | "\n  • " + .] | add // "")),
       "\n**追加したルール（\($add | length) 件）**\n" + (if $add == [] then "なし" else $add | join("\n") end),
       (if $mech == [] then empty else "\n**チェックに置き換えられそうなもの（\($mech | length) 件）**\n" + ($mech | join("\n")) end),
+      (if $rep == [] then empty else "\n**チェックに置き換えたルール（\($rep | length) 件）**\n" + ($rep | join("\n")) end),
       (if $rem == [] then empty else "\n**外したルール（\($rem | length) 件）**\n" + ($rem | join("\n")) end)
   ' "$REPORT"
 }

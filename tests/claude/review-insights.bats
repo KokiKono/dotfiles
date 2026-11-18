@@ -92,33 +92,40 @@ JSON
 
 @test "review-insights mechanize: adopted rules keep the prose until mechanized" {
     # チェックが入るまでは文章のルールも残し、入ったら文章の方を外す（二重管理をやめる）
+    # 形の崩れた mechanize は捨てるが、ルールの採用は止めない
     printf '[{"id":"b-hot","verdict":"adopt","section":"S","rule":"R-hot","paths":[],
-              "mechanize":{"kind":"lint","how":"禁止する"}}]' >"${BATS_TEST_TMPDIR}/d.json"
+              "mechanize":{"kind":"lint","how":"禁止する"}},
+             {"id":"b-mine","verdict":"adopt","section":"S","rule":"R-mine","paths":["**/a/**"],
+              "mechanize":{"kind":"grep"}}]' >"${BATS_TEST_TMPDIR}/d.json"
     bash "${STACK}" decide r1 "${BATS_TEST_TMPDIR}/d.json"
     grep -qxF -- '- R-hot' "${RULES_DIR}/auto-r1-common.md"
     grep -qxF -- '  - lint: 禁止する' "${REVIEW_INSIGHTS_HOME}/r1/backlog.md"
+    [ "$(jq -c '.[] | select(.id=="b-mine") | [.status, .mechanize]' "${REVIEW_INSIGHTS_HOME}/r1/backlog.json")" = '["promoted",null]' ]
     run bash "${STACK}" mechanize r1
     [ "$(jq -r 'map(.id) | join(",")' <<<"$output")" = "b-hot" ]
 
-    bash "${STACK}" mechanized r1 b-hot
-    run ls "${RULES_DIR}"/auto-r1-*.md
+    bash "${STACK}" promote r1 b-hot mechanized
+    run ls "${RULES_DIR}/auto-r1-common.md"
     [ "$status" -ne 0 ]
     run bash "${STACK}" mechanize r1
     [ "$output" = "[]" ]
-    [ "$(jq -r '.[] | select(.id=="b-hot") | .status' "${REVIEW_INSIGHTS_HOME}/r1/backlog.json")" = "promoted" ]
+    [ "$(jq -r '.[] | select(.id=="b-hot") | .status' "${REVIEW_INSIGHTS_HOME}/r1/backlog.json")" = "mechanized" ]
+    grep -qxF -- '- R-hot → lint: 禁止する' "${REVIEW_INSIGHTS_HOME}/r1/backlog.md"
 }
 
 @test "review-insights mechanize: can be attached later only to promoted rules" {
-    run bash "${STACK}" mechanize r1 b-hot lint x
+    run bash "${STACK}" mechanize-set r1 b-hot lint x
     [ "$status" -ne 0 ]
-    run bash "${STACK}" mechanized r1 b-hot
+    run bash "${STACK}" promote r1 b-hot mechanized
     [ "$status" -ne 0 ]
     bash "${STACK}" promote r1 b-hot
-    run bash "${STACK}" mechanize r1 b-hot regex x
+    run bash "${STACK}" mechanize-set r1 b-hot regex x
     [ "$status" -ne 0 ]
-    run bash "${STACK}" mechanize r1 b-hot ci "差分を落とす"
+    run bash "${STACK}" mechanize-set r1 b-hot ci ""
+    [ "$status" -ne 0 ]
+    run bash "${STACK}" mechanize-set r1 b-hot ci "差分を落とす"
     [ "$status" -eq 0 ]
-    [ "$(jq -c '.[0].mechanize' <<<"$output")" = '{"kind":"ci","how":"差分を落とす"}' ]
+    [ "$(jq -c '.mechanize' <<<"$output")" = '{"kind":"ci","how":"差分を落とす"}' ]
 }
 
 @test "review-insights rules: rejecting the last rule removes its file and keeps others" {
@@ -201,15 +208,9 @@ JSON
     printf '[{"id":"a"},{"id":"b"}]' >"${BATS_TEST_TMPDIR}/c.json"
     printf '[{"id":"a","verdict":"adopt"},{"id":"b","verdict":"reject"}]' >"${BATS_TEST_TMPDIR}/ok.json"
     printf '[{"id":"a","verdict":"adopt"}]' >"${BATS_TEST_TMPDIR}/ng.json"
-    printf '[{"id":"a","verdict":"adopt","mechanize":{"kind":"lint","how":"x"}},{"id":"b","verdict":"reject"}]' >"${BATS_TEST_TMPDIR}/mok.json"
-    printf '[{"id":"a","verdict":"adopt","mechanize":{"kind":"grep"}},{"id":"b","verdict":"reject"}]' >"${BATS_TEST_TMPDIR}/mng.json"
     run bash -c "source '${DAILY}'; validate_decisions '${BATS_TEST_TMPDIR}/c.json' '${BATS_TEST_TMPDIR}/ok.json'"
     [ "$status" -eq 0 ]
     run bash -c "source '${DAILY}'; validate_decisions '${BATS_TEST_TMPDIR}/c.json' '${BATS_TEST_TMPDIR}/ng.json'"
-    [ "$status" -ne 0 ]
-    run bash -c "source '${DAILY}'; validate_decisions '${BATS_TEST_TMPDIR}/c.json' '${BATS_TEST_TMPDIR}/mok.json'"
-    [ "$status" -eq 0 ]
-    run bash -c "source '${DAILY}'; validate_decisions '${BATS_TEST_TMPDIR}/c.json' '${BATS_TEST_TMPDIR}/mng.json'"
     [ "$status" -ne 0 ]
 }
 
@@ -247,11 +248,12 @@ JSON
 @test "review-insights daily: report summarizes per-repo counts, failures and promoted rule changes" {
     export REVIEW_INSIGHTS_WORK="${BATS_TEST_TMPDIR}/work"
     mkdir -p "${REVIEW_INSIGHTS_WORK}"
-    # 実行前に promoted だったもの: b-gone（今回なくなる）と b-keep（残る）
-    before='[{"id":"b-gone","rule":"外したルール"},{"id":"b-keep","rule":"残るルール"}]'
+    # 実行前に promoted だったもの: b-gone（今回なくなる）、b-lint（チェックに置き換えた）、b-keep（残る）
+    before='[{"id":"b-gone","rule":"外したルール"},{"id":"b-lint","rule":"置き換えたルール"},{"id":"b-keep","rule":"残るルール"}]'
     jq 'map(if .id == "b-mine" then .status = "promoted" | .auto = true | .rule_final = "足したルール"
             | .mechanize = {"kind":"lint","how":"禁止する"} else . end)
-        + [{"id":"b-keep","rule":"残るルール","status":"promoted","auto":true,"count":9}]' \
+        + [{"id":"b-keep","rule":"残るルール","status":"promoted","auto":true,"count":9},
+           {"id":"b-lint","rule":"置き換えたルール","status":"mechanized","auto":true,"count":4}]' \
         "${REVIEW_INSIGHTS_HOME}/r1/backlog.json" >"${BATS_TEST_TMPDIR}/b" && mv "${BATS_TEST_TMPDIR}/b" "${REVIEW_INSIGHTS_HOME}/r1/backlog.json"
 
     run bash -c "source '${DAILY}'
@@ -270,6 +272,7 @@ JSON
     [[ "$output" == *":warning: 取り込みか分類に失敗した"* ]] || false
     [[ "$output" == *"追加したルール（1 件）**"$'\n'"• [r1] 足したルール"* ]] || false
     [[ "$output" == *"外したルール（1 件）**"$'\n'"• [r1] 外したルール"* ]] || false
+    [[ "$output" == *"チェックに置き換えたルール（1 件）**"$'\n'"• [r1] 置き換えたルール"* ]] || false
     [[ "$output" == *"置き換えられそうなもの（1 件）**"$'\n'"• [r1] 足したルール"$'\n'"    → lint: 禁止する"* ]] || false
     [[ "$output" != *"残るルール"* ]] || false
 }
