@@ -93,7 +93,8 @@ Scripts are idempotent and skip gracefully when a prerequisite (brew/nodenv/code
   errexit が `[[ ]]` の失敗で止まらないので、行末以外の `[[ ]]` は失敗しても ok になる
   （`[ ... ]` は止まる）。`|| false` を付けること。これを知らずに書いた assertion が
   90 箇所近くあり、付けて初めて 1 件が本当に落ちた。`tests/lint/conventions.bats` が、行全体が
-  `[[ ]]` で `|| false` の無い行を見張っている（行末の 1 行でも付ける）。
+  `[[ ]]` で `|| false` の無い行を見張っている（行末の 1 行でも付ける）。複数行にまたがる `[[ ]]` は
+  検査できないので、1 行に収めること。
 - **`@test` titles must be ASCII** — bats mangles multibyte (Japanese) test names. Keep Japanese in comments only.
 
 ## Bootstrapping a new machine
@@ -380,6 +381,8 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **`path` という変数名を使わない。** zsh の `$path` は `PATH` と連動する特殊変数で、
     ローカル変数に使うと以降の `tr` / `wc` が command not found になる。`fpath` / `cdpath` /
     `manpath` / `module_path` も同じで、`tests/lint/conventions.bats` が `home/` の zsh を見張っている。
+    見るのはローカル変数としての使い方（`local` / `read` / `for` / `printf -v` / 文字列の代入）だけで、
+    `typeset -U path` や `path=(... $path)` のような PATH の編集は通す。
   - **rename は旧パスも `show.zsh` に渡す**（一覧の 3 列目）。片方だけだと git が rename と
     判定せず、中身が変わっていないファイルが「全行追加」に見える。
   - `fzf` の絞り込みは切らない（hello-run と違い候補が数十件になる）。`ctrl-r` で取り直し、
