@@ -11,36 +11,36 @@ bare_double_brackets() {
     grep -nE '^[[:space:]]*\[\[.*\]\][[:space:]]*$' "$@"
 }
 
-# zsh の path / fpath / cdpath / manpath / module_path は PATH などと連動する特殊変数。
-# ローカル変数に使うと PATH が書き換わり、以降のコマンドが command not found になる。
+# zsh の path などは PATH と連動する特殊変数。ローカル変数に使うと PATH が書き換わり、
+# 以降のコマンドが command not found になる。
 zsh_special_path_vars() {
-    grep -nE '\b(local|typeset|declare|integer|readonly)\b[^#]*[[:space:]](path|fpath|cdpath|manpath|module_path)([[:space:]=]|$)|\bfor[[:space:]]+(path|fpath|cdpath|manpath|module_path)[[:space:]]+in\b|(^|[;&|[:space:]])(path|fpath|cdpath|manpath|module_path)=' "$@"
+    local v='(path|fpath|cdpath|manpath|module_path)'
+    grep -nE "\b(local|typeset|declare|integer|readonly|read)\b[^#]*[[:space:]]$v([[:space:]=]|\$)|\bfor[[:space:]]+$v[[:space:]]+in\b|(^|[;&|[:space:]])$v=" "$@"
 }
 
-zsh_sources() {
-    find "${REPO_ROOT}/home" -type f \( -name '*.zsh' -o -name 'dot_zshrc' -o -name 'dot_zprofile' -o -name 'dot_zshenv' \)
+# grep は見つからないとき 1、エラーのとき 2 を返す。2 で通さない
+assert_no_hits() {
+    [ "$status" -eq 1 ] || { echo "$output"; false; }
 }
 
 @test "lint: detectors catch the known bad patterns" {
     bad="${BATS_TEST_TMPDIR}/bad"
     printf '    [[ "$output" == *x* ]]\n    [[ -n "$a" ]] || false\n' >"$bad.bats"
-    [ "$(bare_double_brackets "$bad.bats" | wc -l | tr -d ' ')" -eq 1 ]
+    run bare_double_brackets "$bad.bats"
+    [ "${#lines[@]}" -eq 1 ]
 
-    printf '%s\n' 'local path="$1"' 'local repo path' 'for path in a b; do' 'path=/tmp' \
+    printf '%s\n' 'local path="$1"' 'local repo path' 'for path in a b; do' 'path=/tmp' 'read -r st path' \
         'local file_path="$1"' 'echo $path' 'local p="$path"' >"$bad.zsh"
-    [ "$(zsh_special_path_vars "$bad.zsh" | wc -l | tr -d ' ')" -eq 4 ]
+    run zsh_special_path_vars "$bad.zsh"
+    [ "${#lines[@]}" -eq 5 ]
 }
 
 @test "lint: bats assertions written as a bare [[ ]] line end with || false" {
     run bare_double_brackets -r --include='*.bats' "${REPO_ROOT}/tests"
-    # grep は見つからないとき 1、エラーのとき 2 を返す。2 で通さない
-    [ "$status" -eq 1 ] || { echo "$output"; false; }
+    assert_no_hits
 }
 
 @test "lint: zsh sources never assign zsh's special path arrays" {
-    files="$(zsh_sources)"
-    [ -n "$files" ]
-    # shellcheck disable=SC2086
-    run zsh_special_path_vars $files
-    [ "$status" -eq 1 ] || { echo "$output"; false; }
+    run zsh_special_path_vars -r --include='*.zsh' --include='dot_z*' "${REPO_ROOT}/home"
+    assert_no_hits
 }
