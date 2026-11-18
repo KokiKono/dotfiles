@@ -190,11 +190,13 @@ promoted_rules() {
 # mechanized は朝の実行の合間に手で付けるので、実行の前後の比較では見えない。
 # 前回の実行（$3）より後に mechanized にしたものを、置き換えたルールとして報告する
 report_rule_changes() {
-  local repo="$1" before="$2" since="${3:-}" bl
-  bl="$(cat "$DATA/$repo/backlog.json" 2>/dev/null || echo '[]')"
+  local repo="$1" before="$2" since="${3:-}" bl="$DATA/$1/backlog.json"
+  [ -f "$bl" ] || bl=<(echo '[]')
+  # backlog は根拠ごと大きくなるので、引数ではなくファイルで渡す（引数長の上限を超えないように）
   report --arg r "$repo" --argjson b "$before" --argjson a "$(promoted_rules "$repo")" \
-    --argjson bl "$bl" --arg since "$since" '
-    ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
+    --slurpfile bls "$bl" --arg since "$since" '
+    $bls[0] as $bl
+    | ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
     | [$a[] | select(.id as $i | $bi | index($i) | not)] as $new
     | {repo: $r,
        added: [$new[] | .rule],
