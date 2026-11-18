@@ -46,6 +46,8 @@ takt の作業ディレクトリは `~/.cache/review-insights/`（`~/.claude` �
 - `auto-` で始まらないファイルと `~/.claude/rules/review-insights.md` は手書き用で、触らない
 - 実行ログは `~/.claude/review-insights/log/<日付>.log`。個人ルールが変わった日は末尾に `diff -u` が出る。
   変更前の写しは `history/` に 60 日残る
+- config.json に `slack_report_channel`（チャンネル ID）があれば、その回の件数と追加・削除したルールを
+  Slack に投稿する。本文は `daily.sh` が各段の結果（`~/.cache/review-insights/report.jsonl`）から組み立て、`claude -p`（haiku）には Slack 連携で投稿させるだけにする
 - 自動で載ったルールを外すときは `stack.sh promote <repo> <id> rejected` → `stack.sh rules <repo>`。
   一度 rejected / promoted にしたエントリは自動実行で上書きされない
 

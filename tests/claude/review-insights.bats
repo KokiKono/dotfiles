@@ -192,3 +192,78 @@ JSON
     run grep -qE '^\s+(model|provider):' "${REPO_ROOT}/${SKILL}"/takt/review-*.yaml
     [ "$status" -ne 0 ]
 }
+
+@test "review-insights fetch: drops the PR author's own comments unless they reply in a thread" {
+    # jqlib は fetch-comments.sh に埋め込まれているので、定義部分だけを抜き出して使う
+    f="${REPO_ROOT}/${SKILL}/scripts/executable_fetch-comments.sh"
+    lib="$(sed -n "/^jqlib='/,/^'\$/p" "$f" | sed '1s/^jqlib=.//;$d')"
+    run jq -nr "$lib"'
+      [{author:"a", pr_author:"a", in_reply_to_id:null,       body:"【1】配信失敗を先に記録する理由の解説です"},
+       {author:"a", pr_author:"a", in_reply_to_id:"inline:1", body:"ご指摘のとおりなので level を分けました"},
+       {author:"b", pr_author:"a", in_reply_to_id:null,       body:"この判定だと外部連携の店舗が漏れませんか"},
+       {author:"b", pr_author:null, in_reply_to_id:null,      body:"PR の情報が取れなかったときは落とさない"}]
+      | map(noise) | map(tostring) | join(",")'
+    [ "$status" -eq 0 ]
+    [ "$output" = "true,false,false,false" ]
+}
+
+@test "review-insights daily: report summarizes per-repo counts, failures and promoted rule changes" {
+    export REVIEW_INSIGHTS_WORK="${BATS_TEST_TMPDIR}/work"
+    mkdir -p "${REVIEW_INSIGHTS_WORK}"
+    # 実行前に promoted だったもの: b-gone（今回なくなる）と b-keep（残る）
+    before='[{"id":"b-gone","rule":"外したルール"},{"id":"b-keep","rule":"残るルール"}]'
+    jq 'map(if .id == "b-mine" then .status = "promoted" | .auto = true | .rule_final = "足したルール" else . end)
+        + [{"id":"b-keep","rule":"残るルール","status":"promoted","auto":true,"count":9}]' \
+        "${REVIEW_INSIGHTS_HOME}/r1/backlog.json" >"${BATS_TEST_TMPDIR}/b" && mv "${BATS_TEST_TMPDIR}/b" "${REVIEW_INSIGHTS_HOME}/r1/backlog.json"
+
+    run bash -c "source '${DAILY}'
+      : > \"\$REPORT\"
+      report --arg r r1 '{repo: \$r, fetched: 60, deferred: 475}'
+      report --arg r r1 --argjson a '{\"applied\":48,\"stacked\":9,\"dropped\":39,\"backlog_total\":396}' '{repo: \$r, apply: \$a}'
+      report_rule_changes r1 '$before'
+      report --arg r r2 '{repo: \$r, fetched: 3, deferred: 0}'
+      report_fail r2 '取り込みか分類に失敗した'
+      report --arg r r2 --argjson a 'not json' '{repo: \$r, apply: \$a}'
+      format_report"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"日次レポート** :warning: 失敗あり"* ]] || false
+    [[ "$output" == *"取得 60 件（持ち越し 475 件）"* ]] || false
+    [[ "$output" == *"backlog に積んだ 9 件 / 既出・指摘でないもの 39 件（backlog 計 396 件）"* ]] || false
+    [[ "$output" == *":warning: 取り込みか分類に失敗した"* ]] || false
+    [[ "$output" == *"追加したルール（1 件）**"$'\n'"• [r1] 足したルール"* ]] || false
+    [[ "$output" == *"外したルール（1 件）**"$'\n'"• [r1] 外したルール"* ]] || false
+    [[ "$output" != *"残るルール"* ]] || false
+}
+
+@test "review-insights daily: report is posted only when configured, and success needs an OK reply" {
+    stub="${BATS_TEST_TMPDIR}/claude"
+    cat >"$stub" <<STUB
+#!/bin/sh
+echo "\$@" >"${BATS_TEST_TMPDIR}/claude.args"; cat >"${BATS_TEST_TMPDIR}/claude.stdin"
+printf '{"is_error":false,"result":"%s"}' "\$(cat "${BATS_TEST_TMPDIR}/reply")"
+STUB
+    chmod +x "$stub"
+    export REVIEW_INSIGHTS_CLAUDE="$stub" REVIEW_INSIGHTS_WORK="${BATS_TEST_TMPDIR}/work"
+    mkdir -p "${REVIEW_INSIGHTS_WORK}"
+    echo '{"repo":"r1","fetched":0,"deferred":0}' >"${REVIEW_INSIGHTS_WORK}/report.jsonl"
+
+    run bash -c "source '${DAILY}'; post_report"
+    [ "$status" -eq 0 ]
+    [ ! -e "${BATS_TEST_TMPDIR}/claude.args" ]
+
+    jq '.slack_report_channel = "C123"' "${REVIEW_INSIGHTS_HOME}/config.json" >"${BATS_TEST_TMPDIR}/c" \
+        && mv "${BATS_TEST_TMPDIR}/c" "${REVIEW_INSIGHTS_HOME}/config.json"
+    echo OK >"${BATS_TEST_TMPDIR}/reply"
+    run bash -c "source '${DAILY}'; post_report"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Slack に報告を投稿した（C123）"* ]] || false
+    grep -q 'mcp__claude_ai_Slack__slack_send_message' "${BATS_TEST_TMPDIR}/claude.args"
+    grep -q -- '--tools ToolSearch' "${BATS_TEST_TMPDIR}/claude.args"
+    grep -q '取得 0 件' "${BATS_TEST_TMPDIR}/claude.stdin"
+
+    # 投稿できなくても claude は正常終了するので、返答で失敗を拾う
+    echo 'NG Slack に接続できない' >"${BATS_TEST_TMPDIR}/reply"
+    run bash -c "source '${DAILY}'; post_report"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Slack への投稿に失敗: NG Slack に接続できない"* ]] || false
+}
