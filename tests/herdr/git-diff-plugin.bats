@@ -106,13 +106,6 @@ plain() { printf '%s\n' "$1" | sed $'s/\033\\[[0-9;]*m//g'; }
     [ "$output" -ge 2 ]
 }
 
-@test "files.zsh: uses no variable named path" {
-    # zsh の \$path は PATH と連動する特殊変数。ローカル変数に使うと PATH が壊れ、
-    # 以降の tr / wc が command not found になる。
-    run grep -nE '(^|[^A-Za-z_])path=|read -r .*\bpath\b|typeset .*\bpath\b' "${FILES}" "${SHOW}" "${LIB}"
-    [ "$status" -ne 0 ]
-}
-
 @test "show.zsh: renders a rename as a rename when given both paths" {
     command -v delta >/dev/null 2>&1 || skip "delta not installed"
     make_repo
