@@ -338,7 +338,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
-             hello-search hello-manual-test hello-issue writing-retro pr-followup; do
+             hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -484,6 +484,27 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # public リポジトリなので、社名・org/repo 名・Notion の ID/URL が混入していないこと
     run grep -rniE 'hello-ai|auto_reserve|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-' \
         "${TESTHOME}/.claude/skills/hello-search"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: report-my-channel skill is deployed with its references" {
+    SKILL="${TESTHOME}/.claude/skills/report-my-channel"
+    for f in notion slack routine; do [ -f "${SKILL}/references/${f}.md" ]; done
+    [ -x "${SKILL}/scripts/local-routine.sh" ]
+    # 投稿先のチャンネル・ユーザー・DB は追跡外の設定に置く。chezmoi が配ってしまっていないこと
+    [ ! -e "${TESTHOME}/.claude/report-my-channel.local.json" ]
+    grep -q 'report-my-channel.local.json' "${SKILL}/SKILL.md"
+    # 起動したセッションが消えても動くよう、セッション内の定期実行に頼らないこと
+    grep -q 'CronCreate' "${SKILL}/references/routine.md"
+}
+
+@test "apply: report-my-channel skill leaks no workspace identifiers" {
+    # public リポジトリなので、社名・Slack のチャンネル/ユーザー ID・Notion の ID/URL が混入していないこと
+    SKILL="${TESTHOME}/.claude/skills/report-my-channel"
+    run grep -rniE 'hello-ai|helloincai|auto_reserve|gritinc|progrit|slack\.com/archives|app\.notion\.com|notion\.so|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-' "${SKILL}"
+    [ "$status" -ne 0 ]
+    # Slack の ID は大文字なので、大小を区別して探す（区別しないと 16 進の語まで拾う）
+    run grep -rnE '\b[CDGUW][0-9A-Z]{8,}\b' "${SKILL}"
     [ "$status" -ne 0 ]
 }
 
