@@ -76,6 +76,110 @@ run_fn() {
     [ "${ask_line}" -lt "${draw_line}" ]
 }
 
+# --- タブを閉じた issue の再開 --------------------------------------------------
+
+# issue-42 の worktree（repo_a、ブランチ issue-42/old-slug）だけが残り、タブは無い状態を作る。
+# 呼ばれたコマンドは calls に残す。gh と claude（slug 推定）は呼ばれたら印を付けるだけ。
+setup_resume() {
+    ROOT="${BATS_TEST_TMPDIR}/root"
+    SDIR="${ROOT}/.sessions/issue-42"
+    CALLS="${BATS_TEST_TMPDIR}/calls"
+    mkdir -p "${ROOT}/repo_a/.git" "${SDIR}"
+    git init -q -b issue-42/old-slug "${SDIR}/repo_a"
+    cat >"${STUB}/herdr" <<EOF
+#!/usr/bin/env bash
+echo "herdr \$*" >>"${CALLS}"
+case "\$1 \$2" in
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1"}]}}' ;;
+  "tab list") echo '{"result":{"tabs":[]}}' ;;
+  "tab create") echo '{"result":{"tab":{"tab_id":"w1:t9"},"root_pane":{"pane_id":"w1:p1"}}}' ;;
+  "pane split") echo '{"result":{"pane":{"pane_id":"w1:p2"}}}' ;;
+  *) echo '{}' ;;
+esac
+EOF
+    for c in gh claude wt; do
+        printf '#!/usr/bin/env bash\necho "%s $*" >>"%s"\n' "$c" "${CALLS}" >"${STUB}/$c"
+    done
+    chmod +x "${STUB}"/*
+    : >"${CALLS}"
+}
+
+run_resume() {
+    run env PATH="${STUB}:${PATH}" HERDR_ENV=1 HERDR_WORKSPACE_ID=w1 \
+        HELLO_RUN_ROOT="${ROOT}" HELLO_RUN_KB="${BATS_TEST_TMPDIR}/no-kb" \
+        CLAUDE_CONFIG_DIR="${BATS_TEST_TMPDIR}/claude" \
+        zsh -c "source '${HR}'; HELLO_RUN_REPOS=(repo_a); hello-run https://github.com/o/r/issues/42 --no-focus" </dev/null
+}
+
+@test "hello-run: reopens a closed tab from the worktree without gh or slug guessing" {
+    # タブだけ閉じた issue を開き直すたびに gh と haiku を待たされていた
+    setup_resume
+    run_resume
+    [ "$status" -eq 0 ]
+    run grep -E '^(gh|claude|wt) ' "${CALLS}"
+    [ "$status" -ne 0 ]
+    [[ "$(cat "${CALLS}")" == *"herdr tab create"*"--label issue-42"* ]] || false
+    # 会話の記録が無ければ新しい claude を起動する
+    run grep -- '--continue' "${CALLS}"
+    [ "$status" -ne 0 ]
+}
+
+@test "hello-run: continues the previous claude conversation when its log exists" {
+    setup_resume
+    local real enc
+    real="$(cd "${SDIR}" && pwd -P)"
+    enc="${real//[^A-Za-z0-9]/-}"
+    mkdir -p "${BATS_TEST_TMPDIR}/claude/projects/${enc}"
+    : >"${BATS_TEST_TMPDIR}/claude/projects/${enc}/s.jsonl"
+    run_resume
+    [ "$status" -eq 0 ]
+    grep -q -- 'herdr agent start issue-42 --kind claude --pane w1:p1 -- --continue' "${CALLS}"
+}
+
+@test "hello-run: resumes from another repo's worktree when the first one is gone" {
+    setup_resume
+    mv "${SDIR}/repo_a" "${SDIR}/repo_b"
+    mkdir -p "${ROOT}/repo_b/.git"
+    run env PATH="${STUB}:${PATH}" HERDR_ENV=1 HERDR_WORKSPACE_ID=w1 \
+        HELLO_RUN_ROOT="${ROOT}" HELLO_RUN_KB="${BATS_TEST_TMPDIR}/no-kb" \
+        CLAUDE_CONFIG_DIR="${BATS_TEST_TMPDIR}/claude" \
+        zsh -c "source '${HR}'
+          __hr_make_worktree() { echo \"make \${1:t} \$3\" >>'${CALLS}'; mkdir -p \"\$2/\${1:t}\"; }
+          HELLO_RUN_REPOS=(repo_a repo_b); hello-run https://github.com/o/r/issues/42 --no-focus" </dev/null
+    [ "$status" -eq 0 ]
+    run grep -E '^(gh|claude) ' "${CALLS}"
+    [ "$status" -ne 0 ]
+    # 消えた repo_a は、残っている repo_b と同じブランチで作り直す
+    grep -qx 'make repo_a issue-42/old-slug' "${CALLS}"
+}
+
+@test "hello-run: does not resume a session left by the same number in another repo" {
+    # 置き場は issue 番号だけで決まる。別リポジトリの会話を --continue で開かないこと
+    setup_resume
+    echo "https://github.com/o/other/issues/42" >"${SDIR}/.issue-url"
+    local real enc
+    real="$(cd "${SDIR}" && pwd -P)"
+    enc="${real//[^A-Za-z0-9]/-}"
+    mkdir -p "${BATS_TEST_TMPDIR}/claude/projects/${enc}"
+    : >"${BATS_TEST_TMPDIR}/claude/projects/${enc}/s.jsonl"
+    run_resume
+    [ "$status" -eq 0 ]
+    grep -q '^gh ' "${CALLS}"
+    run grep -- '--continue' "${CALLS}"
+    [ "$status" -ne 0 ]
+}
+
+@test "hello-run: still fetches the title when resuming with --prompt" {
+    setup_resume
+    run env PATH="${STUB}:${PATH}" HERDR_ENV=1 HERDR_WORKSPACE_ID=w1 \
+        HELLO_RUN_ROOT="${ROOT}" HELLO_RUN_KB="${BATS_TEST_TMPDIR}/no-kb" \
+        CLAUDE_CONFIG_DIR="${BATS_TEST_TMPDIR}/claude" \
+        zsh -c "source '${HR}'; HELLO_RUN_REPOS=(repo_a); hello-run https://github.com/o/r/issues/42 --no-focus --prompt" </dev/null
+    grep -q '^gh issue view 42' "${CALLS}"
+    run grep -E '^claude ' "${CALLS}"
+    [ "$status" -ne 0 ]
+}
+
 # --- workspace id の解決 -------------------------------------------------------
 
 # focused な workspace を持つ herdr を装う

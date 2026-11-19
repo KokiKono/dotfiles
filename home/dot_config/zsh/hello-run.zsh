@@ -399,16 +399,28 @@ __hr_find_tab() {
 
 __hr_tab_in_session() { __hz_tab_has_cwd_under "$@" }
 
-# __hr_start_agent <label> <pane> <plan:0|1>
+# __hr_has_conversation <dir>: <dir> を cwd にした claude の会話記録が残っていれば 0。
+# 記録の置き場は ~/.claude/projects/<dir の英数字以外を - にしたもの>/*.jsonl。
+__hr_has_conversation() {
+  emulate -L zsh
+  local -a logs
+  local dir=${1:A}
+  logs=("${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/${dir//[^A-Za-z0-9]/-}"/*.jsonl(N))
+  (( ${#logs} ))
+}
+
+# __hr_start_agent <label> <pane> <plan:0|1> [<continue:0|1>]
 # `agent start` は「入力可能になるまで」待つので、claude が初回の信頼確認ダイアログ
 # （新しいディレクトリで出る）で止まると起動済みでも非 0 を返す。その場合は agent 検出で
 # 起動成功とみなす。ペインの shell 起動中（agent_pane_busy）は数回リトライ。
 
 __hr_start_agent() {
   emulate -L zsh
-  local label=$1 main_pane=$2 plan=$3
-  local -a agent_args
-  (( plan )) && agent_args=(-- --permission-mode plan)
+  local label=$1 main_pane=$2 plan=$3 cont=${4:-0}
+  local -a claude_args agent_args
+  (( plan )) && claude_args+=(--permission-mode plan)
+  (( cont )) && claude_args+=(--continue)
+  (( ${#claude_args} )) && agent_args=(-- "${claude_args[@]}")
   integer attempt
   for (( attempt = 0; attempt < 10; attempt++ )); do
     herdr agent start "$label" --kind claude --pane "$main_pane" "${agent_args[@]}" >/dev/null 2>&1 \
@@ -608,7 +620,8 @@ hello-run() {
   [[ -n ${HERDR_ENV:-} ]] || { __hr_err "herdr 環境ではありません（HERDR_ENV が未設定）"; return 1; }
 
   local parsed="" repo="" num="" label="" sdir="" task=""
-  local tab_id="" tab_ws="" found cur_ws
+  local tab_id="" tab_ws="" found cur_ws branch=""
+  integer cont=0
   local panes="main / ${(j: / :)HELLO_RUN_REPOS}"
 
   if (( ! scratch )); then
@@ -618,7 +631,20 @@ hello-run() {
     label="issue-$num"
     sdir="$HELLO_RUN_ROOT/.sessions/issue-$num"
 
-    # 既存タブがあれば作り直さず切り替えるだけ（ブランチ名は worktree から読むので haiku 不要）。
+    # 前に作った worktree が残っていれば、ブランチ名はそこから読む（gh と haiku を待たない）。
+    # 読めなければ空のまま、新規と同じく推定する。置き場は番号だけで決まるので、
+    # .issue-url が別リポジトリの issue を指していたら使わない。--slug の指定は優先する。
+    local wr prev_url=""
+    [[ -r $sdir/.issue-url ]] && prev_url=$(<"$sdir/.issue-url")
+    if [[ -z $slug_arg && ( -z $prev_url || $prev_url == "https://github.com/$repo/issues/$num" ) ]]; then
+      for wr in "${HELLO_RUN_REPOS[@]}"; do
+        [[ -d "$sdir/$wr" ]] \
+          && branch=$(git -C "$sdir/$wr" symbolic-ref --quiet --short HEAD 2>/dev/null) \
+          && break
+      done
+    fi
+
+    # 既存タブがあれば作り直さず切り替えるだけ。
     # scratch は毎回新しい作業なので、この経路を通さず常に作る。
     cur_ws=$(__hr_workspace_id) || cur_ws=""
     if found=$(__hr_find_tab "$label"); then
@@ -626,11 +652,9 @@ hello-run() {
       tab_id=${found##*$'\t'}
     fi
     if [[ -n $tab_id && -d "$sdir/${HELLO_RUN_REPOS[1]}" ]]; then
-      local cur_branch
-      cur_branch=$(git -C "$sdir/${HELLO_RUN_REPOS[1]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
       __hr_ui_init "hello-run  ${repo}#${num}  — 既存のタブに切り替え"
       __hr_ui_box "$label" \
-        branch  "${cur_branch:-?}" \
+        branch  "${branch:-?}" \
         session "${sdir/#$HOME/~}" \
         tab     "$tab_id  ($panes)${${tab_ws:#$cur_ws}:+  @$tab_ws}"
       if (( focus )); then
@@ -640,6 +664,13 @@ hello-run() {
         herdr tab focus "$tab_id" >/dev/null
       fi
       return 0
+    fi
+
+    # タブだけ閉じた issue。会話の記録があれば claude を --continue で続きから開き、
+    # 初期プロンプトは訊かない。
+    if [[ -n $branch ]] && __hr_has_conversation "$sdir"; then
+      cont=1
+      [[ $prompt_mode == ask ]] && prompt_mode=no
     fi
   fi
 
@@ -680,14 +711,14 @@ hello-run() {
     __hr_ui_init "hello-run  scratch" \
       "ブランチ名を推定" "やりたいことを記録" "worktree を作成" "herdr タブを構成" "claude を起動"
   else
-    __hr_ui_init "hello-run  ${repo}#${num}" \
+    __hr_ui_init "hello-run  ${repo}#${num}${branch:+  — 既存の worktree で再開}" \
       "issue を取得" "ブランチ名を推定" "worktree を作成" "herdr タブを構成" "claude を起動"
   fi
 
   local tmpd
   tmpd=$(mktemp -d) || return 1
 
-  local title="" slug=$slug_arg branch=""
+  local title="" slug=$slug_arg
   if (( scratch )); then
     # 1. slug → ブランチ名と置き場（issue 番号に当たる鍵が無いので slug が名前になる）
     __hr_ui_begin 1
@@ -716,24 +747,32 @@ hello-run() {
     __hr_ui_detail "${sdir:t}/README.md"
     __hr_ui_done
   else
-    # 1. issue タイトル（取れなくても致命的ではない）
+    # 1. issue タイトル（取れなくても致命的ではない）。使うのは slug 推定と初期プロンプトだけ
     __hr_ui_begin 1
-    __hr_step "$tmpd/title" __hr_issue_title "$repo" "$num" && title=$(<"$tmpd/title")
-    title=${title%%$'\n'*}
-    __hr_ui_detail "${title:-（タイトルは取得できず）}"
+    if [[ -n $branch && $prompt_mode != yes ]]; then
+      __hr_ui_detail "再開なので省略"
+    else
+      __hr_step "$tmpd/title" __hr_issue_title "$repo" "$num" && title=$(<"$tmpd/title")
+      title=${title%%$'\n'*}
+      __hr_ui_detail "${title:-（タイトルは取得できず）}"
+    fi
     __hr_ui_done
 
     # 2. slug 推定 → ブランチ名（claude が無い / 失敗なら slug 無しにフォールバック）
-    branch="issue-$num"
     __hr_ui_begin 2
-    if [[ -n $slug ]]; then
-      __hr_ui_detail "指定された slug を使用"
-    elif [[ -n $title ]]; then
-      __hr_step "$tmpd/slug" __hr_slugify "$title" && slug=$(<"$tmpd/slug")
-      slug=${slug%%$'\n'*}
+    if [[ -n $branch ]]; then
+      __hr_ui_detail "$branch（既存の worktree）"
+    else
+      branch="issue-$num"
+      if [[ -n $slug ]]; then
+        __hr_ui_detail "指定された slug を使用"
+      elif [[ -n $title ]]; then
+        __hr_step "$tmpd/slug" __hr_slugify "$title" && slug=$(<"$tmpd/slug")
+        slug=${slug%%$'\n'*}
+      fi
+      [[ -n $slug ]] && branch="issue-$num/$slug"
+      __hr_ui_detail "$branch"
     fi
-    [[ -n $slug ]] && branch="issue-$num/$slug"
-    __hr_ui_detail "$branch"
     __hr_ui_done
   fi
 
@@ -795,8 +834,8 @@ hello-run() {
   # 5. claude 起動（＋任意の初期プロンプト）
   __hr_ui_begin 5
   __hr_ui_detail "起動を待っています"
-  if __hr_step "$tmpd/agent" __hr_start_agent "$label" "$main_pane" "$plan"; then
-    __hr_ui_detail "${main_pane}$( (( plan )) && print -n '  plan モード')"
+  if __hr_step "$tmpd/agent" __hr_start_agent "$label" "$main_pane" "$plan" "$cont"; then
+    __hr_ui_detail "${main_pane}$( (( plan )) && print -n '  plan モード')$( (( cont )) && print -n '  前回の会話を再開')"
     __hr_ui_done
   else
     __hr_ui_fail "$__HR_STEP_LOG"
