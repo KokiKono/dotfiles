@@ -74,6 +74,16 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/kb-checks.sh",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -121,6 +131,11 @@
             "command": "bash ~/.claude/hooks/review-before-pr.sh",
             "timeout": 10,
             "type": "command"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/kb-checks.sh",
+            "timeout": 60
           }
         ],
         "matcher": "Bash"
