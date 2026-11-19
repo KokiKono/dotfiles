@@ -1,6 +1,6 @@
 ---
 name: report-my-channel
-description: 指示された報告書（調査結果・状況まとめ・定期レポートなど）を作り、詳細を Notion の個人メモ DB に「種別 = AIレポート」のページとして書き、Slack の自分用メモチャンネルには自分をメンションした概要だけを投稿する。「〜をレポートして」「報告書にまとめて自分のチャンネルに流して」「memo チャンネルに報告して」「毎朝〜を報告して」「定期的にレポートして」「ルーティンにして」などと言われたときに使う。結果を Slack と Notion の両方に残したい話や、報告を定期実行にしたい話なら、スキル名を言われなくても使うこと。社内の資料を調べて答えるだけなら hello-search、他人に向けた Slack 文面の下書きなら my-voice を使う。
+description: 指示された報告書（調査結果・状況まとめ・定期レポートなど）を作り、詳細を Notion の個人メモ DB に「種別 = AIレポート」のページとして書き、Slack の自分用メモチャンネルには概要だけを投稿する。「〜をレポートして」「報告書にまとめて自分のチャンネルに流して」「memo チャンネルに報告して」「毎朝〜を報告して」「定期的にレポートして」「ルーティンにして」などと言われたときに使う。結果を Slack と Notion の両方に残したい話や、報告を定期実行にしたい話なら、スキル名を言われなくても使うこと。社内の資料を調べて答えるだけなら hello-search、他人に向けた Slack 文面の下書きなら my-voice を使う。
 argument-hint: "<報告してほしいこと> [毎朝9時 などの頻度] | run <依頼> | routines | setup"
 ---
 
@@ -13,7 +13,7 @@ Slack は通知を見て「今読むか、後でいいか」を決める場所�
 形の決まりは参照ファイルにある。書く直前に読む。`run` で読むのは最初の 2 つだけでよい。
 
 - `references/notion.md` — Notion のページの形（目次・図・外部リンク・見出しの色）
-- `references/slack.md` — Slack の投稿の形（優先度・装飾・メンション）
+- `references/slack.md` — Slack の投稿の形（優先度・装飾）
 - `references/routine.md` — 定期実行にするとき（§6 と `routines` のときだけ読む）
 
 ## 0. 設定を読む
@@ -23,7 +23,6 @@ Slack は通知を見て「今読むか、後でいいか」を決める場所�
 | キー | 意味 |
 |---|---|
 | `slack_channel_id` | 投稿先チャンネルの ID（`#memo-…` の ID） |
-| `slack_user_id` | メンションする自分の Slack ユーザー ID |
 | `database_url` | 個人メモ DB |
 | `data_source_url` | その data source（`collection://…`）。`notion-create-pages` の親に渡す |
 | `dry_run` | `true` なら Notion にも Slack にも書かず、書く内容を表示するだけ |
@@ -94,15 +93,14 @@ Notion が無いまま詳細を Slack に貼ると、概要だけに留める決
 ## setup モード
 
 1. Slack のチャンネルを `slack_search_channels` で名前から探し、ID を取る（既定は `memo-` で始まる自分のチャンネル）
-2. 自分の Slack ユーザー ID を取る（`slack_search_users` の説明に「current logged in user」として出ている）
-3. Notion の DB は hello-search / ubiquitous-language と同じ個人メモ DB を使う。
+2. Notion の DB は hello-search / ubiquitous-language と同じ個人メモ DB を使う。
    `~/.claude/hello-search.local.json` があれば `database_url` / `data_source_url` を流用してよいか聞く
-4. その data source を fetch し、`種別` に `AIレポート` の選択肢があるか確かめる。無ければ足してよいか聞く
-5. `~/.claude/report-my-channel.local.json` に書く。`dry_run` は最初 `true` にし、1 回ためしてから `false` にするよう勧める
+3. その data source を fetch し、`種別` に `AIレポート` の選択肢があるか確かめる。無ければ足してよいか聞く
+4. `~/.claude/report-my-channel.local.json` に書く。`dry_run` は最初 `true` にし、1 回ためしてから `false` にするよう勧める
 
 ## 守ること
 
 - **Slack に詳細を貼らない。** 長い表・全件の一覧・根拠の引用は Notion に置き、Slack には要点とリンクだけ
 - **投稿先は設定のチャンネルだけ。** 他のチャンネルや他人の DM には投稿しない
-- **社内の固有名詞・ID をこのスキルのファイルに書かない。** チャンネル ID・ユーザー ID・Notion の ID は
+- **社内の固有名詞・ID をこのスキルのファイルに書かない。** チャンネル ID・Notion の ID は
   追跡外の設定とルーティンのプロンプトにだけ置く。例が要るときは `○○` / `△△` にする

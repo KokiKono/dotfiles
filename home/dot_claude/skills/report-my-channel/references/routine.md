@@ -31,7 +31,6 @@ launchd は Mac がスリープ中なら起きたときにまとめて 1 回走�
 1. home/dot_claude/skills/report-my-channel/SKILL.md を読み、`run` として手順に従ってください
 2. 設定（~/.claude/report-my-channel.local.json の代わり）:
    - slack_channel_id: <値>
-   - slack_user_id: <値>
    - database_url: <値>
    - data_source_url: <値>
    - dry_run: false

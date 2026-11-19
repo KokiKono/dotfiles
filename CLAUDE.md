@@ -576,7 +576,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。
     勤務先の org・リポジトリ名と、レビューの中身そのものだから。`apply.bats` が配備と非混入を見る
 - **`home/dot_claude/skills/report-my-channel/`** は、頼まれた報告を作り、詳細を個人メモ DB に
-  `種別 = AIレポート` のページとして書き、自分用の Slack チャンネルには自分をメンションした概要と
+  `種別 = AIレポート` のページとして書き、自分用の Slack チャンネルには概要と
   Notion へのリンクだけを投稿するスキル。Slack は「今読むか後でいいか」を決める場所なので、
   優先度（🔴🟡🟢）を 1 行目に置き、詳細は貼らない。形は `references/{notion,slack}.md`。知っておくこと:
   - **定期実行はスキルを起動したセッションに頼らない。** セッションは閉じられる前提なので `/loop` や
@@ -589,7 +589,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - yomiyasu はこのリポジトリで管理しておらずクラウドに無いので、そこでは `references/notion.md` の
     書き方の項を代わりに当てさせる
   - **投稿先と DB は追跡しない** — `~/.claude/report-my-channel.local.json`（非追跡）に
-    `slack_channel_id` / `slack_user_id` / `database_url` / `data_source_url` / `dry_run`。
+    `slack_channel_id` / `database_url` / `data_source_url` / `dry_run`。
     `tests/claude/report-my-channel.bats` が local-routine.sh を、`apply.bats` が配備と ID の非混入を見る
 - **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
