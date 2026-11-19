@@ -14,6 +14,8 @@ and GitHub Actions CI. Modeled on https://zenn.dev/shunk031/articles/testable-do
 
 ```
 .chezmoiroot                       # contains "home" — the chezmoi source dir
+.claude/                           # このリポジトリ用の Claude 設定（配らない）: skills/apply-merged と hooks/after-merge.sh
+scripts/apply-merged.sh            # マージ済み PR の home/ の変更だけを、ライブを潰さずに $HOME へ apply する
 home/                              # chezmoi source (rendered into $HOME)
 ├── .chezmoi.yaml.tmpl             # prompts for name/email on init → chezmoi config data
 ├── dot_zshrc                      # → ~/.zshrc (thin loader: oh-my-zsh + sources dot_config/zsh/*.zsh)
@@ -59,6 +61,7 @@ tests/
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
+├── scripts/{apply-merged,after-merge}.bats # マージ後の apply のスクリプトと、それを呼ばせる hook
 ├── lint/conventions.bats          # CLAUDE.md の落とし穴（bats の [[ ]]、zsh の path 変数）を grep で検査
 └── files/apply.bats               # E2E: chezmoi apply into a throwaway HOME, assert output
 .github/workflows/ci.yml           # macOS CI: bats + apply E2E (weekly full setup)
@@ -69,6 +72,13 @@ tests/
 - `chezmoi apply` renders `home/` into `$HOME`. `dot_` → `.`, `*.tmpl` files are Go templates,
   `run_onchange_*` scripts execute when their rendered content changes.
 - Editing a file here does **not** take effect until `chezmoi apply` (unlike the old symlink model).
+- **マージした PR の反映は `scripts/apply-merged.sh <PR番号>`（スキル `apply-merged`）で行い、素の `chezmoi apply` は叩かない。**
+  理由は 2 つ。① chezmoi のソースはこのチェックアウトそのもので、作業中のブランチにいるとマージしていない変更まで配る
+  ② 下の「アプリが書き換えるファイル」は、丸ごと apply するとライブ側の変更が消える。スクリプトは origin/master を
+  一時的な worktree に出し、PR が `home/` で変えたファイルのうち、ライブが PR の前の内容のままのものだけを apply する。
+  それ以外は `conflict` として PR の前後の内容を残し、スキルが変更分だけをライブに足す。消したファイルと install
+  スクリプトは扱わない（報告するだけ）。Claude が `gh pr merge` を実行すると、プロジェクトの hook
+  （`.claude/hooks/after-merge.sh`）がこのスキルを呼ばせる。ブラウザでマージしたときは `/apply-merged <番号>`
 - `home/.chezmoi.yaml.tmpl` uses `promptStringOnce` for `name`/`email`; those flow into `dot_gitconfig.tmpl`.
 - `run_onchange_install.sh.tmpl` embeds a sha256 of each `install/**/*.sh` (via `glob`+`include`+`sha256sum`)
   so the install scripts re-run only when they change. It invokes them by
