@@ -53,6 +53,7 @@ tests/
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/pr-followup.bats        # unit tests for the after-PR hook and pr-followup's status script
+├── claude/kb-checks.bats          # unit tests for the hook that runs kb's checks after edits and before PRs
 ├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
@@ -608,7 +609,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   (`CLAUDE.md` — a one-line `@AGENTS.md` loader — and `AGENTS.md`, which holds the actual rules;
   Codex / Zed have their own at `home/dot_codex/AGENTS.md` / `home/dot_config/zed/AGENTS.md`),
   `settings.json` (permissions /
-  hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`, `pr-followup.sh`,
+  hooks / model / sandbox), `.mcp.json`, `statusline-command.sh`, `hooks/` (`review-before-pr.sh`, `pr-followup.sh`, `kb-checks.sh`,
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
@@ -640,6 +641,16 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
   - `gh pr create` を呼んだかの判定は `hooks/lib/gh-pr-create.sh` にあり、`review-before-pr.sh` と共有している。
     片方だけ直すと、レビューを求めた PR とフォローする PR がずれる
+- **`hooks/kb-checks.sh` は、kb の `checks/run`（レビューで繰り返す指摘を lint・差分のチェックにしたもの）を
+  Edit / Write の後と `gh pr create` の前に挟む。** 文章のルール（review-insights）は読み飛ばされるので、
+  防げるものは書いた直後に機械で止める。知っておくこと:
+  - **検査の中身と対象リポジトリは kb が持つ。** 業務の知見なのでこのリポジトリには入れず、hook は
+    `run` を呼ぶだけにしている。`run` は検査の無いリポジトリで 2 を返すので、hook はそのとき何もしない
+  - Edit の後は、編集したファイルの変えた行だけを見る（`run --only`）。編集は済んでいて止められないので、
+    `decision: block` の reason で違反を Claude に渡して直させる。`gh pr create` の前はブランチの変更全体を見て、
+    違反があれば deny する
+  - kb が無いマシンでは何もしない。`SKIP_KB_CHECKS=1`（claude を起動した環境で）で切れる。
+    `run` の置き場は `KB_CHECKS_RUN` で差し替えられ、テストはスタブを使う
 - **`hooks/japanese-reply.py`（Stop）は、ターンの最後の返答が英語なら止めて日本語で書き直させる。**
   `language: japanese` と `rules/writing.md` で何度指示しても英語の返答が続き、そのたびに「日本語で」と
   送り直していたため、送り直しを hook に任せている。知っておくこと:
