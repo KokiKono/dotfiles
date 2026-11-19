@@ -56,6 +56,7 @@ tests/
 ├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
+├── claude/report-my-channel.bats  # unit tests for the report-my-channel skill's local-routine.sh (launchd)
 ├── kb/autosave.bats               # unit tests for the kb autosave script
 ├── zsh/{hello-run,herdr-lib,dev-server}.bats # unit tests for the zsh modules (herdr を stub する)
 ├── lint/conventions.bats          # CLAUDE.md の落とし穴（bats の [[ ]]、zsh の path 変数）を grep で検査
@@ -574,6 +575,22 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     そのため `check.sh` は glob の照合を自前（`paths.py match`）で行い、セッションの読み込みに頼らない
   - **対象リポジトリの一覧と backlog は追跡しない**（`~/.claude/review-insights/config.json` など）。
     勤務先の org・リポジトリ名と、レビューの中身そのものだから。`apply.bats` が配備と非混入を見る
+- **`home/dot_claude/skills/report-my-channel/`** は、頼まれた報告を作り、詳細を個人メモ DB に
+  `種別 = AIレポート` のページとして書き、自分用の Slack チャンネルには自分をメンションした概要と
+  Notion へのリンクだけを投稿するスキル。Slack は「今読むか後でいいか」を決める場所なので、
+  優先度（🔴🟡🟢）を 1 行目に置き、詳細は貼らない。形は `references/{notion,slack}.md`。知っておくこと:
+  - **定期実行はスキルを起動したセッションに頼らない。** セッションは閉じられる前提なので `/loop` や
+    CronCreate は使わず、依頼・設定値・手順の在りかをすべてルーティンのプロンプトに持たせる
+  - **クラウドのルーティン（schedule スキル）を優先する。** プロンプトはこの public リポジトリの SKILL.md を
+    読ませ、追跡できない ID 類だけを直接書く。Mac のファイルや claude.ai に無い MCP が要る報告だけ
+    `scripts/local-routine.sh` で launchd に登録する（定義は `~/.claude/report-my-channel/routines/<slug>.md`、
+    非追跡）。手順は `references/routine.md`。
+    GitHub の org 横断検索（`gh search`）が要る報告は、claude.ai に GitHub を繋いでいない今はクラウドで動かせず、こちらになる
+  - yomiyasu はこのリポジトリで管理しておらずクラウドに無いので、そこでは `references/notion.md` の
+    書き方の項を代わりに当てさせる
+  - **投稿先と DB は追跡しない** — `~/.claude/report-my-channel.local.json`（非追跡）に
+    `slack_channel_id` / `slack_user_id` / `database_url` / `data_source_url` / `dry_run`。
+    `tests/claude/report-my-channel.bats` が local-routine.sh を、`apply.bats` が配備と ID の非混入を見る
 - **`dev-server`**（`home/dot_config/zsh/dev-server.zsh`、`dot_zshrc` が `hello-run.zsh` の後に
   source）は worktree ごとに dev サーバーを立てる CLI（`HERDR_ENV=1` 前提。`jq` / `lsof` / `curl`、
   アプリを選ばせるときだけ `fzf`）。`home/dot_claude/skills/dev-server/SKILL.md` は手順書をやめて、
@@ -612,7 +629,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -688,7 +705,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   search hints — workspace-specific, and this repo is PUBLIC),
   `~/.claude/hello-search.local.json` (the hello-search skill's Notion DB id and GitHub org —
   same reason), `~/.claude/hello-issue.local.json` (the hello-issue skill's target repo and GitHub Project —
-  same reason), `~/.claude/pr-followup.local.json` (the i18n bot logins pr-followup watches — same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
+  same reason), `~/.claude/pr-followup.local.json` (the i18n bot logins pr-followup watches — same reason), `~/.claude/report-my-channel.local.json` and `~/.claude/report-my-channel/` (the report-my-channel skill's Slack channel/user IDs, Notion DB and local routine definitions — same reason), `~/.claude/hello-manual-test.local.json` (the hello-manual-test skill's Notion
   parent, test store names and environment URLs — same reason),
   `~/.claude/writing-retro/` (the writing-retro skill's cursor and log — quotes from work sessions),
   `~/.claude/rules/` (`writing.md` written by the writing-retro skill and `review-insights.md` —
