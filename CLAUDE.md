@@ -250,6 +250,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `~/.pzshrc` (untracked; `dot_zshrc` sources it *before* `hello-run.zsh`, so the `${VAR:-}`
     defaults pick them up). `hello-run` errors out with a pointer to `~/.pzshrc` if they are unset,
     and `apply.bats` asserts no org/repo name leaks into the deployed file.
+  - **タブを閉じた issue は worktree から再開する。** タブが無くても worktree が 1 つでも
+    残っていれば、ブランチ名をそこから読み、gh のタイトル取得と haiku の slug 推定を飛ばす
+    （開き直しが遅かった原因はこの 2 つ）。`.issue-url` が別リポジトリの同じ番号の issue を
+    指しているとき（置き場は番号だけで決まる）と `--slug` を渡したときは再開しない。`~/.claude/projects/<session dir を英数字以外 - にした名前>/`
+    に会話の記録があれば claude を `--continue` で起動し、初期プロンプトは訊かない（`--prompt` なら送る）。
   - **既存タブの探索は全 workspace。** タブはそれを作ったときに居た workspace に残るので、
     別の workspace から `hello-run` を叩くと現在の workspace には無い。`__hr_find_tab` が
     `herdr workspace list` を回して `<ws>\t<tab>` を返し、別 workspace なら
