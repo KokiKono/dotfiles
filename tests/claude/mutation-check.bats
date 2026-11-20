@@ -33,7 +33,10 @@ EOF
 
 # definition <mutations の JSON 配列> [追加のキーの JSON]
 definition() {
-    jq -n --argjson m "$1" --argjson extra "${2:-{\}}" \
+    # 既定値を ${2:-{\}} と書くと、bash 3.2（CI の macOS）では \ が残って JSON にならない
+    local extra='{}'
+    [ -z "${2:-}" ] || extra=$2
+    jq -n --argjson m "$1" --argjson extra "$extra" \
         '{runner: "rspec", command: ["./fake-runner"], mutations: $m} + $extra' > def.json
 }
 
