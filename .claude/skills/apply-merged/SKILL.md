@@ -32,7 +32,8 @@ PR 番号が分からなければ `gh pr list --state merged --limit 5` で確�
 
 終了コード 3 は conflict か removed が残っていることを表す。終了コード 1 で「apply に失敗した」と出たときは、
 `applied` の行を信じない（apply の前に出しているので、配られていないものを含む）。chezmoi のエラーを読んで原因を
-直し、もう一度流して `up-to-date` になることを確かめる。stderr の「install スクリプトが変わっている」は
+直し、もう一度流す（配られていなかったファイルは `applied`、配られていたものは `up-to-date` と出る。
+conflict と removed も出し直されるので、2 と 3 はその結果で進める）。stderr の「install スクリプトが変わっている」は
 3 の報告に含める（スクリプトは install を実行しない）。
 
 ## 2. conflict に PR の変更分だけを足す

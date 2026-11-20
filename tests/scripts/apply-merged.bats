@@ -98,6 +98,7 @@ merge_pr() {
     # 別の PR が同じディレクトリに足したファイル（まだ配っていない）は、この PR の対象ではない
     mkdir -p "$R/home/dot_dir/sub"
     echo n1 >"$R/home/dot_dir/sub/new"
+    echo n2 >"$R/home/dot_dir/sub/new2"   # 同じ新しいディレクトリに 2 つ
     commit "pr"
     sha="$(git -C "$R" rev-parse HEAD)"
     echo o1 >"$R/home/dot_dir/other"
@@ -106,6 +107,7 @@ merge_pr() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"applied	$H/.dir/sub/new"* ]] || false
     [ "$(cat "$H/.dir/sub/new")" = n1 ]
+    [ "$(cat "$H/.dir/sub/new2")" = n2 ]
     [ ! -e "$H/.dir/other" ]
 }
 
