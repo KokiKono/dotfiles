@@ -53,7 +53,7 @@ main() {
     case "$1" in
       --dry-run) dry=1 ;;
       --commit) commit="$2"; shift ;;
-      -h|--help) sed -n '2,20p' "$0"; return 0 ;;
+      -h|--help) sed -n '2,19p' "$0"; return 0 ;;
       *) pr="$1" ;;
     esac
     shift
