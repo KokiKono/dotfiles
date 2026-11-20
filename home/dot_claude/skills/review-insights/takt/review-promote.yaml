@@ -22,6 +22,7 @@ steps:
       reject にするもの:
       - その PR 固有の話で、一般化すると意味がぼやける
       - agent-files/ か personal-rules.md に同じ意図の記述が既にある
+        （personal-rules.md の「チェックに置き換え済み」の節も含む。チェックで防いでいるので文章に戻さない）
       - 他の候補と同じことを言っている（どちらか 1 つだけを adopt する）
 
       adopt するときの書き方:
@@ -29,8 +30,18 @@ steps:
       - section は personal-rules.md の「###」見出しに合うものがあればそれを使い、無ければ
         「データ取得」「マイグレーション」のような短い領域名にする
 
+      adopt したルールが lint・型・CI のチェック・API の設計・テストで機械的に防げるなら、
+      mechanize を付けてください。文章のルールは守られないことがあるので、防げるものは
+      チェックに置き換えたい。付けたものも、チェックができるまでは文章のルールとして載せます。
+      - kind は lint / type / ci / api / test のどれか
+      - how は「何を検出・禁止するか」を 1 行で（例: `pathname ===` の比較を lint で禁止し、
+        ロケールを外す比較用のヘルパーに寄せる）
+      - 状況を見て判断する必要があるもの（「必要なら」「場合によって」が付くもの）には付けない
+
       decisions.json の形（candidates.json の全 id をちょうど 1 回ずつ含める）:
       [{"id": "b-1a2b3c4d", "verdict": "adopt", "section": "データ取得", "rule": "..."},
+       {"id": "b-9c0d1e2f", "verdict": "adopt", "section": "翻訳", "rule": "...",
+        "mechanize": {"kind": "ci", "how": "..."}},
        {"id": "b-5e6f7a8b", "verdict": "reject", "reason": "agent-files/.claude/rules/model.md に既出"}]
 
       書き終えたら「decisions.json を書いた」と答えてください。

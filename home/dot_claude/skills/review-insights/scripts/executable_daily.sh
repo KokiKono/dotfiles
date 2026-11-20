@@ -160,6 +160,11 @@ promote_repo() {
   [ "$(jq 'length' "$cand")" -gt 0 ] || return 0
 
   cat "$RULES" "$RULES_DIR"/*.md > "$dir/personal-rules.md" 2>/dev/null || true
+  # チェックに置き換えたルールは個人ルールから消えているので、同じ意図の候補を文章のルールとして戻さないよう見せる
+  jq -r '[.[] | select(.status == "mechanized")] | if length == 0 then empty else
+      "\n## チェックに置き換え済み（同じ意図のものは文章のルールにしない）\n\n"
+      + (map("- " + (.rule_final // .rule)) | join("\n")) end' \
+    "$DATA/$repo/backlog.json" >> "$dir/personal-rules.md" 2>/dev/null || true
   rm -f "$dir/decisions.json"
   run_takt review-promote "対象ディレクトリ: $repo/（リポジトリ $repo の昇格候補 $(jq 'length' "$cand") 件）" \
     || { log "$repo: review-promote が失敗"; return 1; }
@@ -178,17 +183,28 @@ promote_repo() {
 # 書き出したルールファイルを比べないのは、common が always_max で切られて押し出されたルールまで
 # 「外した」と数えてしまうため
 promoted_rules() {
-  jq -c '[.[] | select(.status == "promoted" and .auto == true) | {id, rule: (.rule_final // .rule)}]' \
+  jq -c '[.[] | select(.status == "promoted" and .auto == true) | {id, rule: (.rule_final // .rule), mechanize}]' \
     "$DATA/$1/backlog.json" 2>/dev/null || echo '[]'
 }
 
+# mechanized は朝の実行の合間に手で付けるので、実行の前後の比較では見えない。
+# 前回の実行（$3）より後に mechanized にしたものを、置き換えたルールとして報告する
 report_rule_changes() {
-  local repo="$1" before="$2"
-  report --arg r "$repo" --argjson b "$before" --argjson a "$(promoted_rules "$repo")" '
-    ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
+  local repo="$1" before="$2" since="${3:-}" bl="$DATA/$1/backlog.json"
+  [ -f "$bl" ] || bl=<(echo '[]')
+  # backlog は根拠ごと大きくなるので、引数ではなくファイルで渡す（引数長の上限を超えないように）
+  report --arg r "$repo" --argjson b "$before" --argjson a "$(promoted_rules "$repo")" \
+    --slurpfile bls "$bl" --arg since "$since" '
+    $bls[0] as $bl
+    | ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
+    | [$a[] | select(.id as $i | $bi | index($i) | not)] as $new
     | {repo: $r,
-       added: [$a[] | select(.id as $i | $bi | index($i) | not) | .rule],
-       removed: [$b[] | select(.id as $i | $ai | index($i) | not) | .rule]}'
+       added: [$new[] | .rule],
+       mechanize: [$new[] | select(.mechanize) | "\(.rule)\n    → \(.mechanize.kind): \(.mechanize.how)"],
+       mech_pending: ($bl | map(select(.status == "promoted" and .mechanize != null)) | length),
+       replaced: [$bl[] | select(.status == "mechanized" and (.mechanized_at // "") > $since) | (.rule_final // .rule)],
+       removed: [$b[] | select(.id as $i | ($ai | index($i) | not)
+                  and ($bl | any(.id == $i and .status == "mechanized") | not)) | .rule]}'
 }
 
 # REPORT から Slack 向けの報告文を組み立てる。
@@ -200,12 +216,16 @@ format_report() {
       elif .apply then "backlog に積んだ \(.apply.stacked) 件 / 既出・指摘でないもの \(.apply.dropped) 件（backlog 計 \(.apply.backlog_total) 件）"
       elif .decide then "昇格 \(.decide.promoted) 件 / 見送り \(.decide.rejected) 件"
       elif .fetched != null then "取得 \(.fetched) 件（持ち越し \(.deferred) 件）"
+      elif (.mech_pending // 0) > 0 then "チェックに置き換える候補（未対応）\(.mech_pending) 件"
       else empty end;
     def bullets($k): [.[] | .repo as $r | (.[$k] // [])[] | "• [\($r)] \(.)"];
-    bullets("added") as $add | bullets("removed") as $rem
+    bullets("added") as $add | bullets("removed") as $rem | bullets("mechanize") as $mech
+    | bullets("replaced") as $rep
     | "**review-insights 日次レポート**" + (if any(.[]; .error) then " :warning: 失敗あり" else "" end),
       (group_by(.repo)[] | "\n**\(.[0].repo)**" + ([.[] | line | "\n  • " + .] | add // "")),
       "\n**追加したルール（\($add | length) 件）**\n" + (if $add == [] then "なし" else $add | join("\n") end),
+      (if $mech == [] then empty else "\n**チェックに置き換えられそうなもの（\($mech | length) 件）**\n" + ($mech | join("\n")) end),
+      (if $rep == [] then empty else "\n**チェックに置き換えたルール（\($rep | length) 件）**\n" + ($rep | join("\n")) end),
       (if $rem == [] then empty else "\n**外したルール（\($rem | length) 件）**\n" + ($rem | join("\n")) end)
   ' "$REPORT"
 }
@@ -233,7 +253,8 @@ post_report() {
 
 main() {
   export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
-  local lock="$DATA/.lock" logf before repo
+  local lock="$DATA/.lock" logf before repo since started
+  started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   mkdir -p "$DATA/log" "$DATA/history"
   logf="$DATA/log/$(date '+%Y-%m-%d').log"
   exec >> "$logf" 2>&1
@@ -248,6 +269,7 @@ main() {
   ensure_self_login
   before="$DATA/history/$(date '+%Y%m%d-%H%M%S')"
   snapshot_rules "$before"
+  since="$(cat "$DATA/.last_run" 2>/dev/null || true)"
 
   for repo in $(jq -r '.repos | keys[]' "$CONF"); do
     local promoted_before; promoted_before="$(promoted_rules "$repo")"
@@ -255,8 +277,9 @@ main() {
     backfill_paths "$repo"
     classify_repo "$repo" || report_fail "$repo" "取り込みか分類に失敗した（cursor は進めていない）"
     promote_repo "$repo" || report_fail "$repo" "昇格の判定に失敗した"
-    report_rule_changes "$repo" "$promoted_before"
+    report_rule_changes "$repo" "$promoted_before" "$since"
   done
+  printf '%s\n' "$started" > "$DATA/.last_run"
 
   # 翌朝に差分を確かめられるよう、個人ルールの変化をログに残す。戻すときは history/ の写しを使う
   snapshot_rules "$before.after"
