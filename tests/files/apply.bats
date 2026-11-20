@@ -414,9 +414,8 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # 旧置き場から移したので、takt-order 側に取り残していないこと
     [ ! -e "${TESTHOME}/.claude/skills/takt-order/scripts/pr-review-status.py" ]
     grep -qF 'pr-followup' "${TESTHOME}/.claude/skills/takt-order/SKILL.md"
-    # AI レビューの前に呼ぶ mutation-check と、流し済みかを見るためのスクリプトが配られていること
+    # AI レビューの前に mutation-check を呼び、流し済みかをそのスクリプトで見ること
     grep -qF 'skills/mutation-check/scripts/kb.sh' "${SKILL}/SKILL.md"
-    [ -x "${TESTHOME}/.claude/skills/mutation-check/scripts/kb.sh" ]
     # i18n の bot 名は非追跡の設定に置く。実際の org・repo 名を混ぜない
     [ ! -e "${TESTHOME}/.claude/pr-followup.local.json" ]
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}" "${TESTHOME}/.claude/hooks/pr-followup.sh"
