@@ -94,6 +94,61 @@ merge_pr() {
     [ "$(cat "$H/.a")" = a0 ]
 }
 
+@test "apply-merged: applies files whose directories do not exist yet, without their siblings" {
+    # 別の PR が同じディレクトリに足したファイル（まだ配っていない）は、この PR の対象ではない
+    mkdir -p "$R/home/dot_dir/sub"
+    echo n1 >"$R/home/dot_dir/sub/new"
+    commit "pr"
+    sha="$(git -C "$R" rev-parse HEAD)"
+    echo o1 >"$R/home/dot_dir/other"
+    commit "later"
+    run "$R/scripts/apply-merged.sh" --commit "$sha"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"applied	$H/.dir/sub/new"* ]] || false
+    [ "$(cat "$H/.dir/sub/new")" = n1 ]
+    [ ! -e "$H/.dir/other" ]
+}
+
+@test "apply-merged: leaves existing parent directories as they are" {
+    # 親が symlink でも権限が違っても、PR が変えたのは中のファイルだけ
+    mkdir -p "$R/home/private_dot_pv" "$R/home/dot_ln" "${BATS_TEST_TMPDIR}/real"
+    mkdir -m 755 "$H/.pv"
+    ln -s "${BATS_TEST_TMPDIR}/real" "$H/.ln"
+    echo keep >"${BATS_TEST_TMPDIR}/real/mine"
+    echo p1 >"$R/home/private_dot_pv/f"
+    echo l1 >"$R/home/dot_ln/f"
+    commit "pr"
+    run "$R/scripts/apply-merged.sh" --commit "$(git -C "$R" rev-parse HEAD)"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$H/.pv/f")" = p1 ]
+    [ "$(stat -f %Lp "$H/.pv")" = 755 ]
+    [ -L "$H/.ln" ]
+    [ "$(cat "$H/.ln/f")" = l1 ]
+    [ "$(cat "$H/.ln/mine")" = keep ]
+}
+
+@test "apply-merged: a failed apply still keeps the conflict material" {
+    echo a1 >"$R/home/dot_a"
+    echo b1 >"$R/home/dot_b"
+    commit "pr"
+    echo "b0 + app" >"$H/.b"
+    chmod a-w "$H"
+    run "$R/scripts/apply-merged.sh" --commit "$(git -C "$R" rev-parse HEAD)"
+    chmod u+w "$H"
+    [ "$status" -eq 1 ]
+    [ "$(cat "$CONFLICT_DIR/$(printf '%s' "$H/.b" | tr / %).new")" = b1 ]
+}
+
+@test "apply-merged: says nothing was applied when chezmoi fails" {
+    echo a1 >"$R/home/dot_a"
+    commit "pr"
+    chmod a-w "$H"
+    run "$R/scripts/apply-merged.sh" --commit "$(git -C "$R" rev-parse HEAD)"
+    chmod u+w "$H"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"apply に失敗した"* ]] || false
+}
+
 @test "apply-merged: ignores the checkout's own branch and refuses unmerged commits" {
     git -C "$R" switch -q -c wip
     echo wip >"$R/home/dot_a"

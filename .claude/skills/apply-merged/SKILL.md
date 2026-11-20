@@ -30,7 +30,9 @@ PR 番号が分からなければ `gh pr list --state merged --limit 5` で確�
 | `conflict` | ライブが PR の前とも後とも違う（アプリか手で変えた） | 2 で PR の変更分だけを足す |
 | `removed` | PR で消したファイル（chezmoi は消さない） | 3 で消すか聞く |
 
-終了コード 3 は conflict か removed が残っていることを表す。stderr の「install スクリプトが変わっている」は
+終了コード 3 は conflict か removed が残っていることを表す。終了コード 1 で「apply に失敗した」と出たときは、
+`applied` の行を信じない（apply の前に出しているので、配られていないものを含む）。chezmoi のエラーを読んで原因を
+直し、もう一度流して `up-to-date` になることを確かめる。stderr の「install スクリプトが変わっている」は
 3 の報告に含める（スクリプトは install を実行しない）。
 
 ## 2. conflict に PR の変更分だけを足す

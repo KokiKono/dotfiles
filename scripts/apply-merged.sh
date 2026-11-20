@@ -16,6 +16,7 @@
 #   removed     PR で消したファイル。chezmoi は消さないので、要らなければ手で消す
 # conflict か removed があれば終了コード 3。差分は CONFLICT_DIR（既定は一時ディレクトリ）に
 # <配備先のパスの / を % にした名前>.{old,new} で残す。
+# apply に失敗したら終了コード 1。applied の行は apply の前に出すので、配られていないものを含む。
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -52,7 +53,7 @@ main() {
     case "$1" in
       --dry-run) dry=1 ;;
       --commit) commit="$2"; shift ;;
-      -h|--help) sed -n '2,19p' "$0"; return 0 ;;
+      -h|--help) sed -n '2,20p' "$0"; return 0 ;;
       *) pr="$1" ;;
     esac
     shift
@@ -109,8 +110,20 @@ main() {
     rm -f "$key.new" "$key.old"
   done < <(changed_sources "$commit")
 
+  local dir failed=0 missing=()
   if ((${#to_apply[@]})) && ((!dry)); then
-    chezmoi_at "$new" apply --exclude scripts --force "${to_apply[@]}"
+    # chezmoi は親ディレクトリが無いファイルを apply できない（PR がディレクトリごと足したとき）。
+    # ディレクトリを再帰で apply すると PR が変えていないファイルまで配り、--parent-dirs は既にある親の
+    # 権限や symlink まで書き換える。無い親だけを再帰なしで対象に足す（親を先に処理するのは chezmoi がやる）
+    for target in "${to_apply[@]}"; do
+      dir="$(dirname "$target")"
+      while [ ! -e "$dir" ] && [ ! -L "$dir" ]; do
+        missing+=("$dir")
+        dir="$(dirname "$dir")"
+      done
+    done
+    chezmoi_at "$new" apply --exclude scripts --force --recursive=false \
+      ${missing[@]+"${missing[@]}"} "${to_apply[@]}" || failed=1
   fi
   git -C "$REPO_ROOT" diff --quiet "$commit^1" "$commit" -- install/ home/.chezmoiscripts/ \
     || echo "install スクリプトが変わっているが、実行していない（必要なら bash install/macos/<名前>.sh）" >&2
@@ -119,6 +132,8 @@ main() {
     KEEP_WORK=1
     echo "conflict の PR 前後の内容: $CONFLICT_DIR/<配備先>.{old,new}" >&2
   fi
+  # applied の行は apply の前に出しているので、失敗したら配っていないことをはっきり伝える
+  ((!failed)) || die "apply に失敗した。上の applied の行は配られていないものを含む（直してから流し直す）"
   return "$rc"
 }
 
