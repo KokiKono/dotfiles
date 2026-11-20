@@ -701,7 +701,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `i18n_bots` / `i18n_pattern` で絞る。PR への普通のコメントは解決済みを持たないので `state` に数えない
     （数えるとループが終わらない）
   - **mutation-check は AI レビューの前に、PR ごとに 1 回だけ流す。** 足したテストも AI レビューに読ませるため。
-    流したかどうかは kb の `mutations/<repo>-<PR番号>/result.json` の有無で見るので、スキルを呼び直しても、
+    終えたかどうかは kb の `mutations/<repo>-<PR番号>/report.md` の有無で見るので（`result.json` は流している途中にもできる）、スキルを呼び直しても、
     AI レビューの指摘を直したあとも流し直さない（定義はコードを直すと古くなり、1 回に数分かかる）。
     テストの穴は聞かずにテストを足すが、実装は変えない。claude-review の workflow が無いリポジトリでは流さない
   - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
