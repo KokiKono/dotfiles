@@ -55,6 +55,7 @@ tests/
 ├── claude/takt-order.bats         # unit tests for the takt-order skill's kb.sh / takt.sh
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/pr-followup.bats        # unit tests for the after-PR hook and pr-followup's status script
+├── claude/mutation-check.bats     # unit tests for the mutation-check skill's run_mutations.py / gen_mutations{.py,_ruby.rb} / kb.sh
 ├── claude/kb-checks.bats          # unit tests for the hook that runs kb's checks after edits and before PRs
 ├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
@@ -516,6 +517,31 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - `takt` は mise の shim なので、node が決まらないディレクトリでは落ちる。`scripts/takt.sh` が
     takt の入った node を探して `mise exec` で呼び直す。`--root` で builtins の場所を出す。
   - `tests/claude/takt-order.bats` が kb.sh / takt.sh を、`apply.bats` が scripts/ 全部の配備と org/repo 名の非混入を見る。
+- **`home/dot_claude/skills/mutation-check/`** は、差分にわざと小さなバグ（変異）を 1 つずつ入れてテストを流し、
+  テストがそのバグに気づけるかを確かめるスキル (`/mutation-check`)。カバレッジが 100% でも、結果を
+  確かめていない行のバグは通る。生き残った変異を「テストの穴」と「結果が変わらない書き換え」に分けるのが
+  目的で、生き残りを 0 にはしない。知っておくこと:
+  - **変異は 2 通りで作る。** `scripts/gen_mutations.py` が、差分で変えた行の演算子・条件式・真偽・数値・
+    よく使うメソッド・文を機械的に書き換える（選ぶ人の思い込みを入れないため。mutant gem は非公開の
+    コードでは有料で、Gemfile に足す合意も要るので使わない）。機械は仕様を知らないので、仕様に踏み込んだ
+    変異は subagent が足す。**定義を subagent に作らせ、テストのコードを
+    読ませない**のは、実装とテストを書いたセッションが、自分のテストで拾える変異ばかりを思いつくため
+  - **定義と結果は kb の `mutations/<repo>-<PR番号>/` にしか置かない**（`scripts/kb.sh` が場所を決める。
+    探す順は takt-order と同じ）。業務のコードの断片なのでこの PUBLIC なリポジトリには入れない
+  - **Ruby は構文木から作る**（`scripts/gen_mutations_ruby.rb`。Prism は Ruby 3.3 以上に同梱で、追加の
+    インストールが要らない）。変異はノードのバイト位置（`offset`）で場所を持ち、書き換えた結果が構文エラーに
+    なるものは出さない。JS / TS はまだ行の文字列に正規表現を当てるだけで、総称型や JSX と区別するため
+    `<` `>` は前後に空白のあるものしか拾わない。Prism を読める `ruby` が無い環境では Ruby も正規表現に落ちる
+    （テストの構文木版はそのとき skip する）
+  - `scripts/run_mutations.py` は、テストが実行されずに落ちた変異（構文が壊れた、読み込みで落ちた）を
+    `broken` として検出と分ける。試作ではこれを検出に数えていて、テストが実際より強く見えた。見分けは
+    集計の行の有無で行うので、変異を入れる前の出力に集計の行が無ければ止まる（`runner` の指定違いに気づくため）
+  - 書き換えたファイルは `finally` で毎回、バイト単位で元に戻す（改行コードも変えない）。SIGTERM・SIGHUP・SIGQUIT も
+    例外に変えて同じ経路を通す。上限を超えたテストはプロセスグループごと止めるが、コンテナの中で動くテストまでは
+    止められない。上限は定義に無ければ、変異を入れない 1 回にかかった時間の 3 倍（最低 30 秒）
+  - 毎コミットには流さない（数十通りで数分かかり、定義はコードを直すと古くなる）。pr-followup への
+    組み込みは、何度か使ってから決める
+  - `tests/claude/mutation-check.bats` が 4 つのスクリプトを、`apply.bats` が配備と、定義の JSON・org/repo 名の非混入を見る。
 - **`home/dot_claude/skills/writing-retro/`** は、1 日の終わりに全セッションの記録
   （`~/.claude/projects/*/*.jsonl`）を読み返し、AI が書いた文章への指摘を一般化して
   `~/.claude/rules/writing.md`（**非追跡**）に書き足すスキル。
@@ -649,7 +675,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.

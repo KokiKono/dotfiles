@@ -338,7 +338,8 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: local claude skills are deployed with frontmatter" {
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
-             hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel; do
+             hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel \
+             mutation-check; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -416,6 +417,22 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     # i18n の bot 名は非追跡の設定に置く。実際の org・repo 名を混ぜない
     [ ! -e "${TESTHOME}/.claude/pr-followup.local.json" ]
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}" "${TESTHOME}/.claude/hooks/pr-followup.sh"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: mutation-check skill is deployed with its scripts and no definitions" {
+    SKILL="${TESTHOME}/.claude/skills/mutation-check"
+    [ -f "${SKILL}/references/definition.md" ]
+    [ -f "${SKILL}/assets/README.md" ]
+    for src in "${REPO_ROOT}/home/dot_claude/skills/mutation-check/scripts/"executable_*; do
+        [ -x "${SKILL}/scripts/$(basename "${src#*/executable_}")" ]
+    done
+    # 変異の定義と結果は kb（非追跡）に置く。業務のコードの断片なので public なここには配らない
+    run find "${SKILL}" -name '*.json'
+    [ -z "$output" ]
+    grep -qF 'kb.sh' "${SKILL}/SKILL.md"
+    # 実際の org・repo 名を混ぜない
+    run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]
 }
 
