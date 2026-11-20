@@ -81,18 +81,26 @@ write_backlog_brief() {
     || echo '[]' > "$WORK/$repo/backlog-brief.json"
 }
 
-# triage の noise と classify の結果を 1 本にし、pr_author を pending から埋める。
-# pr_author は自分の PR かどうかの判定に使うので、LLM に写させず元データから取る。
+# triage の noise と classify の結果を 1 本にし、根拠（evidence）を pending から埋める。
+# pr_author は自分の PR かどうかの判定に、url や日付は backlog.md の根拠に使うので、LLM に写させず元データから取る。
+# LLM は evidence ごと書き落とすことがある。excerpt だけは LLM の抜粋を優先し、無ければ本文の頭で代える。
 merge_classified() {
   local dir="$1"
   jq -n --slurpfile p <(jq -s '.' "$dir/pending.jsonl") \
         --slurpfile t "$dir/triage.json" \
         --slurpfile c <( [ -f "$dir/classified.json" ] && cat "$dir/classified.json" || echo '[]' ) '
-    ($p[0] | map({key: .id, value: .pr_author}) | from_entries) as $author
+    ($p[0] | map({key: .id, value: .}) | from_entries) as $src
     | ($t[0].noise // []) as $noise
     | ($noise | map(.id)) as $noise_ids
     | ($c[0] | map(.comment_ids -= $noise_ids) | map(select(.comment_ids | length > 0))
-       | map(if .evidence then .evidence.pr_author = $author[.comment_ids[0]] else . end))
+       | map(if .verdict == "stack" or .evidence then
+               ($src[.comment_ids[0]] // {}) as $s
+               | .evidence = ((.evidence // {})
+                   + ({pr: $s.pr, url: $s.url, date: $s.created_at[0:10], author: $s.author, source: $s.source}
+                      | with_entries(select(.value != null)))
+                   + {pr_author: $s.pr_author}
+                   | .excerpt //= (($s.body // "")[0:200]))
+             else . end))
       + ($noise | map(select(.id as $i | $p[0] | map(.id) | index($i)))
          | map({verdict: "noise", comment_ids: [.id], rule: null, reason: ("triage: " + .reason)}))'
 }
@@ -199,8 +207,10 @@ report_rule_changes() {
     | ($b | map(.id)) as $bi | ($a | map(.id)) as $ai
     | [$a[] | select(.id as $i | $bi | index($i) | not)] as $new
     | {repo: $r,
-       added: [$new[] | .rule],
-       mechanize: [$new[] | select(.mechanize) | "\(.rule)\n    → \(.mechanize.kind): \(.mechanize.how)"],
+       # 足したルールごとに、チェックで防げる（機械）か、文章のルールとして AI に読ませるしかない（AI）かを添える
+       added: [$new[] | if .mechanize then "`機械` \(.rule)\n    → \(.mechanize.kind): \(.mechanize.how)"
+                        else "`AI` \(.rule)" end],
+       added_mech: ($new | map(select(.mechanize)) | length),
        mech_pending: ($bl | map(select(.status == "promoted" and .mechanize != null)) | length),
        replaced: [$bl[] | select(.status == "mechanized" and (.mechanized_at // "") > $since) | (.rule_final // .rule)],
        removed: [$b[] | select(.id as $i | ($ai | index($i) | not)
@@ -219,12 +229,12 @@ format_report() {
       elif (.mech_pending // 0) > 0 then "チェックに置き換える候補（未対応）\(.mech_pending) 件"
       else empty end;
     def bullets($k): [.[] | .repo as $r | (.[$k] // [])[] | "• [\($r)] \(.)"];
-    bullets("added") as $add | bullets("removed") as $rem | bullets("mechanize") as $mech
-    | bullets("replaced") as $rep
+    bullets("added") as $add | bullets("removed") as $rem | bullets("replaced") as $rep
+    | ([.[] | .added_mech // 0] | add // 0) as $mech
     | "**review-insights 日次レポート**" + (if any(.[]; .error) then " :warning: 失敗あり" else "" end),
       (group_by(.repo)[] | "\n**\(.[0].repo)**" + ([.[] | line | "\n  • " + .] | add // "")),
-      "\n**追加したルール（\($add | length) 件）**\n" + (if $add == [] then "なし" else $add | join("\n") end),
-      (if $mech == [] then empty else "\n**チェックに置き換えられそうなもの（\($mech | length) 件）**\n" + ($mech | join("\n")) end),
+      "\n**追加したルール（\($add | length) 件: 機械判定の候補 \($mech) / AI 判定 \(($add | length) - $mech)）**\n"
+        + (if $add == [] then "なし" else $add | join("\n") end),
       (if $rep == [] then empty else "\n**チェックに置き換えたルール（\($rep | length) 件）**\n" + ($rep | join("\n")) end),
       (if $rem == [] then empty else "\n**外したルール（\($rem | length) 件）**\n" + ($rem | join("\n")) end)
   ' "$REPORT"

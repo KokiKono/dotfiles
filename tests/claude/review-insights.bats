@@ -90,6 +90,15 @@ JSON
     [ "$status" -ne 0 ]
 }
 
+@test "review-insights render: an occurrence without an excerpt does not break backlog.md" {
+    # excerpt は分類の LLM が写すので欠けることがある。落ちると backlog.md が見出しだけになる
+    jq 'map(if .id == "b-hot" then .occurrences[0].excerpt = null else . end)' \
+        "${REVIEW_INSIGHTS_HOME}/r1/backlog.json" >"${BATS_TEST_TMPDIR}/b" && mv "${BATS_TEST_TMPDIR}/b" "${REVIEW_INSIGHTS_HOME}/r1/backlog.json"
+    run bash "${STACK}" render r1
+    [ "$status" -eq 0 ]
+    grep -q '^### 頻出' "${REVIEW_INSIGHTS_HOME}/r1/backlog.md"
+}
+
 @test "review-insights mechanize: adopted rules keep the prose until mechanized" {
     # チェックが入るまでは文章のルールも残し、入ったら文章の方を外す（二重管理をやめる）
     # 形の崩れた mechanize は捨てるが、ルールの採用は止めない
@@ -199,6 +208,17 @@ JSON
     [ "$(jq -r '.[1].verdict' "$D/m.json")" = "noise" ]
 }
 
+@test "review-insights daily: evidence the classifier left out is rebuilt from pending" {
+    # evidence が無いまま積むと、自分の PR への指摘として拾えず、backlog.md の根拠もリンクにならない
+    D="${REVIEW_INSIGHTS_HOME}/r1"
+    printf '%s\n' '{"id":"inline:1","pr_author":"me","pr":7,"url":"https://x/7","created_at":"2026-11-19T01:02:03Z","author":"rev","source":"human","body":"本文"}' >"$D/pending.jsonl"
+    printf '{"noise":[]}' >"$D/triage.json"
+    printf '[{"verdict":"stack","comment_ids":["inline:1"],"rule":"R"}]' >"$D/classified.json"
+    run bash -c "source '${DAILY}'; merge_classified '$D'"
+    [ "$status" -eq 0 ]
+    [ "$(jq -c '.[0].evidence' <<<"$output")" = '{"pr":7,"url":"https://x/7","date":"2026-11-19","author":"rev","source":"human","pr_author":"me","excerpt":"本文"}' ]
+}
+
 @test "review-insights daily: coverage check rejects missing and duplicated ids" {
     D="${REVIEW_INSIGHTS_HOME}/r1"
     printf '%s\n' '{"id":"inline:1"}' '{"id":"inline:2"}' >"$D/pending.jsonl"
@@ -278,12 +298,11 @@ JSON
     [[ "$output" == *"取得 60 件（持ち越し 475 件）"* ]] || false
     [[ "$output" == *"backlog に積んだ 9 件 / 既出・指摘でないもの 39 件（backlog 計 396 件）"* ]] || false
     [[ "$output" == *":warning: 取り込みか分類に失敗した"* ]] || false
-    [[ "$output" == *"追加したルール（1 件）**"$'\n'"• [r1] 足したルール"* ]] || false
+    [[ "$output" == *"追加したルール（1 件: 機械判定の候補 1 / AI 判定 0）**"$'\n'"• [r1] \`機械\` 足したルール"$'\n'"    → lint: 禁止する"* ]] || false
     [[ "$output" == *"外したルール（1 件）**"$'\n'"• [r1] 外したルール"* ]] || false
     [[ "$output" == *"チェックに置き換えたルール（1 件）**"$'\n'"• [r1] 置き換えたルール"* ]] || false
     [[ "$output" != *"前に置き換えたルール"* ]] || false
     [[ "$output" == *"チェックに置き換える候補（未対応）1 件"* ]] || false
-    [[ "$output" == *"置き換えられそうなもの（1 件）**"$'\n'"• [r1] 足したルール"$'\n'"    → lint: 禁止する"* ]] || false
     [[ "$output" != *"残るルール"* ]] || false
 }
 
