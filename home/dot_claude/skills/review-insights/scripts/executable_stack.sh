@@ -85,7 +85,7 @@ render() {
           + " / claude-review " + ((.occurrences | map(select(.source=="claude-review")) | length)|tostring) + "\n"
         + "- 根拠:\n"
         + (.occurrences | sort_by(.date) | reverse | .[0:5]
-           | map("  - [#" + (.pr|tostring) + "](" + .url + ") " + .date + " — " + (.excerpt | gsub("\n";" ") | .[0:100])) | join("\n"))
+           | map("  - [#" + (.pr|tostring) + "](" + .url + ") " + .date + " — " + ((.excerpt // "") | gsub("\n";" ") | .[0:100])) | join("\n"))
         + "\n";
       (map(select(ready($m; $me))) | sort_by(-.count)) as $hot
       | (map(select(.status == "stacked" and (ready($m; $me) | not))) | sort_by(-.count)) as $cold
