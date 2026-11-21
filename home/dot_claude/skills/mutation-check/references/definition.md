@@ -5,7 +5,11 @@
 ```json
 {
   "runner": "rspec",
-  "command": ["bin/rspec", "--fail-fast", "spec/services/○○_service_spec.rb"],
+  "command": ["bin/rspec", "--fail-fast"],
+  "tests": {
+    "app/services/○○_service.rb": ["spec/services/○○_service_spec.rb"],
+    "*": ["spec/requests/○○_spec.rb"]
+  },
   "timeout": 300,
   "mutations": [
     {
@@ -21,7 +25,8 @@
 
 | キー | 必須 | 中身 |
 |---|---|---|
-| `command` | ○ | テストを流すコマンド（文字列の配列。シェルは通さない）。差分に関係するテストのファイルだけを渡す |
+| `command` | ○ | テストを流すコマンド（文字列の配列。シェルは通さない）。`tests` を書くときは、テストのファイルを入れない |
+| `tests` | △ | 変異ごとに流すテストのファイル。`command` の後ろに足して流す。変異する `file` をキーにした配列で書き、キーに無いファイルの変異には `"*"` の配列を流す。全部の変異に同じものを流すなら配列だけでよい。**これがあるときだけ結果をキャッシュする** |
 | `runner` | △ | `rspec` / `jest` / `vitest`。集計の行の見分け方を決める。他の道具なら `summary_pattern` を書く |
 | `summary_pattern` | △ | テストが実行されたときに必ず出る集計の行の正規表現。`runner` より優先する |
 | `broken_pattern` | | 読み込みに失敗したファイルがあることを示す行の正規表現。`runner` より優先する |
@@ -37,6 +42,35 @@
 - `offset` を持つ変異は、コードを直すと位置がずれて `invalid` になる。候補を作り直す
 - 同じ `old` に別の `new` を当てる変異を並べてよい（1 つずつ入れて戻すので、ぶつからない）
 - `--fail-fast`（RSpec）や `--bail`（Jest / Vitest）を付けると、検出できる変異が早く終わる
+- `tests` にはその実装を確かめているテストだけを書く。関係の薄いテストまで入れると、そのテストを
+  直すたびにキャッシュが外れる。`tests` のファイルが無いとき、`"*"` が無くてキーにも無い `file` があるときは、流す前に止まる
+
+## キャッシュ
+
+`run_mutations.py` は、`tests` のある定義の結果を `~/.cache/mutation-check/cache.sqlite3`（SQLite）に
+記録し、次からは同じ変異を流さずに返す。kb には置かない（消えても流し直せば戻るので、履歴に残す意味が無い）。
+持つのはハッシュと結果だけで、ソースやテストの中身は持たない。
+
+| 何が同じなら前の結果を返すか | 中身 |
+|---|---|
+| ソースの側 | `command`、集計の行の見分け方、`file` のパス、変異を入れた後のファイルの中身。label と位置は見ないので、名前を変えても、別の PR やブランチでも当たる |
+| テストの側 | その変異の `tests` のファイルの中身 |
+
+- テストの側が変わっていても、行やファイルを足しただけなら `killed` は返す（落ちていたテストは落ちたままなので）。
+  `survived` は足したテストで検出に変わりうるので流し直す。行を消した・書き換えたときは `killed` も流し直す
+- 記録するのは `killed` と `survived` だけ。`broken`・`timeout`・`invalid` は毎回流す
+- 全部の変異がキャッシュから返るテストの組は、変異を入れない 1 回も流さない
+- 同じファイルを 1 行でも直すと、そのファイルの変異は全部流し直す
+- `tests` に書いていないファイル（呼び出し先の別クラス、factory、共通の前処理）を変えても気づかない。
+  既存のテストの前処理に行を足して弱めた場合も、`killed` を返してしまう。そのときは `--no-cache` を付ける
+
+| 引数・環境変数 | 働き |
+|---|---|
+| `--no-cache` | キャッシュを引かずに全部流す（結果は記録する） |
+| `--clear-cache` | キャッシュを消して終わる（定義は要らない） |
+| `MUTATION_CHECK_CACHE` | キャッシュの置き場を差し替える |
+
+30 日使わなかった結果は、実行の終わりに消す。
 
 ### runner ごとの見分け方
 
@@ -100,10 +134,15 @@ Prism を読める `ruby` が PATH に無いときと `--no-ast` を付けたと
 {
   "counts": { "killed": 34, "survived": 6, "broken": 3, "timeout": 0, "invalid": 0 },
   "results": [
-    { "label": "…", "file": "…", "status": "survived", "summary": "12 examples, 0 failures", "seconds": 6.8 }
-  ]
+    { "label": "…", "file": "…", "status": "survived", "summary": "12 examples, 0 failures", "seconds": 6.8 },
+    { "label": "…", "file": "…", "status": "killed", "summary": "12 examples, 1 failure", "seconds": 0.0, "cached": true }
+  ],
+  "cached": 1
 }
 ```
+
+`cached` はキャッシュから返した件数で、`tests` のある定義のときだけ出る。キャッシュから返した結果には
+`"cached": true` が付き、`summary` は記録したときのもの。
 
 | status | 意味 | 次にやること |
 |---|---|---|
@@ -120,8 +159,8 @@ Prism を読める `ruby` が PATH に無いときと `--no-ast` を付けたと
 ```markdown
 # <repo>#<PR番号> の mutation check（YYYY-MM-DD）
 
-- 1 回目: 検出 34 / 40（壊れた 3）
-- spec を足した後: 検出 39 / 43
+- 1 回目（commit abc1234）: 検出 34 / 40（壊れた 3）
+- spec を足した後（commit def5678）: 検出 39 / 43（キャッシュ 34 件、流したのは 9 件）
 
 ## テストの穴
 
