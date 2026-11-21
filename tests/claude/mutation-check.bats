@@ -212,6 +212,7 @@ echo "$*" >> calls
 if grep -q 'SYNTAX' target.txt; then
     echo "0 examples, 0 failures, 1 error occurred outside of examples"; exit 1
 fi
+if grep -q 'fails always' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
 if grep -q 'limit = 5' target.txt && grep -q 'checks limit' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
 if grep -q 'keep = false' target.txt && grep -q 'checks keep' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
 echo "3 examples, 0 failures"
@@ -284,6 +285,54 @@ calls() {
     [ "$(status_of killed)" = "survived" ]
 }
 
+@test "mutation-check cache: a test that fails on the unmutated code stops the run even when all results are cached" {
+    cached_setup
+    definition "[$(mutation killed 'limit = 4' 'limit = 5')]" '{"tests": ["a_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    # 行を足しただけなので検出はキャッシュから返るが、足したテストは変異を入れていないコードで落ちる
+    printf 'checks limit\nfails always\n' > a_spec.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"変異を入れる前にテストが通っていない"* ]] || false
+}
+
+@test "mutation-check cache: editing another mutated file that shares a test reruns the mutations" {
+    cached_setup
+    printf 'other = 1\n' > other.txt
+    printf 'checks other\n' > b_spec.txt
+    shared() {
+        jq -n --argjson tests "$1" '{runner: "rspec", command: ["./fake-runner"], tests: $tests,
+            mutations: [{label: "a", file: "target.txt", old: "limit = 4", new: "limit = 5"},
+                        {label: "b", file: "other.txt", old: "other = ", new: "other = 1 + "}]}' > def.json
+    }
+    # テストを共有しているファイルを直すと、もう片方の変異も流し直す（呼び出し先を直した場合に当たる）
+    shared '["a_spec.txt"]'
+    python3 "${RUN}" def.json > /dev/null
+    printf 'other = 2\n' > other.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(jq -r '.cached' out.json)" = "0" ]
+    # テストが別なら、直していないファイルの変異はキャッシュから返る
+    shared '{"target.txt": ["a_spec.txt"], "other.txt": ["b_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    printf 'other = 3\n' > other.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(jq -r '.results[] | select(.label == "a") | .cached' out.json)" = "true" ]
+    [ "$(jq -r '.results[] | select(.label == "b") | .cached' out.json)" = "null" ]
+}
+
+@test "mutation-check cache: a cache that stops working mid-run does not stop the run" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    # 表を壊して、開けるが引けない状態にする
+    sqlite3 "${HOME}/.cache/mutation-check/cache.sqlite3" 'DROP TABLE results'
+    sqlite3 "${HOME}/.cache/mutation-check/cache.sqlite3" 'CREATE TABLE results (other TEXT)'
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"キャッシュが使えなくなった"* ]] || false
+    [ "$(status_of killed)" = "killed" ]
+    [ "$(status_of survived)" = "survived" ]
+}
+
 @test "mutation-check cache: broken results are not cached" {
     cached_setup
     definition "[$(mutation syntax 'keep = true' 'SYNTAX')]" '{"tests": ["a_spec.txt"]}'
@@ -326,8 +375,8 @@ calls() {
                     {label: "b", file: "other.txt", old: "other = 1", new: "other = 2"}]}' > def.json
     run python3 "${RUN}" def.json --out out.json
     [ "$status" -eq 0 ]
-    # テストの組ごとに基準を流す
-    [ "$(printf 'a_spec.txt\na_spec.txt\nb_spec.txt\nb_spec.txt\n')" = "$(cat calls)" ]
+    # 先に組ごとの基準を流し、それから変異を流す
+    [ "$(printf 'a_spec.txt\nb_spec.txt\na_spec.txt\nb_spec.txt\n')" = "$(cat calls)" ]
     [ "$(status_of a)" = "killed" ]
     [ "$(status_of b)" = "survived" ]
 }

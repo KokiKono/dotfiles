@@ -79,7 +79,8 @@ def cache_path():
 class Cache:
     """変異の結果を、変異を入れた後のソースとテストのファイルの中身で引く。
 
-    results.key はソースの側（コマンド、見分け方、ファイル名、変異を入れた後の中身）のハッシュ。
+    results.key はソースの側（コマンド、見分け方、ファイル名、変異を入れた後の中身、同じテストで
+    確かめている他の変異対象のファイルの中身）のハッシュ。
     label や行番号は入れないので、同じ書き換えなら名前や位置が変わっても当たる。
     テストの側は results.tests に {パス: 中身のハッシュ} で持ち、引くときに今の中身と比べる。
     鍵に入れないのは、テストに行を足しただけなら「検出」をそのまま使えるようにするため。
@@ -96,29 +97,40 @@ class Cache:
             CREATE TABLE IF NOT EXISTS tests (sha TEXT PRIMARY KEY, lines TEXT NOT NULL, at INTEGER NOT NULL);
         """)
         self.now = int(time.time())
-        self.seen = {}
+        self.saved = set()
 
-    def key(self, config, file, mutated):
+    def key(self, config, mutation, mutated):
         digest = hashlib.sha256()
         broken = config["broken"].pattern if config["broken"] else ""
-        for part in (str(CACHE_VERSION), json.dumps(config["command"]), config["summary"].pattern, broken, file):
+        parts = [str(CACHE_VERSION), json.dumps(config["command"]), config["summary"].pattern, broken, mutation["file"]]
+        for other in mutation["with"]:
+            # 同じ PR で直している呼び出し先を変えたら、こちらの変異の結果も変わりうる
+            try:
+                parts += [other, hashlib.sha256(Path(other).read_bytes()).hexdigest()]
+            except OSError:
+                parts += [other, ""]
+        for part in parts:
             digest.update(part.encode() + b"\0")
         digest.update(mutated)
         return digest.hexdigest()
 
     def fingerprint(self, tests):
-        """{パス: 中身のハッシュ}。行ごとのハッシュも残し、後で「行を足しただけか」を比べられるようにする。"""
+        """{パス: 中身のハッシュ}。行ごとのハッシュも残し、後で「行を足しただけか」を比べられるようにする。
+
+        数十分かかる実行の途中でテストを直されることがあるので、ハッシュは覚えずに毎回読み直す。
+        """
+        result = {}
         for test in tests:
-            if test in self.seen:
-                continue
             content = Path(test).read_bytes()
-            sha = hashlib.sha256(content).hexdigest()
+            sha = result[test] = hashlib.sha256(content).hexdigest()
+            if sha in self.saved:
+                continue
             # テストの中身そのものは持たない（業務のコードなので）。行の並びを比べられれば足りる
             lines = "\n".join(hashlib.sha1(line).hexdigest()[:12] for line in content.splitlines())
             self.db.execute("INSERT INTO tests VALUES (?, ?, ?) ON CONFLICT(sha) DO UPDATE SET at = excluded.at",
                             (sha, lines, self.now))
-            self.seen[test] = sha
-        return {test: self.seen[test] for test in tests}
+            self.saved.add(sha)
+        return result
 
     def only_added(self, old_sha, new_sha):
         if old_sha == new_sha:
@@ -130,6 +142,7 @@ class Cache:
         return all(line in rest for line in rows[old_sha].split("\n"))
 
     def lookup(self, key, tests):
+        """(status, 集計の行, テストが記録したときと同じか) か None。"""
         row = self.db.execute("SELECT status, summary, tests FROM results WHERE key = ?", (key,)).fetchone()
         if not row:
             return None
@@ -137,16 +150,16 @@ class Cache:
         now = self.fingerprint(tests)
         if before != now:
             # テストに行やファイルを足しても、落ちていたテストは落ちたままなので「検出」は使える。
-            # 生き残りは足したテストで検出に変わりうるので流し直す。前処理に行を足して既存のテストを
-            # 弱めた場合は見逃す（--no-cache で流し直せる）
+            # 生き残りは足したテストで検出に変わりうるので流し直す。足した行が既存のテストを弱めた場合
+            # （前処理に足した、skip を足した、囲んで無効にした）は見逃す（--no-cache で流し直せる）
             if status != "killed" or not all(t in now and self.only_added(sha, now[t]) for t, sha in before.items()):
                 return None
         self.db.execute("UPDATE results SET tests = ?, at = ? WHERE key = ?", (json.dumps(now), self.now, key))
-        return status, summary
+        return status, summary, before == now
 
-    def store(self, key, status, summary, label, tests):
+    def store(self, key, status, summary, label, fingerprint):
         self.db.execute("INSERT OR REPLACE INTO results VALUES (?, ?, ?, ?, ?, ?)",
-                        (key, status, summary, label, json.dumps(self.fingerprint(tests)), self.now))
+                        (key, status, summary, label, json.dumps(fingerprint), self.now))
 
     def sweep(self):
         cutoff = self.now - CACHE_DAYS * 86400
@@ -155,11 +168,12 @@ class Cache:
 
 
 def load_tests(definition, mutations):
-    """変異ごとのテストのファイルを mutation["tests"] に入れる。定義に tests が無ければ、どの変異も空になる。"""
+    """変異ごとのテストのファイルを mutation["tests"] に、同じテストで確かめている他の変異対象の
+    ファイルを mutation["with"] に入れる。定義に tests が無ければ、どの変異も空になる。"""
     tests = definition.get("tests")
     if tests is None:
         for m in mutations:
-            m["tests"] = ()
+            m["tests"], m["with"] = (), ()
         return
     by_file = {"*": tests} if isinstance(tests, list) else tests
     if not isinstance(by_file, dict):
@@ -175,6 +189,9 @@ def load_tests(definition, mutations):
         if files is None:
             raise DefinitionError(f"tests に {m['file']} の分が無い（どのファイルにも流すものは \"*\" に書く）")
         m["tests"] = tuple(files)
+    of_file = {m["file"]: set(m["tests"]) for m in mutations}
+    for m in mutations:
+        m["with"] = tuple(sorted(f for f, files in of_file.items() if f != m["file"] and files & of_file[m["file"]]))
 
 
 def load_definition(path):
@@ -345,53 +362,82 @@ def main():
     cache = open_cache(mutations)
     timeouts = {}
 
+    def cached(method, *method_args):
+        """キャッシュを呼ぶ。不調（ディスクが一杯、ロックが取れない）なら、以降は使わずに流す。"""
+        nonlocal cache
+        if not cache:
+            return None
+        try:
+            return getattr(cache, method)(*method_args)
+        except (OSError, sqlite3.Error) as e:
+            print(f"run_mutations: キャッシュが使えなくなったので、以降は使わずに流す: {e}", file=sys.stderr)
+            cache = None
+            return None
+
     def baseline(tests):
-        """変異を入れずに 1 回流し、変異ごとの上限を返す。テストの組ごとに 1 回で、全部キャッシュに当たれば流さない。"""
-        if tests not in timeouts:
-            status, summary, seconds = run_tests(config, tests, config["timeout"] or BASELINE_TIMEOUT)
-            print(f"基準{'（' + ' '.join(tests) + '）' if tests else ''}: {summary}（{seconds:.0f} 秒）", flush=True)
-            if status != "passed":
-                sys.exit("run_mutations: 変異を入れる前にテストが通っていないので止めます")
-            if summary == NO_SUMMARY:
-                # 集計の行を拾えないと、検出と「壊れた」を分けられない
-                sys.exit("run_mutations: 基準の出力に集計の行が無い。runner か summary_pattern を直す")
-            # 条件式や算術の書き換えは無限ループを作りやすい。固定の長い上限だと 1 件ごとに待たされる
-            timeouts[tests] = config["timeout"] or max(MIN_TIMEOUT, seconds * 3)
-        return timeouts[tests]
+        """変異を入れずに 1 回流し、変異ごとの上限を決める。テストの組ごとに 1 回。"""
+        if tests in timeouts:
+            return
+        status, summary, seconds = run_tests(config, tests, config["timeout"] or BASELINE_TIMEOUT)
+        print(f"基準{'（' + ' '.join(tests) + '）' if tests else ''}: {summary}（{seconds:.0f} 秒）", flush=True)
+        if status != "passed":
+            sys.exit("run_mutations: 変異を入れる前にテストが通っていないので止めます")
+        if summary == NO_SUMMARY:
+            # 集計の行を拾えないと、検出と「壊れた」を分けられない
+            sys.exit("run_mutations: 基準の出力に集計の行が無い。runner か summary_pattern を直す")
+        # 条件式や算術の書き換えは無限ループを作りやすい。固定の長い上限だと 1 件ごとに待たされる
+        timeouts[tests] = config["timeout"] or max(MIN_TIMEOUT, seconds * 3)
 
     def write_out(counts=None, **totals):
         if args.out:
             body = {"counts": counts, "results": results, **totals}
             Path(args.out).write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n")
 
-    def check(mutation):
-        """(status, 集計の行, 秒, キャッシュから取ったか)"""
+    def run(mutation, original, mutated):
+        tests = mutation["tests"]
+        # 流している間にテストや他の変異対象を直されたら、どの中身で出た結果か分からないので記録しない
+        before = cached("key", config, mutation, mutated), cached("fingerprint", tests)
+        status, summary, seconds = apply_and_run(mutation, original, mutated, config, timeouts[tests])
+        # 壊れた・時間切れは環境や定義の不備でも起きるので、次も流す
+        if status in CACHED and all(before) and before == (cached("key", config, mutation, mutated), cached("fingerprint", tests)):
+            cached("store", before[0], status, summary, mutation["label"], before[1])
+        return status, summary, seconds
+
+    # 先に全部の変異をキャッシュに当て、流す必要のあるテストの組の基準をまとめて流す。
+    # 変異を流し始めてから別の組の基準が落ちると、そこまでの数十分が無駄になる
+    plans = []
+    for mutation in mutations:
         try:
             original, mutated = mutate(mutation)
         except DefinitionError as e:
-            return "invalid", str(e), 0.0, False
-        tests = mutation["tests"]
-        key = cache.key(config, mutation["file"], mutated) if cache else None
-        hit = cache.lookup(key, tests) if key and not args.no_cache else None
-        if hit:
-            return hit[0], hit[1], 0.0, True
-        status, summary, seconds = apply_and_run(mutation, original, mutated, config, baseline(tests))
-        # 壊れた・時間切れは環境や定義の不備でも起きるので、次も流す
-        if key and status in CACHED:
-            cache.store(key, status, summary, mutation["label"], tests)
-        return status, summary, seconds, False
+            plans.append((mutation, None, str(e)))
+            continue
+        hit = None
+        if not args.no_cache:
+            key = cached("key", config, mutation, mutated)
+            hit = key and cached("lookup", key, mutation["tests"])
+        plans.append((mutation, hit, (original, mutated)))
+    for mutation, hit, sources in plans:
+        # テストを足した後の「検出」の使い回しでも、足したテストが変異を入れないコードで通ることは確かめる
+        if isinstance(sources, tuple) and not (hit and hit[2]):
+            baseline(mutation["tests"])
 
     results = []
-    for mutation in mutations:
-        status, summary, seconds, cached = check(mutation)
+    for mutation, hit, sources in plans:
+        if hit:
+            status, summary, seconds = hit[0], hit[1], 0.0
+        elif isinstance(sources, str):
+            status, summary, seconds = "invalid", sources, 0.0
+        else:
+            status, summary, seconds = run(mutation, *sources)
         result = {
             "label": mutation["label"], "file": mutation["file"],
             "status": status, "summary": summary, "seconds": round(seconds, 1),
         }
-        if cached:
+        if hit:
             result["cached"] = True
         results.append(result)
-        took = "キャッシュ" if cached else f"{seconds:.0f} 秒"
+        took = "キャッシュ" if hit else f"{seconds:.0f} 秒"
         print(f"[{LABELS[status]}] {mutation['label']}: {summary}（{took}）", flush=True)
         # 途中で止められても、そこまでの結果を --survivors-of に使えるように毎回書く
         write_out()
@@ -404,10 +450,10 @@ def main():
     for r in results:
         if r["status"] != "killed":
             print(f"- [{LABELS[r['status']]}] {r['label']}: {r['summary']}")
-    if cache:
+    if mutations[0]["tests"]:
         hits = sum(1 for r in results if r.get("cached"))
         print(f"キャッシュから {hits} 件、流したのは {len(results) - hits} 件")
-        cache.sweep()
+        cached("sweep")
         write_out(counts, cached=hits)
     else:
         write_out(counts)
