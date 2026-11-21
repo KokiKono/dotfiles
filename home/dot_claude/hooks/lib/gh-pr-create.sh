@@ -5,3 +5,6 @@
 # コミットメッセージや grep の引数に含まれるだけのものは対象にしない。
 # 先頭の環境変数の代入（GH_TOKEN=x gh pr create など）は越えて見る
 GH_PR_CREATE_RE='(^|[;&|])[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+create'
+
+# kb-checks.sh が commit の前の検査に使う。4 つ目の括弧は git -C <path> のパス
+GIT_COMMIT_RE='(^|[;&|])[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*git[[:space:]]+(-C[[:space:]]+([^[:space:]]+)[[:space:]]+)?commit([[:space:]]|;|$)'

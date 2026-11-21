@@ -1,15 +1,16 @@
 #!/bin/bash
-# レビューで繰り返す指摘を機械化した検査（kb の checks/run）を、Claude の編集と PR 作成に挟む。
+# レビューで繰り返す指摘を機械化した検査（kb の checks/run）を、Claude の編集・commit・PR 作成に挟む。
 # - Edit / Write の後: 編集したファイルの、変えた行だけを見て、違反があれば Claude に直させる
-# - gh pr create の前: ブランチの変更全体を見て、違反があれば PR を作らせない
+# - git commit の前: ブランチの変更全体を見て、違反があれば commit させない
+# - gh pr create の前: 同じく全体を見て、違反があれば PR を作らせない
 # 検査の中身と対象リポジトリは kb が持つ（業務の知見なのでこのリポジトリには入れない）。
 # 検査の無いリポジトリでは run が 2 を返すので、何もしない。
 set -euo pipefail
 
 input=$(cat)
 
-# Bash の呼び出しごとに走るので、編集でも PR 作成でもないものは外部プロセスを起動せずに抜ける
-[[ $input == *'gh pr create'* || $input == *'"file_path"'* ]] || exit 0
+# Bash の呼び出しごとに走るので、編集でも commit でも PR 作成でもないものは外部プロセスを起動せずに抜ける
+[[ $input == *'gh pr create'* || $input == *'commit'* || $input == *'"file_path"'* ]] || exit 0
 [ "${SKIP_KB_CHECKS:-}" = "1" ] && exit 0
 RUN="${KB_CHECKS_RUN:-$HOME/git_clone/local/kb/checks/run}"
 [ -x "$RUN" ] || exit 0
@@ -39,13 +40,22 @@ case "$event:$tool" in
 $found" '{decision: "block", reason: $r}'
     ;;
   PreToolUse:Bash)
-    [[ $command == *'gh pr create'* ]] || exit 0
     source "$(dirname "${BASH_SOURCE[0]}")/lib/gh-pr-create.sh"
-    [[ $command =~ $GH_PR_CREATE_RE ]] || exit 0
+    # git の pre-commit hook にしないのは、業務リポジトリに hook を足せず、人の commit まで止めるため。
+    # Edit の後の検査は Bash（sed など）での書き換えを見ないので、commit の前にもう一度見る
+    if [[ $command =~ $GH_PR_CREATE_RE ]]; then
+      what="PR を作る"
+    elif [[ $command =~ $GIT_COMMIT_RE ]]; then
+      what="commit する"
+      # git -C <path> commit は、そのパスのリポジトリを見る
+      [ -n "${BASH_REMATCH[4]}" ] && cwd="${BASH_REMATCH[4]}"
+    else
+      exit 0
+    fi
     [ -n "$cwd" ] && git -C "$cwd" rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
     found=$(hits "$cwd")
     [ -n "$found" ] || exit 0
-    msg="PR を作る前に、レビューで繰り返し指摘されている書き方を直してください（誤検知ならユーザーに確認し、SKIP_KB_CHECKS=1 で起動し直してもらう）:
+    msg="${what}前に、レビューで繰り返し指摘されている書き方を直してください（誤検知ならユーザーに確認し、SKIP_KB_CHECKS=1 で起動し直してもらう）:
 $found"
     jq -n --arg m "$msg" '{
       hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m},

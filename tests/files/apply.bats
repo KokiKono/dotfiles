@@ -339,7 +339,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
              hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel \
-             mutation-check; do
+             mutation-check comment-check; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -434,6 +434,21 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ -z "$output" ]
     grep -qF 'kb.sh' "${SKILL}/SKILL.md"
     # 実際の org・repo 名を混ぜない
+    run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: comment-check skill is deployed with its script and no work repo names" {
+    SKILL="${TESTHOME}/.claude/skills/comment-check"
+    [ -x "${SKILL}/scripts/added_comments.py" ]
+    # 会話を引き継ぐ fork に読ませると初見にならない
+    grep -qF 'general-purpose' "${SKILL}/SKILL.md"
+    # 型の表は kb（非追跡）が持つ。スキルは足し方の在りかを指すだけにする
+    grep -qF 'checks/comments/patterns.tsv' "${SKILL}/SKILL.md"
+    run find "${SKILL}" -name '*.tsv'
+    [ -z "$output" ]
+    # hook が求める順番と、スキルの名前がずれていないこと
+    grep -qF '"comment-check"' "${TESTHOME}/.claude/hooks/review-before-pr.sh"
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]
 }
