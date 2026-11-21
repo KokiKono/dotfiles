@@ -204,6 +204,196 @@ EOF
     cmp target.txt before.txt
 }
 
+# キャッシュの検証用。流すたびに calls へ引数を 1 行足すので、行数で「実際に流した回数」が分かる
+cached_setup() {
+    cat > fake-runner <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> calls
+if grep -q 'SYNTAX' target.txt; then
+    echo "0 examples, 0 failures, 1 error occurred outside of examples"; exit 1
+fi
+if grep -q 'fails always' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
+if grep -q 'limit = 5' target.txt && grep -q 'checks limit' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
+if grep -q 'keep = false' target.txt && grep -q 'checks keep' "$@"; then echo "3 examples, 1 failure"; exit 1; fi
+echo "3 examples, 0 failures"
+EOF
+    printf 'checks limit\n' > a_spec.txt
+    definition "[$(mutation killed 'limit = 4' 'limit = 5'),$(mutation survived 'keep = true' 'keep = false')]" \
+        '{"tests": ["a_spec.txt"]}'
+}
+
+calls() {
+    [ -e calls ] || { echo 0; return; }
+    wc -l < calls | tr -d ' '
+}
+
+@test "mutation-check cache: a second run returns the same results without running the tests" {
+    cached_setup
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    # 基準 1 回 + 変異 2 件
+    [ "$(calls)" = "3" ]
+    [ "$(jq -r '.cached' out.json)" = "0" ]
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    # 全部当たれば基準も流さない
+    [ "$(calls)" = "3" ]
+    [ "$(status_of killed)" = "killed" ]
+    [ "$(status_of survived)" = "survived" ]
+    [ "$(jq -r '.cached' out.json)" = "2" ]
+    [ "$(jq -r '[.results[].cached] | all' out.json)" = "true" ]
+    [[ "$output" == *"キャッシュから 2 件、流したのは 0 件"* ]] || false
+}
+
+@test "mutation-check cache: the label and the position do not matter, the mutated source does" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    # 名前を変えても、同じ書き換えなら当たる
+    definition "[$(mutation renamed 'limit = 4' 'limit = 5')]" '{"tests": ["a_spec.txt"]}'
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(calls)" = "3" ]
+    [ "$(status_of renamed)" = "killed" ]
+    # ソースを直したら、同じファイルの変異は流し直す
+    printf 'limit = 4\nkeep = true\nextra = 1\n' > target.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(calls)" = "5" ]
+    [ "$(jq -r '.cached' out.json)" = "0" ]
+}
+
+@test "mutation-check cache: adding lines to a test keeps killed results and reruns survivors" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    printf 'checks limit\nchecks keep\n' > a_spec.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    # 基準 1 回 + 生き残りだった 1 件だけ
+    [ "$(calls)" = "5" ]
+    [ "$(jq -r '.results[] | select(.label == "killed") | .cached' out.json)" = "true" ]
+    # 足したテストで、生き残りが検出に変わる
+    [ "$(status_of survived)" = "killed" ]
+    [ "$(jq -r '.results[] | select(.label == "survived") | .cached' out.json)" = "null" ]
+}
+
+@test "mutation-check cache: changing or removing a test line reruns killed results too" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    printf 'checks nothing\n' > a_spec.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    [ "$(calls)" = "6" ]
+    # テストを弱めたので、検出できていた変異が生き残る
+    [ "$(status_of killed)" = "survived" ]
+}
+
+@test "mutation-check cache: a test that fails on the unmutated code stops the run even when all results are cached" {
+    cached_setup
+    definition "[$(mutation killed 'limit = 4' 'limit = 5')]" '{"tests": ["a_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    # 行を足しただけなので検出はキャッシュから返るが、足したテストは変異を入れていないコードで落ちる
+    printf 'checks limit\nfails always\n' > a_spec.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"変異を入れる前にテストが通っていない"* ]] || false
+}
+
+@test "mutation-check cache: editing another mutated file that shares a test reruns the mutations" {
+    cached_setup
+    printf 'other = 1\n' > other.txt
+    printf 'checks other\n' > b_spec.txt
+    shared() {
+        jq -n --argjson tests "$1" '{runner: "rspec", command: ["./fake-runner"], tests: $tests,
+            mutations: [{label: "a", file: "target.txt", old: "limit = 4", new: "limit = 5"},
+                        {label: "b", file: "other.txt", old: "other = ", new: "other = 1 + "}]}' > def.json
+    }
+    # テストを共有しているファイルを直すと、もう片方の変異も流し直す（呼び出し先を直した場合に当たる）
+    shared '["a_spec.txt"]'
+    python3 "${RUN}" def.json > /dev/null
+    printf 'other = 2\n' > other.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(jq -r '.cached' out.json)" = "0" ]
+    # テストが別なら、直していないファイルの変異はキャッシュから返る
+    shared '{"target.txt": ["a_spec.txt"], "other.txt": ["b_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    printf 'other = 3\n' > other.txt
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(jq -r '.results[] | select(.label == "a") | .cached' out.json)" = "true" ]
+    [ "$(jq -r '.results[] | select(.label == "b") | .cached' out.json)" = "null" ]
+}
+
+@test "mutation-check cache: a cache that stops working mid-run does not stop the run" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    # 表を壊して、開けるが引けない状態にする
+    sqlite3 "${HOME}/.cache/mutation-check/cache.sqlite3" 'DROP TABLE results'
+    sqlite3 "${HOME}/.cache/mutation-check/cache.sqlite3" 'CREATE TABLE results (other TEXT)'
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"キャッシュが使えなくなった"* ]] || false
+    [ "$(status_of killed)" = "killed" ]
+    [ "$(status_of survived)" = "survived" ]
+}
+
+@test "mutation-check cache: broken results are not cached" {
+    cached_setup
+    definition "[$(mutation syntax 'keep = true' 'SYNTAX')]" '{"tests": ["a_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(status_of syntax)" = "broken" ]
+    [ "$(calls)" = "4" ]
+}
+
+@test "mutation-check cache: --no-cache reruns everything and --clear-cache forgets" {
+    cached_setup
+    python3 "${RUN}" def.json > /dev/null
+    run python3 "${RUN}" def.json --no-cache --out out.json
+    [ "$(calls)" = "6" ]
+    [ "$(jq -r '.cached' out.json)" = "0" ]
+    run python3 "${RUN}" --clear-cache
+    [ "$status" -eq 0 ]
+    [ ! -e "${HOME}/.cache/mutation-check/cache.sqlite3" ]
+    run python3 "${RUN}" def.json
+    [ "$(calls)" = "9" ]
+}
+
+@test "mutation-check cache: is off without tests, since the test files are unknown" {
+    cached_setup
+    definition "[$(mutation killed 'limit = 4' 'limit = 5')]" '{"command": ["./fake-runner", "a_spec.txt"]}'
+    python3 "${RUN}" def.json > /dev/null
+    run python3 "${RUN}" def.json --out out.json
+    [ "$(calls)" = "4" ]
+    [ "$(jq -r 'has("cached")' out.json)" = "false" ]
+    [ ! -e "${HOME}/.cache/mutation-check" ]
+}
+
+@test "mutation-check tests: each mutation runs only the tests of its file" {
+    cached_setup
+    printf 'other = 1\n' > other.txt
+    printf 'checks other\n' > b_spec.txt
+    jq -n '{runner: "rspec", command: ["./fake-runner"],
+        tests: {"target.txt": ["a_spec.txt"], "*": ["b_spec.txt"]},
+        mutations: [{label: "a", file: "target.txt", old: "limit = 4", new: "limit = 5"},
+                    {label: "b", file: "other.txt", old: "other = 1", new: "other = 2"}]}' > def.json
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    # 先に組ごとの基準を流し、それから変異を流す
+    [ "$(printf 'a_spec.txt\nb_spec.txt\na_spec.txt\nb_spec.txt\n')" = "$(cat calls)" ]
+    [ "$(status_of a)" = "killed" ]
+    [ "$(status_of b)" = "survived" ]
+}
+
+@test "mutation-check tests: rejects a missing test file or a file without tests" {
+    cached_setup
+    definition "[$(mutation a 'limit = 4' 'limit = 5')]" '{"tests": ["nope_spec.txt"]}'
+    run python3 "${RUN}" def.json
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"nope_spec.txt"* ]] || false
+    definition "[$(mutation a 'limit = 4' 'limit = 5')]" '{"tests": {"other.txt": ["a_spec.txt"]}}'
+    run python3 "${RUN}" def.json
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"target.txt"* ]] || false
+    [ "$(calls)" = "0" ]
+}
+
 # 差分のあるリポジトリを作る。base は最初のコミット
 gen_repo() {
     git init -q repo

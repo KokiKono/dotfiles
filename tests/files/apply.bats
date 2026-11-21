@@ -433,6 +433,9 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     run find "${SKILL}" -name '*.json'
     [ -z "$output" ]
     grep -qF 'kb.sh' "${SKILL}/SKILL.md"
+    # キャッシュは定義に tests があるときだけ効くので、定義を作る手順がそれを書かせること
+    grep -qF '`tests`' "${SKILL}/SKILL.md"
+    grep -qF -- '--no-cache' "${SKILL}/SKILL.md"
     # 実際の org・repo 名を混ぜない
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]

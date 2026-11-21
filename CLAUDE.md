@@ -540,8 +540,17 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - 書き換えたファイルは `finally` で毎回、バイト単位で元に戻す（改行コードも変えない）。SIGTERM・SIGHUP・SIGQUIT も
     例外に変えて同じ経路を通す。上限を超えたテストはプロセスグループごと止めるが、コンテナの中で動くテストまでは
     止められない。上限は定義に無ければ、変異を入れない 1 回にかかった時間の 3 倍（最低 30 秒）
-  - 毎コミットには流さない（数十通りで数分かかり、定義はコードを直すと古くなる）。pr-followup が、
-    AI レビューを始める前に PR ごとに 1 回だけ呼ぶ（下の pr-followup の項）
+  - **結果は `~/.cache/mutation-check/cache.sqlite3` にキャッシュし、同じ変異は流さない。** 変異 1 件に
+    テスト 1 回（Rails で 10 秒強）かかり、169 件の PR で 28 分かかったため。鍵は「変異を入れた後のソース」と
+    「その変異に流すテストのファイル」の中身で、label や位置は見ない。同じテストを共有している他の変異対象の
+    ファイルの中身も鍵に入れる（同じ PR で直した呼び出し先の変更を拾うため）。直した commit からの差分だけを
+    流す案は、テスト側を変えた影響を拾えないので採らなかった。テストに行を足しただけなら `killed` は使い回す
+    （落ちていたテストは落ちたままなので）。キャッシュが効くのは定義に `tests`（変異するファイルごとの
+    テストのファイル）があるときだけ。`command` に埋めたテストは見分けられず、全変異に同じテストを流すと
+    どれか 1 つを直しただけで全件が外れる。定義に出てこないファイル（PR で変えていない呼び出し先、factory）の
+    変更には気づかないので `--no-cache` がある。kb に置かないのは、消えても流し直せば戻り、autosave の履歴を太らせるだけだから
+  - 初回は PR を Ready にする前に流す。2 回目からはキャッシュがあるので、直すたびに流してよい。pr-followup が
+    AI レビューを始める前と、指摘を直した周の push の前に呼ぶ（下の pr-followup の項）
   - `tests/claude/mutation-check.bats` が 4 つのスクリプトを、`apply.bats` が配備と、定義の JSON・org/repo 名の非混入を見る。
 - **`home/dot_claude/skills/writing-retro/`** は、1 日の終わりに全セッションの記録
   （`~/.claude/projects/*/*.jsonl`）を読み返し、AI が書いた文章への指摘を一般化して
@@ -693,7 +702,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `tests/claude/review-before-pr.bats` が判定を見張っている
 - **`hooks/pr-followup.sh`（PostToolUse）は `gh pr create` が PR を作ったら、`pr-followup` スキルを
   その URL で実行するよう `additionalContext` で伝える**。スキル（`home/dot_claude/skills/pr-followup/`）は
-  CI を待って落ちたら直し、bot の i18n 警告を消し、mutation-check でテストの穴を 1 回確かめ、Draft なら会話に残タスクが無いときだけ `claude-review`
+  CI を待って落ちたら直し、bot の i18n 警告を消し、mutation-check でテストの穴を確かめ、Draft なら会話に残タスクが無いときだけ `claude-review`
   ラベルを付け、claude-review の指摘を直すか理由を返信して「0 new」になるまで回す。知っておくこと:
   - **Stop hook で止めさせない方針。** 人に聞くべき場面（範囲外の CI 失敗、仕様判断）でも止まれなくなるため、
     hook は指示を差し込むだけにしている。止まったら人が `/pr-followup` で再開する
@@ -701,9 +710,10 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     本文が i18n の語に当たるコメント」で拾う。bot 名と語は `~/.claude/pr-followup.local.json`（非追跡）の
     `i18n_bots` / `i18n_pattern` で絞る。PR への普通のコメントは解決済みを持たないので `state` に数えない
     （数えるとループが終わらない）
-  - **mutation-check は AI レビューの前に、PR ごとに 1 回だけ流す。** 足したテストも AI レビューに読ませるため。
-    終えたかどうかは kb の `mutations/<repo>-<PR番号>/report.md` の有無で見るので（`result.json` は流している途中にもできる）、スキルを呼び直しても、
-    AI レビューの指摘を直したあとも流し直さない（定義はコードを直すと古くなり、1 回に数分かかる）。
+  - **mutation-check は AI レビューの前と、指摘を直した周の push の前に流す。** 先に流すのは、足したテストも
+    AI レビューに読ませるため。直した周にも流すのは、直した行にテストの穴ができていないかを見るためで、
+    キャッシュがあるのでテストが流れるのは、直したファイルと、同じテストで確かめているファイルの変異だけになる。スキルを呼び直したときは、
+    kb の `mutations/<repo>-<PR番号>/report.md` に残した commit が HEAD と同じなら流さない（`result.json` は流している途中にもできる）。
     テストの穴は聞かずにテストを足すが、実装は変えない。claude-review の workflow が無いリポジトリでは流さない
   - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
   - `gh pr create` を呼んだかの判定は `hooks/lib/gh-pr-create.sh` にあり、`review-before-pr.sh` と共有している。
