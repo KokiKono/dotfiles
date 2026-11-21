@@ -339,7 +339,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
              hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel \
-             mutation-check; do
+             mutation-check comment-check; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -434,6 +434,22 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ -z "$output" ]
     grep -qF 'kb.sh' "${SKILL}/SKILL.md"
     # 実際の org・repo 名を混ぜない
+    run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
+    [ "$status" -ne 0 ]
+}
+
+@test "apply: comment-check skill is deployed with its script and no work repo names" {
+    SKILL="${TESTHOME}/.claude/skills/comment-check"
+    [ -x "${SKILL}/scripts/added_comments.py" ]
+    # コメントを読ませる subagent の種類。会話を引き継ぐ fork にすると、issue や仕様を知った状態で読んでしまう
+    grep -qF 'general-purpose' "${SKILL}/SKILL.md"
+    # commit の前に止めるコメントの言い回しの表（patterns.tsv）は、業務リポジトリで測って育てるので
+    # kb（非追跡）が持つ。スキルは場所を指すだけで、表そのものは配らない
+    grep -qF 'checks/comments/patterns.tsv' "${SKILL}/SKILL.md"
+    run find "${SKILL}" -name '*.tsv'
+    [ -z "$output" ]
+    # hook が呼び出しを探す名前と、スキルの名前がずれていないこと（ずれると PR を作れなくなる）
+    grep -qF '"comment-check"' "${TESTHOME}/.claude/hooks/review-before-pr.sh"
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]
 }

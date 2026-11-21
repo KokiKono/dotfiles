@@ -2,7 +2,7 @@
 
 load ../test_helper
 
-# kb の検査（checks/run）を Edit の後と gh pr create の前に挟む hook を検証する。
+# kb の検査（checks/run）を Edit の後と、git commit・gh pr create の前に挟む hook を検証する。
 # run はスタブにして、渡された引数と終了コードだけを見る。
 
 setup() {
@@ -82,7 +82,7 @@ bash_hook() {
     export STUB_RC=1
     run bash_hook "git status"
     [ -z "$output" ]
-    run bash_hook "git commit -m 'gh pr create の前に検査する'"
+    run bash_hook "git log --grep 'gh pr create の前に検査する'"
     [ -z "$output" ]
     [ ! -e "$ARGS" ]
 }
@@ -94,4 +94,51 @@ bash_hook() {
     KB_CHECKS_RUN="${BATS_TEST_TMPDIR}/none" run edit_hook
     [ "$status" -eq 0 ]
     [ -z "$output" ]
+}
+
+@test "kb-checks: denies git commit while the branch has violations" {
+    export STUB_RC=1
+    run bash_hook "git add -A && git commit -m x"
+    [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = "deny" ]
+    [[ "$(jq -r .hookSpecificOutput.permissionDecisionReason <<<"$output")" == "commit する前に"*"[kb/x] bad"* ]] || false
+    [ "$(cat "$ARGS")" = "$WT" ]
+}
+
+@test "kb-checks: git -C <path> commit checks that repository" {
+    export STUB_RC=1
+    OTHER="${BATS_TEST_TMPDIR}/other"
+    git init -q "$OTHER"
+    run bash_hook "git -C $OTHER commit -m x"
+    [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = "deny" ]
+    [ "$(cat "$ARGS")" = "$OTHER" ]
+    # 引用符付きと、hook に渡された cwd からの相対パス
+    mkdir "$WT/sub"; git init -q "$WT/sub"
+    run bash_hook "git -C \"$OTHER\" commit -m x"
+    [ "$(cat "$ARGS")" = "$OTHER" ]
+    run bash_hook "git -C sub commit -m x"
+    [ "$(cat "$ARGS")" = "$WT/sub" ]
+    # メッセージの中の -C は、見るリポジトリを変えない
+    run bash_hook "git commit -m 'revert git -C $OTHER commit'"
+    [ "$(cat "$ARGS")" = "$WT" ]
+}
+
+@test "kb-checks: git global options before commit do not hide it" {
+    export STUB_RC=1
+    for c in "git -c user.name=x commit -m x" "git --no-pager commit -m x" "GIT_EDITOR=true git commit --amend"; do
+        rm -f "$ARGS"
+        run bash_hook "$c"
+        [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = "deny" ]
+        [ "$(cat "$ARGS")" = "$WT" ]
+    done
+}
+
+@test "kb-checks: commit only counts when git commit is invoked" {
+    export STUB_RC=1
+    run bash_hook 'git log --grep "git commit"'
+    [ -z "$output" ]
+    run bash_hook "git commit-graph write"
+    [ -z "$output" ]
+    run bash_hook "git show commit"
+    [ -z "$output" ]
+    [ ! -e "$ARGS" ]
 }

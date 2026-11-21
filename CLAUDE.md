@@ -56,7 +56,8 @@ tests/
 ├── claude/review-before-pr.bats   # unit tests for the PR-before-review hook
 ├── claude/pr-followup.bats        # unit tests for the after-PR hook and pr-followup's status script
 ├── claude/mutation-check.bats     # unit tests for the mutation-check skill's run_mutations.py / gen_mutations{.py,_ruby.rb} / kb.sh
-├── claude/kb-checks.bats          # unit tests for the hook that runs kb's checks after edits and before PRs
+├── claude/kb-checks.bats          # unit tests for the hook that runs kb's checks after edits and before commits / PRs
+├── claude/comment-check.bats      # unit tests for the comment-check skill's added_comments.py
 ├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
@@ -675,16 +676,16 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
-- **`hooks/review-before-pr.sh`** は `gh pr create` を、`/simplify` → `/code-review` を済ませるまで止める
+- **`hooks/review-before-pr.sh`** は `gh pr create` を、`/simplify` → `/comment-check` → `/code-review` を済ませるまで止める
   （hook からスキルは起動できないので、止めて Claude に実行させる）。判定はトランスクリプトの JSONL の
   Skill ツール呼び出し（`assistant` の `tool_use`、`input.skill`）と、ユーザーが打ったスラッシュコマンド
   （`<command-name>`）で行う。以前は "simplify" の文字列 grep だったので、スキル一覧に名前が出ているだけで
   通っていた。`/code-review` は `/simplify` より後、かつ最後の Edit / Write より後に要る（`/simplify` が
-  書き換えた後のコードを見るため）。`docs/` と README だけの差分と、claude を起動した環境の
+  書き換えた後のコードを見るため）。`/comment-check` はその間に要る（下の comment-check の項）。`docs/` と README だけの差分と、claude を起動した環境の
   `SKIP_PR_REVIEW=1` は通す。`.md` を拡張子で丸ごと外さないのは、このリポジトリでは SKILL.md などが本体だから。
   コマンド文字列に書いた `SKIP_PR_REVIEW=1` は見ない（Claude が自分で付けて飛ばせるため）。`gh pr create` は
   コマンドとして呼ばれたときだけ見る（コミットメッセージに文字列が入っているだけでは止めない）。
@@ -707,14 +708,32 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - takt-order §7 はこのスキルに委ねている。`SKIP_PR_FOLLOWUP=1` で hook を切れる
   - `gh pr create` を呼んだかの判定は `hooks/lib/gh-pr-create.sh` にあり、`review-before-pr.sh` と共有している。
     片方だけ直すと、レビューを求めた PR とフォローする PR がずれる
+- **`home/dot_claude/skills/comment-check/`** は、差分で足したコードコメントを、会話を知らない subagent に
+  初見の人として読ませて直すスキル (`/comment-check`)。レビューで「この issue の番号は必要ですか」と
+  指摘されたのがきっかけで、外を開かないと分からない参照と、残す価値の無いコメントを PR の前に落とす。知っておくこと:
+  - **subagent に読ませるのは、書いたセッションが issue も仕様も知っていて、初見で読めるかを判定できないため。**
+    `fork` は会話を引き継ぐので使わない。subagent は分からなかった所を問いで返すだけで、直すのは理由を
+    知っている元のセッション
+  - **順番は `/simplify` → `/comment-check` → `/code-review`**（`review-before-pr.sh` が求める）。`/simplify` の
+    書き換えでコメントが実装とずれうるので後に、直したコメントを AI と人のレビューに読ませるので前に置く。
+    `/code-review` の指摘を直したあとのコメントまでは見直させない（回り続けるため）
+  - **grep で拾える型は、kb の `checks/comments/patterns.tsv` に足して commit の前に止める**（下の kb-checks）。
+    AI に毎回読ませるより確実なので、スキルは見つけた型の登録を提案する。commit を止める検査に誤検知が入ると
+    全セッションが止まるので、承認なしには足さない。型の表は業務リポジトリで測って育てるので kb が持ち、
+    足し方も kb の `checks/README.md` にある
+  - `scripts/added_comments.py` が足したコメントを抜き出し、0 件なら subagent を起動しない。構文解析はせず、
+    拾いすぎる側に倒している（subagent が読む行が増えるだけなので）。`tests/claude/comment-check.bats` が見る
 - **`hooks/kb-checks.sh` は、kb の `checks/run`（レビューで繰り返す指摘を lint・差分のチェックにしたもの）を
-  Edit / Write の後と `gh pr create` の前に挟む。** 文章のルール（review-insights）は読み飛ばされるので、
+  Edit / Write の後と、`git commit`・`gh pr create` の前に挟む。** 文章のルール（review-insights）は読み飛ばされるので、
   防げるものは書いた直後に機械で止める。知っておくこと:
   - **検査の中身と対象リポジトリは kb が持つ。** 業務の知見なのでこのリポジトリには入れず、hook は
     `run` を呼ぶだけにしている。`run` は検査の無いリポジトリで 2 を返すので、hook はそのとき何もしない
   - Edit の後は、編集したファイルの変えた行だけを見る（`run --only`）。編集は済んでいて止められないので、
-    `decision: block` の reason で違反を Claude に渡して直させる。`gh pr create` の前はブランチの変更全体を見て、
-    違反があれば deny する
+    `decision: block` の reason で違反を Claude に渡して直させる。`git commit` と `gh pr create` の前は
+    ブランチの変更全体を見て、違反があれば deny する
+  - **commit の前にも見るのは、Edit の後の検査が Bash（sed など）での書き換えを見ないため。** git の pre-commit hook に
+    しないのは、業務リポジトリに hook を足せず、人の commit まで止めるため。`git commit` の判定（`GIT_COMMIT_RE`）は
+    `hooks/lib/gh-pr-create.sh` にある
   - kb が無いマシンでは何もしない。`SKIP_KB_CHECKS=1`（claude を起動した環境で）で切れる。
     `run` の置き場は `KB_CHECKS_RUN` で差し替えられ、テストはスタブを使う
 - **`hooks/japanese-reply.py`（Stop）は、ターンの最後の返答が英語なら止めて日本語で書き直させる。**

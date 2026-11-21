@@ -1,5 +1,5 @@
 #!/bin/bash
-# gh pr create の前に /simplify → /code-review を済ませたかを、トランスクリプトの実際の呼び出しで確かめる。
+# gh pr create の前に /simplify → /comment-check → /code-review を済ませたかを、トランスクリプトの実際の呼び出しで確かめる。
 # hook からスキルは起動できないので、足りなければ止めて Claude に実行させる。
 set -euo pipefail
 
@@ -40,7 +40,7 @@ fi
 # 文字列の grep では、スキル一覧に名前が出ているだけで通ってしまう。
 # Skill ツールの呼び出し（または /<name> のスラッシュコマンド）と、Edit 系の編集の位置を比べる。
 # トランスクリプトは数十 MB になるので、全体を配列に読まず 1 行ずつ畳み込む。
-read -r s r e < <(jq -n -r '
+read -r s c r e < <(jq -n -r '
   reduce (inputs | [input_line_number, .]) as [$i, $rec] ({};
     ($rec.message.content // []) as $c
     | if $rec.type == "assistant" and ($c | type) == "array" then
@@ -54,14 +54,19 @@ read -r s r e < <(jq -n -r '
         # コマンド名の無い user レコード（tool_result など）で状態を空にしない
         | if $k then .[$k] = $i else . end
       else . end)
-  | "\(.simplify // -1) \(.["code-review"] // -1) \(.edit // -1)"' "$transcript_path" 2>/dev/null \
-  || echo "-1 -1 -1")
+  | "\(.simplify // -1) \(.["comment-check"] // -1) \(.["code-review"] // -1) \(.edit // -1)"' "$transcript_path" 2>/dev/null \
+  || echo "-1 -1 -1 -1")
 
-# /simplify はコードを書き換えるので先に、/code-review はその後かつ最後の編集より後に要る
+# /simplify はコードを書き換えるので先に、/code-review はその後かつ最後の編集より後に要る。
+# /comment-check をその間に置くのは、/simplify の書き換えでコメントが実装とずれうるのと、
+# 直したあとのコメントを /code-review に読ませるため。/code-review の指摘を直したあとの
+# コメントまでは見直させない（求めると /comment-check と /code-review が互いを呼び直して終わらない）
 if [ "$s" -lt 0 ]; then
-  todo="/simplify で変更を整理し、続けて /code-review low でバグを確かめてください。"
-elif [ "$r" -le "$s" ]; then
-  todo="/simplify の後の /code-review low がまだです。実行してください。"
+  todo="/simplify で変更を整理し、/comment-check で足したコメントを見直し、続けて /code-review low でバグを確かめてください。"
+elif [ "$c" -le "$s" ]; then
+  todo="/simplify の後の /comment-check がまだです。実行し、続けて /code-review low を実行してください。"
+elif [ "$r" -le "$c" ]; then
+  todo="/comment-check の後の /code-review low がまだです。実行してください。"
 elif [ "$r" -le "$e" ]; then
   todo="/code-review の後にコードを編集しています。/code-review low をもう一度実行してください。"
 else

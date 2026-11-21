@@ -2,7 +2,7 @@
 
 load ../test_helper
 
-# gh pr create の前に /simplify → /code-review を求める hook を検証する。
+# gh pr create の前に /simplify → /comment-check → /code-review を求める hook を検証する。
 # トランスクリプトは Claude Code の JSONL の形を最小限で写したもの。
 
 setup() {
@@ -38,8 +38,8 @@ denied() { [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$output")" = 
     denied
 }
 
-@test "review-before-pr: simplify then code-review after the last edit passes" {
-    edit; skill simplify; edit; skill code-review
+@test "review-before-pr: simplify, comment-check, then code-review after the last edit passes" {
+    edit; skill simplify; edit; skill comment-check; edit; skill code-review
     run run_hook
     [ "$status" -eq 0 ]
     [ -z "$output" ]
@@ -47,26 +47,42 @@ denied() { [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$output")" = 
 
 @test "review-before-pr: tool results after the reviews do not erase them" {
     # user レコードはほとんどがコマンド名を持たない tool_result。それで記録が消えてはいけない
-    edit; result; skill simplify; result; skill code-review; result
+    edit; result; skill simplify; result; skill comment-check; result; skill code-review; result
     run run_hook
     [ -z "$output" ]
 }
 
 @test "review-before-pr: slash commands typed by the user count too" {
-    edit; slash simplify; slash code-review
+    edit; slash simplify; slash comment-check; slash code-review
     run run_hook
     [ -z "$output" ]
 }
 
 @test "review-before-pr: code-review before simplify is not enough" {
-    edit; skill code-review; skill simplify
+    edit; skill comment-check; skill code-review; skill simplify
     run run_hook
     denied
-    [[ "$output" == *"/simplify の後の /code-review"* ]] || false
+    [[ "$output" == *"/simplify の後の /comment-check"* ]] || false
+}
+
+@test "review-before-pr: comment-check is required between simplify and code-review" {
+    # /simplify の書き換えでコメントが実装とずれうるので、前に済ませたものは数えない
+    edit; skill comment-check; skill simplify; skill code-review
+    run run_hook
+    denied
+    [[ "$output" == *"/simplify の後の /comment-check"* ]] || false
+    # 直したあとのコメントを /code-review に読ませる
+    skill comment-check
+    run run_hook
+    denied
+    [[ "$output" == *"/comment-check の後の /code-review"* ]] || false
+    skill code-review
+    run run_hook
+    [ -z "$output" ]
 }
 
 @test "review-before-pr: editing after code-review requires another code-review" {
-    skill simplify; skill code-review; edit
+    skill simplify; skill comment-check; skill code-review; edit
     run run_hook
     denied
     [[ "$output" == *"もう一度"* ]] || false
