@@ -19,19 +19,15 @@ KINDS = {
     "dash": {".sql", ".lua"},
 }
 # 行の頭から始まるコメントと、コードの後ろに付くコメント。
-# 後ろに付く側は前後に空白を求める（文字列の中の # や、URL の // を拾わないため）。
+# 後ろに付く # と // には前後に空白を求める（文字列の中の # や、URL の // を拾わないため）。
+# /* だけは空白を求めない。JSX の {/* */} は { の直後に書くため。
 # 拾いすぎても subagent が読む行が増えるだけなので、厳密な構文解析はしない
-FULL = {
-    "hash": re.compile(r"^\s*#(?!!)"),
-    "slash": re.compile(r"^\s*(//|/\*|\*|\{/\*)"),
-    "dash": re.compile(r"^\s*--"),
+COMMENT = {
+    "hash": re.compile(r"^\s*#(?!!)|\s#\s"),
+    "slash": re.compile(r"^\s*(//|\*(\s|/|$))|\s//\s|/\*"),
+    "dash": re.compile(r"^\s*--|\s--\s"),
 }
-TRAILING = {
-    "hash": re.compile(r"\s#\s"),
-    "slash": re.compile(r"\s//\s|/\*"),
-    "dash": re.compile(r"\s--\s"),
-}
-# 道具への指示は、人に読ませる説明ではないので見直しの対象にしない
+# 道具への指示と、ブロックコメントの枠だけの行（/** や */）は、読ませる説明が無いので見直しの対象にしない
 DIRECTIVE = re.compile(
     r"frozen_string_literal|rubocop:|eslint-|oxlint-|biome-ignore|prettier-ignore|shellcheck |"
     r"@ts-(expect-error|ignore|nocheck)|typed:|coding[:=]|noqa|type: ignore|istanbul ignore|"
@@ -39,13 +35,15 @@ DIRECTIVE = re.compile(
 )
 
 
-def git(repo, *args):
-    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, check=True).stdout
+def git(repo, *args, check=True):
+    # 利用者の設定（パスの引用）で出力の形が変わらないようにする
+    return subprocess.run(["git", "-C", repo, "-c", "core.quotepath=false", *args],
+                          capture_output=True, text=True, check=check)
 
 
 def default_base(repo):
     for ref in ("origin/HEAD", "origin/main", "origin/master"):
-        r = subprocess.run(["git", "-C", repo, "merge-base", ref, "HEAD"], capture_output=True, text=True)
+        r = git(repo, "merge-base", ref, "HEAD", check=False)
         if r.returncode == 0:
             return r.stdout.strip()
     sys.exit("既定ブランチが見つからない（--base で指定する）")
@@ -53,25 +51,31 @@ def default_base(repo):
 
 def added_lines(repo, base):
     """{path: 足した行番号の集合}。未追跡のファイルは None（全行）"""
-    added, current = {}, None
-    for line in git(repo, "diff", "-U0", "--diff-filter=d", base).splitlines():
-        if line.startswith("+++ b/"):
-            current = added.setdefault(line[6:], set())
+    added, current, in_header = {}, None, False
+    diff = git(repo, "diff", "-U0", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
+               "--diff-filter=d", base).stdout
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            current, in_header = None, True
+        elif in_header and line.startswith("+++ "):
+            # ヘッダーの中だけで見る。`++ b/` で始まる足した行も `+++ b/` で始まるため
+            current = added.setdefault(line[6:], set()) if line.startswith("+++ b/") else None
         elif line.startswith("@@") and current is not None:
+            in_header = False
             start, _, length = line.split()[2][1:].partition(",")
             current.update(range(int(start), int(start) + int(length or 1)))
-    for rel in git(repo, "ls-files", "--others", "--exclude-standard").splitlines():
+    for rel in git(repo, "ls-files", "--others", "--exclude-standard").stdout.splitlines():
         added[rel] = None
     return added
 
 
 def is_comment(line, kind):
-    return bool(FULL[kind].search(line) or TRAILING[kind].search(line)) and not DIRECTIVE.search(line)
+    return bool(COMMENT[kind].search(line)) and not DIRECTIVE.search(line)
 
 
 def blocks_of(repo, rel, numbers):
     kind = next((k for k, exts in KINDS.items() if Path(rel).suffix in exts), None)
-    if kind is None:
+    if kind is None or numbers == set():
         return
     try:
         lines = (Path(repo) / rel).read_text().splitlines()
@@ -96,7 +100,7 @@ def main():
     parser.add_argument("--base")
     parser.add_argument("repo", nargs="?", default=".")
     args = parser.parse_args()
-    repo = git(args.repo, "rev-parse", "--show-toplevel").strip()
+    repo = git(args.repo, "rev-parse", "--show-toplevel").stdout.strip()
     base = args.base or default_base(repo)
     blocks = [b for rel, numbers in sorted(added_lines(repo, base).items()) for b in blocks_of(repo, rel, numbers)]
     json.dump({"base": base, "count": len(blocks), "blocks": blocks}, sys.stdout, ensure_ascii=False, indent=1)

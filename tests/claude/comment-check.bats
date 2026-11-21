@@ -46,6 +46,8 @@ const a = 1 // trailing
 export const X = () => <div>{/* jsx */}</div>
 TSX
     echo 'c = "a#b" # trailing' >>"$R/a.rb"
+    # 行頭の * でも、参照外しはコメントではない
+    printf '%s\n' 'func f(p *int) {' '*p = 1' '}' >"$R/c.go"
     run blocks '[.blocks[] | "\(.file):\(.start)-\(.end)"]'
     [ "$output" = '["a.rb:3-3","b.tsx:2-2","b.tsx:4-4","b.tsx:6-6"]' ]
 }

@@ -441,13 +441,14 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
 @test "apply: comment-check skill is deployed with its script and no work repo names" {
     SKILL="${TESTHOME}/.claude/skills/comment-check"
     [ -x "${SKILL}/scripts/added_comments.py" ]
-    # 会話を引き継ぐ fork に読ませると初見にならない
+    # コメントを読ませる subagent の種類。会話を引き継ぐ fork にすると、issue や仕様を知った状態で読んでしまう
     grep -qF 'general-purpose' "${SKILL}/SKILL.md"
-    # 型の表は kb（非追跡）が持つ。スキルは足し方の在りかを指すだけにする
+    # commit の前に止めるコメントの言い回しの表（patterns.tsv）は、業務リポジトリで測って育てるので
+    # kb（非追跡）が持つ。スキルは場所を指すだけで、表そのものは配らない
     grep -qF 'checks/comments/patterns.tsv' "${SKILL}/SKILL.md"
     run find "${SKILL}" -name '*.tsv'
     [ -z "$output" ]
-    # hook が求める順番と、スキルの名前がずれていないこと
+    # hook が呼び出しを探す名前と、スキルの名前がずれていないこと（ずれると PR を作れなくなる）
     grep -qF '"comment-check"' "${TESTHOME}/.claude/hooks/review-before-pr.sh"
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]

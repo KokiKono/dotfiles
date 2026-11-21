@@ -10,7 +10,7 @@ set -euo pipefail
 input=$(cat)
 
 # Bash の呼び出しごとに走るので、編集でも commit でも PR 作成でもないものは外部プロセスを起動せずに抜ける
-[[ $input == *'gh pr create'* || $input == *'commit'* || $input == *'"file_path"'* ]] || exit 0
+[[ $input == *'gh pr create'* || $input == *git*commit* || $input == *'"file_path"'* ]] || exit 0
 [ "${SKIP_KB_CHECKS:-}" = "1" ] && exit 0
 RUN="${KB_CHECKS_RUN:-$HOME/git_clone/local/kb/checks/run}"
 [ -x "$RUN" ] || exit 0
@@ -47,8 +47,16 @@ $found" '{decision: "block", reason: $r}'
       what="PR を作る"
     elif [[ $command =~ $GIT_COMMIT_RE ]]; then
       what="commit する"
-      # git -C <path> commit は、そのパスのリポジトリを見る
-      [ -n "${BASH_REMATCH[4]}" ] && cwd="${BASH_REMATCH[4]}"
+      # git -C <path> commit は、そのパスのリポジトリを見る。コマンド全体ではなく commit に当たった部分から
+      # 取る（メッセージの中の -C を拾わないため）。空白を含むパスは扱えず、検査せずに通す
+      if [[ ${BASH_REMATCH[0]} =~ -C[[:space:]]+([^[:space:]]+) ]]; then
+        dir=${BASH_REMATCH[1]}
+        dir=${dir#[\"\']}
+        dir=${dir%[\"\']}
+        dir=${dir/#\~/$HOME}
+        [[ $dir == /* ]] || dir="$cwd/$dir"
+        cwd=$dir
+      fi
     else
       exit 0
     fi

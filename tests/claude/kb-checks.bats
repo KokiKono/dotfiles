@@ -111,6 +111,25 @@ bash_hook() {
     run bash_hook "git -C $OTHER commit -m x"
     [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = "deny" ]
     [ "$(cat "$ARGS")" = "$OTHER" ]
+    # 引用符付きと、hook に渡された cwd からの相対パス
+    mkdir "$WT/sub"; git init -q "$WT/sub"
+    run bash_hook "git -C \"$OTHER\" commit -m x"
+    [ "$(cat "$ARGS")" = "$OTHER" ]
+    run bash_hook "git -C sub commit -m x"
+    [ "$(cat "$ARGS")" = "$WT/sub" ]
+    # メッセージの中の -C は、見るリポジトリを変えない
+    run bash_hook "git commit -m 'revert git -C $OTHER commit'"
+    [ "$(cat "$ARGS")" = "$WT" ]
+}
+
+@test "kb-checks: git global options before commit do not hide it" {
+    export STUB_RC=1
+    for c in "git -c user.name=x commit -m x" "git --no-pager commit -m x" "GIT_EDITOR=true git commit --amend"; do
+        rm -f "$ARGS"
+        run bash_hook "$c"
+        [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = "deny" ]
+        [ "$(cat "$ARGS")" = "$WT" ]
+    done
 }
 
 @test "kb-checks: commit only counts when git commit is invoked" {

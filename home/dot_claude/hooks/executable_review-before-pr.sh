@@ -60,7 +60,7 @@ read -r s c r e < <(jq -n -r '
 # /simplify はコードを書き換えるので先に、/code-review はその後かつ最後の編集より後に要る。
 # /comment-check をその間に置くのは、/simplify の書き換えでコメントが実装とずれうるのと、
 # 直したあとのコメントを /code-review に読ませるため。/code-review の指摘を直したあとの
-# コメントまでは見直させない（番号の参照は commit の前の kb-checks が止める）
+# コメントまでは見直させない（求めると /comment-check と /code-review が互いを呼び直して終わらない）
 if [ "$s" -lt 0 ]; then
   todo="/simplify で変更を整理し、/comment-check で足したコメントを見直し、続けて /code-review low でバグを確かめてください。"
 elif [ "$c" -le "$s" ]; then
