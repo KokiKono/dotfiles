@@ -231,7 +231,7 @@ calls() {
     cached_setup
     run python3 "${RUN}" def.json --out out.json
     [ "$status" -eq 0 ]
-    # 絞らずに全件を対象にし、検出済みはキャッシュから返す
+    # テストを変えていないので、生き残りも含めて 2 件ともキャッシュから返る
     run python3 "${RUN}" def.json --survivors-of out.json --out again.json
     [ "$status" -eq 0 ]
     [[ "$output" == *"--survivors-of を使わず"* ]] || false
