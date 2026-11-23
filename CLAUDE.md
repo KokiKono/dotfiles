@@ -551,6 +551,12 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     変更には気づかないので `--no-cache` がある。kb に置かないのは、消えても流し直せば戻り、autosave の履歴を太らせるだけだから
   - 初回は PR を Ready にする前に流す。2 回目からはキャッシュがあるので、直すたびに流してよい。pr-followup が
     AI レビューを始める前と、指摘を直した周の push の前に呼ぶ（下の pr-followup の項）
+  - **テストを足した後の流し直しに `--survivors-of` を使わせない**（`tests` のある定義では）。キャッシュを入れた後の
+    最初の実行でこれが使われ、キャッシュから返った変異が 0 件だった。絞らなくても流れるのは生き残りだけで、
+    絞ると、足したテストが既存の行を書き換えたときに検出できていた変異を確かめ直せない
+  - **報告と `report.md` は、スクリプトの言葉（検出、生き残り）を使わずに書く。** 「検出に変わった」では、
+    PR も mutation-check も知らない人に何が起きたかが伝わらなかった。5W1H の表を先に置き、見逃したバグは 1 件ずつ
+    「対応した / 対応しなかった / 対応できなかった」に分けて理由を添える（書式は `references/definition.md`）
   - `tests/claude/mutation-check.bats` が 4 つのスクリプトを、`apply.bats` が配備と、定義の JSON・org/repo 名の非混入を見る。
 - **`home/dot_claude/skills/writing-retro/`** は、1 日の終わりに全セッションの記録
   （`~/.claude/projects/*/*.jsonl`）を読み返し、AI が書いた文章への指摘を一般化して
