@@ -457,6 +457,20 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     [ "$status" -ne 0 ]
 }
 
+@test "apply: md-diff-preview mod is deployed as a plugin under skills" {
+    MOD="${TESTHOME}/.claude/skills/md-diff-preview"
+    # skills フォルダのプラグインとして読み込ませるので、manifest は .claude-plugin/ に要る
+    # （chezmoi のソースで dot_ を付け忘れると claude-plugin/ になり、読み込まれない）
+    grep -q '"name": "md-diff-preview"' "${MOD}/.claude-plugin/plugin.json"
+    grep -qF './register.tsx' "${MOD}/hooks/hooks.json"
+    [ -f "${MOD}/hooks/register.tsx" ]
+    [ ! -e "${MOD}/claude-plugin" ]
+    # README の表示例が指す画像が揃っていること
+    for f in 1-create 2-add 3-change 4-delete; do
+        [ -f "${MOD}/docs/${f}.png" ]
+    done
+}
+
 @test "apply: writing-retro skill is deployed without the rules it writes" {
     SKILL="${TESTHOME}/.claude/skills/writing-retro"
     [ -x "${SKILL}/scripts/retro.sh" ]

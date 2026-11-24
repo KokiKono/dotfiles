@@ -693,7 +693,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`; plus the `md-diff-preview` mod under `skills/`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -741,6 +741,18 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     足し方も kb の `checks/README.md` にある
   - `scripts/added_comments.py` が足したコメントを抜き出し、0 件なら subagent を起動しない。構文解析はせず、
     拾いすぎる側に倒している（subagent が読む行が増えるだけなので）。`tests/claude/comment-check.bats` が見る
+- **`home/dot_claude/skills/md-diff-preview/` はスキルではなく Claude Code の mod（hooks モジュールだけのプラグイン）。**
+  Write / Edit で Markdown を変えたとき、会話欄の diff の代わりに、整形した本文に削除・追加の帯を付けた差分を描く。
+  知っておくこと:
+  - **skills フォルダに置くのは、そこにあるプラグインを Claude Code が起動時に読み込むため。** `settings.json` の
+    `CLAUDE_CODE_PLUGIN_DIRS` でも読み込めるが、アプリが書き換えるファイルを触らずに済む方を採った。
+    manifest は `.claude-plugin/` に要るので、ソースでは `dot_claude-plugin/` と書く
+  - **描き直すのは呼び出しの行（`ui.render` の `ToolUse`）。** 端末は Edit の diff をこの行に結果ごと描く。
+    Write の結果は別の行（`ToolResult`）にも出るので、プレビューを出したときはそちらを空にする。
+    `isExpanded` は端末では常に true で渡り、ctrl+o を見分けられないので見ていない
+  - 検証とテストは配備先で `claude plugin validate` / `claude plugin test`（ソースは `dot_` の名前なので通らない）。
+    README のスクショは、herdr のペインの色付き出力を升目の HTML にして Chrome で撮った。freeze は全角を
+    2 桁ちょうどで送らず、枠線や表がずれた。撮るときはホームのパスを `~` に置き換えている（public なので）
 - **`hooks/kb-checks.sh` は、kb の `checks/run`（レビューで繰り返す指摘を lint・差分のチェックにしたもの）を
   Edit / Write の後と、`git commit`・`gh pr create` の前に挟む。** 文章のルール（review-insights）は読み飛ばされるので、
   防げるものは書いた直後に機械で止める。知っておくこと:
