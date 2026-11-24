@@ -6,6 +6,8 @@ export type Index = {
   defs: Record<string, Def[]>
   // ラベルを含む返答のブロックの通し番号。鍵は本文の先頭（extract.ts の keyOf）
   seqOf: Record<string, number>
+  // compact の前に控えた、ラベルごとの最後の定義（extract.ts の carryOver）
+  carried: Record<string, Def>
 }
 
 declare module 'claude-code' {

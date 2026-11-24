@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { buildIndex, refsFor } from './extract'
+import { buildIndex, carryOver, refsFor } from './extract'
 
 const msg = (role: 'user' | 'assistant', ...texts: string[]) => ({
   role,
@@ -8,7 +8,7 @@ const msg = (role: 'user' | 'assistant', ...texts: string[]) => ({
 })
 
 const defsIn = (text: string) =>
-  Object.values(buildIndex([msg('assistant', text)], null).defs).flat()
+  Object.values(buildIndex([msg('assistant', text)], {}).defs).flat()
 
 const PROPOSAL = [
   '方針は 2 つあります。',
@@ -56,7 +56,7 @@ test('a mention in running text is not a definition', async () => {
 
 test('a later reply that mentions a label gets the definition from an earlier message', async () => {
   const later = '案A にする場合は、hook の誤検知を先に潰します。'
-  const index = buildIndex([msg('user', '方針を出して'), msg('assistant', PROPOSAL), msg('user', 'ok'), msg('assistant', later)], null)
+  const index = buildIndex([msg('user', '方針を出して'), msg('assistant', PROPOSAL), msg('user', 'ok'), msg('assistant', later)], {})
   const refs = refsFor(later, index)
 
   expect(refs.map(r => r.label)).toEqual(['案A'])
@@ -64,23 +64,23 @@ test('a later reply that mentions a label gets the definition from an earlier me
 })
 
 test('the reply that defines the labels gets no chips for them', async () => {
-  const index = buildIndex([msg('assistant', PROPOSAL)], null)
+  const index = buildIndex([msg('assistant', PROPOSAL)], {})
 
   expect(refsFor(PROPOSAL, index)).toEqual([])
 })
 
 test('when a label is defined twice, a reply sees the definition before it', async () => {
-  const second = '- 案A: 全部書き直す'
+  const second = '- 案A: 全部書き直す\n- 案B: 捨てる'
   const between = '案A で進めます'
   const after = '案A の続きです'
-  const index = buildIndex([msg('assistant', PROPOSAL), msg('assistant', between), msg('assistant', second), msg('assistant', after)], null)
+  const index = buildIndex([msg('assistant', PROPOSAL), msg('assistant', between), msg('assistant', second), msg('assistant', after)], {})
 
   expect(refsFor(between, index)[0]?.def.excerpt).toContain('- **案A**: hook で毎回検査する')
   expect(refsFor(after, index)[0]?.def.excerpt).toBe('- 案A: 全部書き直す')
 })
 
 test('a reply still being written, not yet indexed, takes the latest definition', async () => {
-  const index = buildIndex([msg('assistant', PROPOSAL)], null)
+  const index = buildIndex([msg('assistant', PROPOSAL)], {})
 
   expect(refsFor('案B だと遅くなります', index)[0]?.def.excerpt).toBe('- **案B**: CI でだけ検査する')
 })
@@ -96,21 +96,40 @@ test('AskUserQuestion options that carry a label are definitions', async () => {
       },
     ],
   }
-  const index = buildIndex([ask], null)
+  const index = buildIndex([ask], {})
 
   expect(index.defs['案A']?.[0]?.excerpt).toBe('どれにしますか？\n案A（推奨）: 速い')
 })
 
-test('a definition that compaction dropped from the history is kept from the previous index', async () => {
-  const before = buildIndex([msg('assistant', PROPOSAL)], null)
-  const after = buildIndex([msg('user', '<summary>要約</summary>'), msg('assistant', '案A で進めます')], before)
+test('a definition carried over a compaction stays, and a later redefinition does not hide it', async () => {
+  const carried = carryOver(buildIndex([msg('assistant', PROPOSAL)], {}))
+  // compact の要約はユーザー側の行に入る。要約の中の「- 案A: …」は定義として拾わない
+  const summary = msg('user', 'This session is being continued...\n- 案A: hook\n- 案B: CI')
+  const between = '案A で進めます'
+  const after = buildIndex([summary, msg('assistant', between), msg('assistant', '- 案A: 別の話\n- 案B: 別の話')], carried)
 
   expect(after.defs['案A']?.[0]?.seq).toBe(0)
-  expect(refsFor('案A で進めます', after)[0]?.def.excerpt).toContain('- **案A**: hook で毎回検査する')
+  expect(refsFor(between, after)[0]?.def.excerpt).toContain('- **案A**: hook で毎回検査する')
 })
 
-test('injected reminders are not indexed', async () => {
-  const index = buildIndex([msg('user', '<system-reminder>\n- 案A: 古い\n</system-reminder>')], null)
+test('a definition removed from the history without a compaction (a rewind) is dropped', async () => {
+  const before = buildIndex([msg('assistant', PROPOSAL)], {})
+  const after = buildIndex([msg('assistant', '案A で進めます')], before.carried)
 
-  expect(index.defs).toEqual({})
+  expect(after.defs).toEqual({})
+})
+
+test('a recap that names one label does not replace the definition', async () => {
+  const recap = '- **案A** を採用しました'
+  const index = buildIndex([msg('assistant', PROPOSAL), msg('assistant', recap), msg('assistant', '案A の続き')], {})
+
+  expect(index.defs['案A']).toHaveLength(1)
+  expect(refsFor(recap, index)[0]?.def.excerpt).toContain('hook で毎回検査する')
+})
+
+test('a label inside a longer word or followed by a counter is not a label', async () => {
+  expect(defsIn('- 改善案A: a\n- 代替案B: b\n- 提案1: c')).toEqual([])
+  expect(defsIn('- パターン2つ: a\n- 案3個: b')).toEqual([])
+  // 助詞の後ろは別の語の一部ではないので、参照として拾う
+  expect(refsFor('方針は案A で', buildIndex([msg('assistant', PROPOSAL)], {})).map(r => r.label)).toEqual(['案A'])
 })

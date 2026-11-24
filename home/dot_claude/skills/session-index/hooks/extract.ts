@@ -2,8 +2,9 @@ import type { Def, Index } from '../types'
 
 // 「案A」「A案」「選択肢2」「方針B」のような、後から名前だけで呼ばれる見出しの語
 const PREFIXED = '(?:案|選択肢|オプション|パターン|プラン|方針|アプローチ|Option|Plan|Approach)'
-const LABEL_SRC = `(?:${PREFIXED}\\s?[A-Z0-9]{1,2}(?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]案)`
-const LABEL = new RegExp(LABEL_SRC, 'g')
+// 前が漢字・カタカナなら別の語の一部（改善案A、デザインパターン2）、後ろが「つ」「個」なら数（パターン2つ）
+const LABEL_SRC = `(?:(?<![\\p{Script=Han}\\p{Script=Katakana}ー])${PREFIXED}\\s?[A-Z0-9]{1,2}(?![A-Za-z0-9つ個件])|(?<![A-Za-z0-9])[A-Z]案)`
+const LABEL = new RegExp(LABEL_SRC, 'gu')
 
 // 定義とみなすのは、行頭のラベルが見出し・太字・表の 1 列目のどれかになっているか、直後に
 // 区切りの記号（: ： ( （ ｜ — –）が続くか、ラベルだけで行が終わるものだけ。
@@ -12,10 +13,10 @@ const ITEM = '(?:[-*+]\\s+|\\d+[.)]\\s+)?'
 const BOLD = '(?:\\*\\*|__)'
 const L = `(?<label>${LABEL_SRC})`
 const DEFINING_FORMS: { kind: Kind; re: RegExp }[] = [
-  { kind: 'heading', re: new RegExp(`^\\s*(?<hashes>#{1,6})\\s+${BOLD}?${L}`) },
-  { kind: 'table', re: new RegExp(`^\\s*\\|\\s*${BOLD}?${L}${BOLD}?\\s*\\|`) },
-  { kind: 'item', re: new RegExp(`^(?<indent>\\s*)${ITEM}${BOLD}${L}`) },
-  { kind: 'item', re: new RegExp(`^(?<indent>\\s*)${ITEM}${L}\\s*(?:[:：（(｜—–]|$)`) },
+  { kind: 'heading', re: new RegExp(`^\\s*(?<hashes>#{1,6})\\s+${BOLD}?${L}`, 'u') },
+  { kind: 'table', re: new RegExp(`^\\s*\\|\\s*${BOLD}?${L}${BOLD}?\\s*\\|`, 'u') },
+  { kind: 'item', re: new RegExp(`^(?<indent>\\s*)${ITEM}${BOLD}${L}`, 'u') },
+  { kind: 'item', re: new RegExp(`^(?<indent>\\s*)${ITEM}${L}\\s*(?:[:：（(｜—–]|$)`, 'u') },
 ]
 
 type Kind = 'heading' | 'table' | 'item'
@@ -83,21 +84,32 @@ const cap = (lines: string[]): string => {
   return `${kept.slice(0, MAX_EXCERPT_CHARS)}${isCut ? '…' : ''}`
 }
 
+const hasLabel = (text: string): boolean => {
+  const has = LABEL.test(text)
+  // g 付きの test が覚えた位置を戻す。残すと次の呼び出しが途中から探す
+  LABEL.lastIndex = 0
+
+  return has
+}
+
+// 定義の形をした行の一覧。1 つのブロックで 2 つ以上のラベルを出したときだけ定義とみなす。
+// 選択肢は並べて出すもので、1 つだけの「- **案A** を採用しました」はまとめの言及なので、
+// これを定義にすると元の定義がまとめの一文で上書きされる
+const openingsOf = (lines: string[]): { i: number; opening: Opening }[] => {
+  // 行ごとに定義の形の正規表現をすべて当てる前に、ラベルの無い行を落とす
+  const found = lines.flatMap((line, i) => {
+    const opening = hasLabel(line) ? openingOf(line) : undefined
+
+    return opening === undefined ? [] : [{ i, opening }]
+  })
+
+  return new Set(found.map(f => f.opening.label)).size >= 2 ? found : []
+}
+
 const definitionsOf = (text: string, seq: number): Def[] => {
   const lines = text.split('\n')
-  const defs: Def[] = []
 
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i] ?? ''
-    // 行ごとに定義の形の正規表現をすべて当てる前に、ラベルの無い行を落とす。
-    // LABEL は g 付きで test が位置を覚えるので、次の行のために戻す
-    const opening = LABEL.test(line) ? openingOf(line) : undefined
-    LABEL.lastIndex = 0
-
-    if (opening === undefined) {
-      continue
-    }
-
+  return openingsOf(lines).map(({ i, opening }) => {
     let end = i + 1
 
     if (opening.kind !== 'table') {
@@ -106,10 +118,8 @@ const definitionsOf = (text: string, seq: number): Def[] => {
       }
     }
 
-    defs.push({ label: opening.label, excerpt: cap(lines.slice(i, end)), seq })
-  }
-
-  return defs
+    return { label: opening.label, excerpt: cap(lines.slice(i, end)), seq }
+  })
 }
 
 type Option = { label?: unknown; description?: unknown }
@@ -140,14 +150,16 @@ const optionDefs = (input: unknown, seq: number): Def[] => {
   )
 }
 
-// エンジンが差し込むリマインダーやタスクの通知は、人も Claude も書いていないので索引に入れない
-const isInjected = (text: string): boolean => /^\s*</.test(text)
-
 type Block = { type: string; [field: string]: unknown }
 type Message = { role: 'user' | 'assistant'; content: Block[] }
 
-export const buildIndex = (messages: Message[], previous: Index | null): Index => {
+// 索引にするのは Claude の返答だけ。ユーザー側の行には compact の要約やリマインダーが混ざり、
+// 要約の「- 案A: …」を拾うと、引き継いだ元の定義が要約の短い一文に置き換わる
+export const buildIndex = (messages: Message[], carried: Record<string, Def>): Index => {
   const defs: Record<string, Def[]> = {}
+  for (const [label, def] of Object.entries(carried)) {
+    defs[label] = [def]
+  }
   const seqOf: Record<string, number> = {}
   let seq = 0
 
@@ -156,15 +168,16 @@ export const buildIndex = (messages: Message[], previous: Index | null): Index =
       seq += 1
       let found: Def[] = []
 
-      if (block.type === 'text' && typeof block.text === 'string' && !isInjected(block.text)) {
+      if (message.role !== 'assistant') {
+        continue
+      }
+
+      if (block.type === 'text' && typeof block.text === 'string') {
         const text = normalize(block.text)
 
-        if (labelsOf(text).length > 0) {
+        if (hasLabel(text)) {
           found = definitionsOf(text, seq)
-
-          if (message.role === 'assistant') {
-            seqOf[keyOf(text)] = seq
-          }
+          seqOf[keyOf(text)] = seq
         }
       } else if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
         found = optionDefs(block.input, seq)
@@ -176,18 +189,20 @@ export const buildIndex = (messages: Message[], previous: Index | null): Index =
     }
   }
 
-  // compact で古い発言が要約に置き換わると、そこにあった定義は履歴から消える。
-  // 前回の索引にしか無いラベルは、どの発言よりも前（seq 0）の定義として残す
-  for (const [label, olds] of Object.entries(previous?.defs ?? {})) {
-    const last = olds.at(-1)
-
-    if (!(label in defs) && last !== undefined) {
-      defs[label] = [{ ...last, seq: 0 }]
-    }
-  }
-
-  return { defs, seqOf }
+  return { defs, seqOf, carried }
 }
+
+// compact で古い発言が要約に置き換わると、そこにあった定義は履歴から消える。compact の直前に
+// ラベルごとの最後の定義を、どの発言よりも前（seq 0）のものとして控える。履歴との差分で
+// 引き継がないのは、rewind で取り消した定義まで残り続けるため
+export const carryOver = (index: Index | null): Record<string, Def> =>
+  Object.fromEntries(
+    Object.entries(index?.defs ?? {}).flatMap(([label, defs]) => {
+      const last = defs.at(-1)
+
+      return last === undefined ? [] : [[label, { ...last, seq: 0 }]]
+    }),
+  )
 
 // 描画するブロックが参照しているラベルのうち、ほかの発言で定義したものを返す。
 // 同じラベルが何度も定義されていれば、このブロックより前の最後の定義を採る。
@@ -195,8 +210,7 @@ export const buildIndex = (messages: Message[], previous: Index | null): Index =
 export const refsFor = (rawText: string, index: Index) => {
   const text = normalize(rawText)
   const own = index.seqOf[keyOf(text)]
-  const lines = text.split('\n')
-  const definedHere = new Set(lines.map(line => openingOf(line)?.label))
+  const definedHere = new Set(openingsOf(text.split('\n')).map(f => f.opening.label))
 
   return labelsOf(text).flatMap(label => {
     const def = definedHere.has(label) ? undefined : index.defs[label]?.findLast(d => own === undefined || d.seq < own)
@@ -206,13 +220,7 @@ export const refsFor = (rawText: string, index: Index) => {
 }
 
 // 描画で索引を読む前に、ラベルを含まない返答を安く落とすための判定
-export const mentionsLabel = (rawText: string): boolean => {
-  const has = LABEL.test(normalize(rawText))
-  // g 付きの test が覚えた位置を戻す。残すと次の呼び出しが途中から探す
-  LABEL.lastIndex = 0
-
-  return has
-}
+export const mentionsLabel = (rawText: string): boolean => hasLabel(normalize(rawText))
 
 // hover の scope に使う、ブロックの本文の短い指紋
 export const fingerprint = (text: string): string => {

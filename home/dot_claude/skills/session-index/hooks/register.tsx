@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildIndex, fingerprint, mentionsLabel, refsFor } from './extract'
+import { buildIndex, carryOver, fingerprint, mentionsLabel, refsFor } from './extract'
 
 const index = atom({ plugin: 'session-index', key: 'index' } as const, null)
 
@@ -12,7 +12,7 @@ const CARD_MAX_COLUMNS = 80
 const rebuild = async ($: EngineInterface): Promise<void> => {
   const messages = await $.session.messages({ as: 'api' })
   const previous = await read($, index)
-  const next = buildIndex(messages, previous)
+  const next = buildIndex(messages, previous?.carried ?? {})
 
   if (JSON.stringify(next) !== JSON.stringify(previous)) {
     await update($, index, () => next)
@@ -25,6 +25,18 @@ export const register: Register = on => {
     await rebuild($)
 
     return result
+  })
+
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      const current = await read($, index)
+
+      if (current !== null) {
+        await update($, index, () => ({ ...current, carried: carryOver(current) }))
+      }
+    }
+
+    return next(e)
   })
 
   // 索引はメインの会話から作るので、subagent のターンの終わりでは作り直さない
@@ -40,7 +52,8 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     // 索引を読むと、その描画は索引が変わるたびに描き直される。ラベルの無い返答では読まない
-    const current = mentionsLabel(e.props.text) ? await read($, index) : null
+    // 要約の形で描かれるブロックは本文が履歴と違い、どの返答か突き合わせられないので触らない
+    const current = !e.props.isSummary && mentionsLabel(e.props.text) ? await read($, index) : null
     const refs = current === null ? [] : refsFor(e.props.text, current).slice(0, MAX_CHIPS)
 
     if (refs.length === 0) {
@@ -51,7 +64,8 @@ export const register: Register = on => {
     const width = Math.min(CARD_MAX_COLUMNS, Math.max(20, (e.viewport?.columns ?? CARD_MAX_COLUMNS) - 6))
     // hover の scope は全サイトで共有されるので、ほかの返答やブロックのカードまで一緒に開かないよう、
     // ブロックごとに別の名前にする。scope は 64 文字まで
-    const scope = (i: number): string => `si:${e.requestId.slice(-36)}:${fingerprint(e.props.text)}:${i}`
+    const block = `si:${e.requestId.slice(-36)}:${fingerprint(e.props.text)}`
+    const scope = (i: number): string => `${block}:${i}`
 
     // カードは位置を固定せず、チップの行の下に差し込む。absolute で本文の上に重ねると、
     // 端末には背景を塗りつぶす色が無く、下の本文がカードの隙間から透けて読めなくなる

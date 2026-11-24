@@ -22,7 +22,7 @@ const engine = ($: EngineInterface, e: RenderInput) => {
 }
 
 // 前のターンの終わりに作った索引。エンジンの state から読めるように渡す
-const INDEX = buildIndex([{ role: 'assistant', content: [{ type: 'text', text: PROPOSAL }] }], null)
+const INDEX = buildIndex([{ role: 'assistant', content: [{ type: 'text', text: PROPOSAL }] }], {})
 const stored = () => ({ value: { value: INDEX, version: 1 } })
 
 test('a reply that mentions an earlier label keeps its text and gets a chip and a hidden card', async ($, on) => {
