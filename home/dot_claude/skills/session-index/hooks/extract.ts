@@ -5,8 +5,9 @@ const PREFIXED = '(?:案|選択肢|オプション|パターン|プラン|方針
 const LABEL_SRC = `(?:${PREFIXED}\\s?[A-Z0-9]{1,2}(?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]案)`
 const LABEL = new RegExp(LABEL_SRC, 'g')
 
-// 定義とみなすのは、行頭のラベルが見出し・太字・表の 1 列目のどれかになっているか、
-// 直後に「:」「（」が続くものだけ。「案A にする場合は」のような行頭の言及は参照として扱う
+// 定義とみなすのは、行頭のラベルが見出し・太字・表の 1 列目のどれかになっているか、直後に
+// 区切りの記号（: ： ( （ ｜ — –）が続くか、ラベルだけで行が終わるものだけ。
+// 「案A にする場合は」のような行頭の言及は参照として扱う
 const ITEM = '(?:[-*+]\\s+|\\d+[.)]\\s+)?'
 const BOLD = '(?:\\*\\*|__)'
 const L = `(?<label>${LABEL_SRC})`
@@ -35,7 +36,8 @@ const normalize = (text: string): string =>
 
 const canonical = (label: string): string => label.replace(/\s/g, '')
 
-// 以下の関数は、normalize 済みの本文を受け取る
+// labelsOf・openingOf・keyOf・definitionsOf は normalize 済みの本文を受け取る。
+// 生の本文を渡すと、全角で書いたラベル（案Ａ）を取りこぼす
 const labelsOf = (text: string): string[] => [...new Set(Array.from(text.matchAll(LABEL), m => canonical(m[0])))]
 
 const openingOf = (line: string): Opening | undefined => {
@@ -56,10 +58,12 @@ const openingOf = (line: string): Opening | undefined => {
   return undefined
 }
 
-// 返答のブロックを、描画時に受け取る本文と突き合わせるための鍵
+// 返答のブロックを、描画時に受け取る本文と突き合わせるための鍵。
+// 履歴（$.session.messages）のブロックには id が無く、描画側の id はメッセージ単位なので
+// ブロックを見分けられない。描画される本文は隠す部分（<context> など）が除かれ、書いている
+// 途中なら末尾が欠けるので、全文ではなく空白を畳んだ先頭だけで突き合わせる
 const keyOf = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, KEY_CHARS)
 
-// 見出しは次の同じか上の階層の見出しまで、箇条書きや太字の段落は空行か同じか浅い項目・見出しまで
 const ends = (line: string, opening: Opening): boolean => {
   const heading = /^(#{1,6})\s/.exec(line)
 
@@ -85,7 +89,8 @@ const definitionsOf = (text: string, seq: number): Def[] => {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? ''
-    // 行ごとに 4 本の正規表現を当てる前に、ラベルの無い行を落とす
+    // 行ごとに定義の形の正規表現をすべて当てる前に、ラベルの無い行を落とす。
+    // LABEL は g 付きで test が位置を覚えるので、次の行のために戻す
     const opening = LABEL.test(line) ? openingOf(line) : undefined
     LABEL.lastIndex = 0
 
@@ -203,6 +208,7 @@ export const refsFor = (rawText: string, index: Index) => {
 // 描画で索引を読む前に、ラベルを含まない返答を安く落とすための判定
 export const mentionsLabel = (rawText: string): boolean => {
   const has = LABEL.test(normalize(rawText))
+  // g 付きの test が覚えた位置を戻す。残すと次の呼び出しが途中から探す
   LABEL.lastIndex = 0
 
   return has

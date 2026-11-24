@@ -7,7 +7,6 @@ const msg = (role: 'user' | 'assistant', ...texts: string[]) => ({
   content: texts.map(text => ({ type: 'text', text })),
 })
 
-// 1 つの返答で定義したラベルと、その抜粋
 const defsIn = (text: string) =>
   Object.values(buildIndex([msg('assistant', text)], null).defs).flat()
 

@@ -767,7 +767,6 @@ assert lg['command'] == 'lazygit', lg
     grep -qF './register.tsx' "${MOD}/hooks/hooks.json"
     [ -f "${MOD}/hooks/register.tsx" ]
     [ -f "${MOD}/hooks/extract.ts" ]
-    # plugin.json の types が指す state の契約
     [ -f "${MOD}/types/index.d.ts" ]
     [ ! -e "${MOD}/claude-plugin" ]
 }
