@@ -23,7 +23,10 @@ export const MAX_LINES = 80
 const MAX_CELLS = 250_000
 
 const MD_PATH = /\.(md|mdx|markdown)$/i
-const FENCE = /^\s{0,3}(```|~~~)/
+// CommonMark のフェンス。開きは 3 つ以上の ` か ~、閉じは同じ文字で開き以上の長さの並びだけの行。
+// 4 連の ` で囲んだ中の ``` や、```python のような情報文字列付きの行では閉じない
+const FENCE_OPEN = /^\s{0,3}(`{3,}|~{3,})/
+const FENCE_CLOSE = /^\s{0,3}(`{3,}|~{3,})\s*$/
 const HEADING = /^\s{0,3}#{1,6}\s/
 
 export const isMarkdownPath = (path: string): boolean => MD_PATH.test(path)
@@ -49,8 +52,9 @@ export const unapplyPatch = (after: string, hunks: Hunk[]): string | null => {
   const lines = after.replace(/\r\n?/g, '\n').split('\n')
   // 後ろの hunk から戻すと、前の hunk の行番号がずれない
   for (const h of [...hunks].sort((a, b) => b.newStart - a.newStart)) {
-    // 新側が 0 行の hunk は newStart が挿入位置の 1 つ前を指す
-    const start = h.newLines === 0 ? h.newStart : h.newStart - 1
+    // structuredPatch（jsdiff）の newStart は新側が 0 行でも 1 始まりの位置。unified 形式に
+    // 書き出すときだけ 1 を引くので、ここでは常に 1 を引けばよい
+    const start = h.newStart - 1
     const expected = sideOf(h, '-')
     if (expected.some((l, k) => lines[start + k] !== l)) return null
     lines.splice(start, h.newLines, ...sideOf(h, '+'))
@@ -58,7 +62,11 @@ export const unapplyPatch = (after: string, hunks: Hunk[]): string | null => {
   return lines.join('\n')
 }
 
-const fenceOf = (line: string): string | undefined => FENCE.exec(line)?.[1]
+const fenceOf = (line: string): string | undefined => FENCE_OPEN.exec(line)?.[1]
+const closes = (line: string, open: string): boolean => {
+  const mark = FENCE_CLOSE.exec(line)?.[1]
+  return !!mark && mark[0] === open[0] && mark.length >= open.length
+}
 
 // 空行・見出し・コードブロックの境目で分ける。リストや表は空行までを 1 ブロックにする
 export const splitBlocks = (text: string): string[] => {
@@ -73,7 +81,7 @@ export const splitBlocks = (text: string): string[] => {
     const mark = fenceOf(line)
     if (fence) {
       cur.push(line)
-      if (mark === fence) {
+      if (closes(line, fence)) {
         fence = null
         flush()
       }
@@ -147,10 +155,8 @@ export const diffBlocks = (before: string[], after: string[]): Block[] | null =>
 const closeFence = (lines: string[]): string[] => {
   let open: string | null = null
   for (const l of lines) {
-    const mark = fenceOf(l)
-    if (!mark) continue
-    if (!open) open = mark
-    else if (mark === open) open = null
+    if (!open) open = fenceOf(l) ?? null
+    else if (closes(l, open)) open = null
   }
   return open ? [...lines, open] : lines
 }

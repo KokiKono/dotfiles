@@ -12,6 +12,12 @@ test('a fence closes only on the same marker', async () => {
   expect(splitBlocks(['```', '~~~', '```', 'after'].join('\n'))).toEqual(['```\n~~~\n```', 'after'])
 })
 
+test('a longer fence is not closed by a shorter one or a line with an info string', async () => {
+  const text = ['````md', '```js', 'x', '```', '````', 'after'].join('\n')
+
+  expect(splitBlocks(text)).toEqual(['````md\n```js\nx\n```\n````', 'after'])
+})
+
 test('diffs the middle after trimming equal ends, deletions before additions', async () => {
   const blocks = diffBlocks(['a', 'b', 'old', 'c'], ['a', 'b', 'new', 'c'])
 

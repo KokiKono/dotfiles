@@ -37,26 +37,25 @@ const versionsOf = async (
   return before === null || typeof current !== 'string' ? null : { before, after: current }
 }
 
-const shownOf = async ($: EngineInterface, tool: string, o: WriteResult | EditResult): Promise<Shown> => {
+// 変わったブロックが 1 つも見つからないときは null を返し、元の diff に任せる。空白だけの変更
+// （行末の空白、空行の増減）はブロックの比較では消え、プレビューにすると変更が見えなくなるため
+const shownOf = async ($: EngineInterface, tool: string, o: WriteResult | EditResult): Promise<Shown | null> => {
   const hunks = o.structuredPatch ?? []
   const versions = await versionsOf($, tool, o, hunks)
-  const diff = versions && buildRichDiff(versions.before, versions.after)
-  return {
-    filePath: o.filePath,
-    isNew: tool === 'Write' && (o as WriteResult).type === 'create',
-    diff: diff ?? buildHunkDiff(hunks),
-  }
+  const diff = (versions && buildRichDiff(versions.before, versions.after)) ?? buildHunkDiff(hunks)
+  if (diff.added + diff.removed === 0) return null
+  return { filePath: o.filePath, isNew: tool === 'Write' && (o as WriteResult).type === 'create', diff }
 }
 
 // 呼び出しの行は、画面の表示範囲が変わるたびに描き直される。そのたびに差分を作り直すと、
 // 計算が重いうえ、Edit の行は後の編集を含んだファイルを読み直し、過去の行の表示が変わってしまう。
 // 最初に描いたときに 1 回だけ作り、以降はそれを見せる
 const MEMO_MAX = 200
-const memo = new Map<string, Promise<Shown>>()
-const memoized = ($: EngineInterface, id: string, tool: string, o: WriteResult | EditResult): Promise<Shown> => {
+const memo = new Map<string, Promise<Shown | null>>()
+const memoized = ($: EngineInterface, id: string, tool: string, o: WriteResult | EditResult): Promise<Shown | null> => {
   const hit = memo.get(id)
   if (hit) return hit
-  const shown = shownOf($, tool, o)
+  const shown = shownOf($, tool, o).catch(() => null)
   memo.set(id, shown)
   if (memo.size > MEMO_MAX) memo.delete(memo.keys().next().value!)
   return shown
@@ -80,13 +79,15 @@ const draw = ($: EngineInterface, e: RenderInput, tool: string, { filePath, isNe
         </Box>
       ) : (
         <Box flexDirection="column" gap={1} paddingTop={1}>
-          {diff.items.map(it =>
+          {diff.items.map((it, i) =>
             it.kind === 'gap' ? (
-              <Text dimColor>
-                {'  '}⋯{it.count === null ? '' : ` ${it.count} unchanged ${it.count === 1 ? 'block' : 'blocks'}`}
-              </Text>
+              <Box key={`gap-${i}`}>
+                <Text dimColor>
+                  {'  '}⋯{it.count === null ? '' : ` ${it.count} unchanged ${it.count === 1 ? 'block' : 'blocks'}`}
+                </Text>
+              </Box>
             ) : (
-              <Box flexDirection="row">
+              <Box key={`block-${i}`} flexDirection="row">
                 {it.kind === 'same' ? <Box width={1} /> : <Box width={1} backgroundColor={BAR[it.kind]} />}
                 <Box flexDirection="column" flexGrow={1} paddingLeft={1}>
                   <Markdown text={it.text} dimColor={it.kind === 'del'} />
@@ -107,14 +108,17 @@ export const register: Register = on => {
     // isExpanded は見ない。端末は単独の Edit の行を ctrl+o を押していなくても true で渡すので、
     // ctrl+o のときだけ diff に戻す、という使い方ができない
     const o = isRunning || isErrored || isInterrupted ? null : asMarkdownWrite(tool, output)
-    if (!o) return next(e)
-    return draw($, e, tool, await memoized($, e.props.tool_use_id, tool, o))
+    const shown = o && (await memoized($, e.props.tool_use_id, tool, o))
+    if (!shown) return next(e)
+    return draw($, e, tool, shown)
   })
 
   // Write の結果（「Wrote N lines」と中身）は、呼び出しの行とは別に結果だけの行（ToolResult）にも
-  // 描かれる。プレビューを出した呼び出しの結果は、ここで空にして二重に見せない
-  on('ui.render', { component: 'ToolResult' }, ($, e, next) => {
-    if (e.props.isErrored || !asMarkdownWrite(e.props.tool, e.props.output)) return next(e)
+  // 描かれる。呼び出しの行にプレビューを出したときだけ、ここを空にして二重に見せない。呼び出しの行が
+  // 描かれない・プレビューをやめたとき（中断、空白だけの変更）は、結果の行が唯一の表示になる
+  on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    const pending = memo.get(e.props.tool_use_id)
+    if (!pending || !(await pending)) return next(e)
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
