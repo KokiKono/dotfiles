@@ -1,0 +1,5 @@
+{
+  "name": "md-diff-preview",
+  "version": "0.1.0",
+  "description": "Write/Edit で Markdown を変えたとき、会話欄の diff の代わりに変更した節を整形して見せる"
+}
