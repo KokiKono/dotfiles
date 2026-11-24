@@ -18,7 +18,8 @@ export type RichDiff = {
 }
 
 export const MAX_LINES = 80
-// 変わった部分のブロック数の積がこれを超えると、差分の表が大きくなりすぎるので扱わない
+// 最長共通部分列の計算に使う升目（旧のブロック数 × 新のブロック数）の上限。1 升 4 バイトで約 1MB。
+// 超えたら diffBlocks は null を返し、呼び出し側は hunk ごとに比べる経路に落ちる
 const MAX_CELLS = 250_000
 
 const MD_PATH = /\.(md|mdx|markdown)$/i
@@ -100,8 +101,8 @@ const key = (block: string): string =>
     .map(l => l.trimEnd())
     .join('\n')
 
-// 先頭と末尾の一致するブロックを削ってから、残りを最長共通部分列で比べる。
-// ふつうの編集なら表は変わった部分の大きさで済む
+// 先頭と末尾の一致するブロックを先に削るのは、升目を変わった部分の大きさで済ませるため。削らないと、
+// 1 か所だけ直した長い文書でも文書全体の升目を埋め、MAX_CELLS を超えて全文での比較を諦めてしまう
 export const diffBlocks = (before: string[], after: string[]): Block[] | null => {
   const a = before.map(key)
   const b = after.map(key)

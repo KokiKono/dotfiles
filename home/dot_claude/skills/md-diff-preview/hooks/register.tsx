@@ -48,8 +48,9 @@ const shownOf = async ($: EngineInterface, tool: string, o: WriteResult | EditRe
   }
 }
 
-// 同じ呼び出しの行は、スクロールのたびと、呼び出しの行・結果の行の 2 か所で描かれる。差分は
-// 確定した結果から決まるので 1 回だけ作り、ファイルも 1 回だけ読む（その時点で照合した版に固定される）
+// 呼び出しの行は、画面の表示範囲が変わるたびに描き直される。そのたびに差分を作り直すと、
+// 計算が重いうえ、Edit の行は後の編集を含んだファイルを読み直し、過去の行の表示が変わってしまう。
+// 最初に描いたときに 1 回だけ作り、以降はそれを見せる
 const MEMO_MAX = 200
 const memo = new Map<string, Promise<Shown>>()
 const memoized = ($: EngineInterface, id: string, tool: string, o: WriteResult | EditResult): Promise<Shown> => {
@@ -78,7 +79,6 @@ const draw = ($: EngineInterface, e: RenderInput, tool: string, { filePath, isNe
           <Markdown text={diff.items.map(it => ('text' in it ? it.text : '')).join('\n\n') || '(empty)'} />
         </Box>
       ) : (
-        // GitHub の rich diff に倣い、整形した本文の左に削除は赤、追加は緑の帯を付ける
         <Box flexDirection="column" gap={1} paddingTop={1}>
           {diff.items.map(it =>
             it.kind === 'gap' ? (
