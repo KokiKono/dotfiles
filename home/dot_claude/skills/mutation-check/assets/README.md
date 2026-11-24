@@ -9,7 +9,7 @@ mutations/
     ├── candidates.json  差分から機械的に作った候補（gen_mutations.py）
     ├── mutations.json   変異の定義（候補に、subagent が仕様から考えた変異を足したもの）
     ├── result.json      直近の実行結果（run_mutations.py --out）
-    └── report.md        生き残りの分類（テストの穴 / 結果が変わらない）と、足した spec
+    └── report.md        何を確かめたかと、見逃したバグ 1 件ずつの対応（対応した / しなかった / できなかった）
 ```
 
 - 定義は書き換え前の文字列で場所を指すので、コードを直すと古くなる。過去の定義は流し直すためではなく、

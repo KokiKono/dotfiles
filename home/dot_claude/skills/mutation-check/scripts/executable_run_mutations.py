@@ -337,7 +337,8 @@ def main():
     parser.add_argument("definition", nargs="?")
     parser.add_argument("--out", help="結果を JSON で書き出す先")
     parser.add_argument("--only", default="", help="label がこの接頭辞で始まる変異だけを流す")
-    parser.add_argument("--survivors-of", help="前回の結果（--out）で生き残った変異だけを流す")
+    parser.add_argument("--survivors-of",
+                        help="前回の結果（--out）で生き残った変異だけを流す。tests のある定義では無視する")
     parser.add_argument("--no-cache", action="store_true",
                         help="キャッシュを引かずに全部流す（結果は記録する）。tests に無いファイルを変えたときに使う")
     parser.add_argument("--clear-cache", action="store_true", help="キャッシュを消して終わる")
@@ -349,6 +350,14 @@ def main():
 
     try:
         config = load_definition(args.definition)
+        if args.survivors_of and config["mutations"][0]["tests"]:
+            # 生き残りだけに絞ると、テストのファイルの既存の行を変えたときに、前回は検出できていた変異が
+            # 対象から落ち、検出できなくなっていても気づけない。絞らなくても、テストに行を足しただけなら
+            # 検出できていた変異はキャッシュから返るので、流す数は変わらない。エラーにしないのは、
+            # 手順を読み違えて付けた呼び出し元をやり直させず、正しい結果を返すため
+            print("run_mutations: tests のある定義では --survivors-of を使わず、全部の変異を対象にする"
+                  "（前の結果を使える変異はキャッシュから返る）", file=sys.stderr)
+            args.survivors_of = None
         mutations = select(config["mutations"], args.only, args.survivors_of)
     except (DefinitionError, OSError, KeyError, json.JSONDecodeError) as e:
         sys.exit(f"run_mutations: {e}")

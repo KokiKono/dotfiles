@@ -227,6 +227,18 @@ calls() {
     wc -l < calls | tr -d ' '
 }
 
+@test "mutation-check cache: --survivors-of is ignored when the definition has tests" {
+    cached_setup
+    run python3 "${RUN}" def.json --out out.json
+    [ "$status" -eq 0 ]
+    # テストを変えていないので、生き残りも含めて 2 件ともキャッシュから返る
+    run python3 "${RUN}" def.json --survivors-of out.json --out again.json
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--survivors-of を使わず"* ]] || false
+    [ "$(jq -r '[.results[].label] | join(",")' again.json)" = "killed,survived" ]
+    [ "$(jq -r '.cached' again.json)" = "2" ]
+}
+
 @test "mutation-check cache: a second run returns the same results without running the tests" {
     cached_setup
     run python3 "${RUN}" def.json --out out.json
