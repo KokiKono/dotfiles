@@ -1,0 +1,6 @@
+{
+  "name": "session-index",
+  "version": "0.1.0",
+  "description": "会話で定義した「案A」などのラベルを索引にし、後の返答で触れたときにホバーで定義を見せる",
+  "types": "./types/index.d.ts"
+}
