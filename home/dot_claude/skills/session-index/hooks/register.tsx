@@ -1,22 +1,23 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildIndex, refsFor } from './extract'
-import type { Ref } from './extract'
+import { buildIndex, fingerprint, mentionsLabel, refsFor } from './extract'
 
 const index = atom({ plugin: 'session-index', key: 'index' } as const, null)
 
 const MAX_CHIPS = 6
 const CARD_MAX_COLUMNS = 80
 
+// 索引を書くと、それを読んでいる返答がすべて描き直される。中身が変わらないターンでは書かない
 const rebuild = async ($: EngineInterface): Promise<void> => {
   const messages = await $.session.messages({ as: 'api' })
-  await update($, index, previous => buildIndex(messages, previous))
-}
+  const previous = await read($, index)
+  const next = buildIndex(messages, previous)
 
-// hover の scope は全サイトで共有されるので、同じラベルを参照するほかの返答のカードまで
-// 一緒に開かないよう、返答（requestId）ごとに別の名前にする。scope は 64 文字まで
-const scopeOf = (requestId: string, i: number): string => `si:${requestId.slice(-48)}:${i}`
+  if (JSON.stringify(next) !== JSON.stringify(previous)) {
+    await update($, index, () => next)
+  }
+}
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -26,16 +27,21 @@ export const register: Register = on => {
     return result
   })
 
+  // 索引はメインの会話から作るので、subagent のターンの終わりでは作り直さない
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    await rebuild($)
+
+    if (e.agentId === undefined) {
+      await rebuild($)
+    }
 
     return result
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
-    const current = await read($, index)
-    const refs: Ref[] = current === null ? [] : refsFor(e.props.text, current).slice(0, MAX_CHIPS)
+    // 索引を読むと、その描画は索引が変わるたびに描き直される。ラベルの無い返答では読まない
+    const current = mentionsLabel(e.props.text) ? await read($, index) : null
+    const refs = current === null ? [] : refsFor(e.props.text, current).slice(0, MAX_CHIPS)
 
     if (refs.length === 0) {
       return next(e)
@@ -43,6 +49,9 @@ export const register: Register = on => {
 
     const { Box, Text, Markdown } = $.ui.resolve(e)
     const width = Math.min(CARD_MAX_COLUMNS, Math.max(20, (e.viewport?.columns ?? CARD_MAX_COLUMNS) - 6))
+    // hover の scope は全サイトで共有されるので、ほかの返答やブロックのカードまで一緒に開かないよう、
+    // ブロックごとに別の名前にする。scope は 64 文字まで
+    const scope = (i: number): string => `si:${e.requestId.slice(-36)}:${fingerprint(e.props.text)}:${i}`
 
     // カードは位置を固定せず、チップの行の下に差し込む。absolute で本文の上に重ねると、
     // 端末には背景を塗りつぶす色が無く、下の本文がカードの隙間から透けて読めなくなる
@@ -51,7 +60,7 @@ export const register: Register = on => {
         {await next(e)}
         <Box paddingLeft={2} gap={1} flexWrap="wrap">
           {refs.map((ref, i) => (
-            <Text dimColor hover={{ scope: scopeOf(e.requestId, i), dimColor: false, bold: true }}>
+            <Text dimColor hover={{ scope: scope(i), dimColor: false, bold: true }}>
               ↳ {ref.label}
             </Text>
           ))}
@@ -60,7 +69,7 @@ export const register: Register = on => {
           <Box
             key={`card-${i}`}
             display="none"
-            hover={{ scope: scopeOf(e.requestId, i), display: 'flex' }}
+            hover={{ scope: scope(i), display: 'flex' }}
             flexDirection="column"
             marginLeft={2}
             width={width}

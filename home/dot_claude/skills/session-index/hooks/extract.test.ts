@@ -1,11 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
-import { buildIndex, definitionsIn, labelsIn, refsFor } from './extract'
+import { buildIndex, refsFor } from './extract'
 
 const msg = (role: 'user' | 'assistant', ...texts: string[]) => ({
   role,
   content: texts.map(text => ({ type: 'text', text })),
 })
+
+// 1 つの返答で定義したラベルと、その抜粋
+const defsIn = (text: string) =>
+  Object.values(buildIndex([msg('assistant', text)], null).defs).flat()
 
 const PROPOSAL = [
   '方針は 2 つあります。',
@@ -18,13 +22,15 @@ const PROPOSAL = [
 ].join('\n')
 
 test('labels are found in many spellings and full-width forms are folded', async () => {
-  expect(labelsIn('案Aと案 Bと案Ｃ、A案、選択肢2、Option C')).toEqual(['案A', '案B', '案C', 'A案', '選択肢2', 'OptionC'])
+  const text = ['- 案A: a', '- 案 B: b', '- 案Ｃ: c', '- A案: d', '- 選択肢2: e', '- Option C: f'].join('\n')
+
+  expect(defsIn(text).map(d => d.label)).toEqual(['案A', '案B', '案C', 'A案', '選択肢2', 'OptionC'])
   // 「案内」「方針」のような普通の語は拾わない
-  expect(labelsIn('案内を見て方針を決める')).toEqual([])
+  expect(defsIn('- 案内: 見る\n- 方針: 決める')).toEqual([])
 })
 
 test('a list item that opens with a label is a definition and keeps its nested lines', async () => {
-  const defs = definitionsIn(PROPOSAL, 3)
+  const defs = defsIn(PROPOSAL)
 
   expect(defs.map(d => d.label)).toEqual(['案A', '案B'])
   expect(defs[0]?.excerpt).toBe('- **案A**: hook で毎回検査する\n  - 速いが誤検知がある')
@@ -33,20 +39,20 @@ test('a list item that opens with a label is a definition and keeps its nested l
 
 test('a heading definition runs until the next heading of the same level', async () => {
   const text = '## 案A\n\n本文1\n\n### 補足\n\n本文2\n\n## 案B\n\n本文3'
-  const defs = definitionsIn(text, 1)
+  const defs = defsIn(text)
 
   expect(defs[0]?.excerpt).toBe('## 案A\n\n本文1\n\n### 補足\n\n本文2')
   expect(defs[1]?.excerpt).toBe('## 案B\n\n本文3')
 })
 
 test('a table row whose first cell is a label is a definition', async () => {
-  const defs = definitionsIn('| 案 | 内容 |\n| --- | --- |\n| 案A | 速い |\n| 案B | 安全 |', 1)
+  const defs = defsIn('| 案 | 内容 |\n| --- | --- |\n| 案A | 速い |\n| 案B | 安全 |')
 
   expect(defs.map(d => d.excerpt)).toEqual(['| 案A | 速い |', '| 案B | 安全 |'])
 })
 
 test('a mention in running text is not a definition', async () => {
-  expect(definitionsIn('案A にする場合は hook を足します', 1)).toEqual([])
+  expect(defsIn('案A にする場合は hook を足します')).toEqual([])
 })
 
 test('a later reply that mentions a label gets the definition from an earlier message', async () => {
@@ -70,14 +76,14 @@ test('when a label is defined twice, a reply sees the definition before it', asy
   const after = '案A の続きです'
   const index = buildIndex([msg('assistant', PROPOSAL), msg('assistant', between), msg('assistant', second), msg('assistant', after)], null)
 
-  expect(refsFor(between, index)[0]?.def.line).toBe('- **案A**: hook で毎回検査する')
-  expect(refsFor(after, index)[0]?.def.line).toBe('- 案A: 全部書き直す')
+  expect(refsFor(between, index)[0]?.def.excerpt).toContain('- **案A**: hook で毎回検査する')
+  expect(refsFor(after, index)[0]?.def.excerpt).toBe('- 案A: 全部書き直す')
 })
 
 test('a reply still being written, not yet indexed, takes the latest definition', async () => {
   const index = buildIndex([msg('assistant', PROPOSAL)], null)
 
-  expect(refsFor('案B だと遅くなります', index)[0]?.def.line).toBe('- **案B**: CI でだけ検査する')
+  expect(refsFor('案B だと遅くなります', index)[0]?.def.excerpt).toBe('- **案B**: CI でだけ検査する')
 })
 
 test('AskUserQuestion options that carry a label are definitions', async () => {
@@ -101,7 +107,7 @@ test('a definition that compaction dropped from the history is kept from the pre
   const after = buildIndex([msg('user', '<summary>要約</summary>'), msg('assistant', '案A で進めます')], before)
 
   expect(after.defs['案A']?.[0]?.seq).toBe(0)
-  expect(refsFor('案A で進めます', after)[0]?.def.line).toBe('- **案A**: hook で毎回検査する')
+  expect(refsFor('案A で進めます', after)[0]?.def.excerpt).toContain('- **案A**: hook で毎回検査する')
 })
 
 test('injected reminders are not indexed', async () => {
