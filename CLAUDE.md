@@ -715,7 +715,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`; plus the `md-diff-preview` mod under `skills/`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`; plus the `md-diff-preview` and `session-index` mods under `skills/`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -775,6 +775,18 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   - 検証とテストは配備先で `claude plugin validate` / `claude plugin test`（ソースは `dot_` の名前なので通らない）。
     README のスクショは、herdr のペインの色付き出力を升目の HTML にして Chrome で撮った。freeze は全角を
     2 桁ちょうどで送らず、枠線や表がずれた。撮るときはホームのパスを `~` に置き換えている（public なので）
+- **`home/dot_claude/skills/session-index/` はスキルではなく Claude Code の mod（hooks モジュールだけのプラグイン）。**
+  会話で定義した「案A」「選択肢2」などのラベルを索引にし、後の返答でそのラベルに触れると返答の下に `↳ 案A` の
+  チップを出す。チップにマウスを重ねると、定義したときの本文がカードで開く。知っておくこと:
+  - **定義とみなすのは、Claude の返答の 1 ブロックに行頭の形（見出し・太字・`案A:`・表の 1 列目）で 2 つ以上並んだ
+    ラベルと、AskUserQuestion の選択肢だけ。** 文中の「案A にすると」や、1 つだけの「**案A** を採用」まで定義にすると、
+    言及した返答が次々と定義を上書きし、カードが言及を見せてしまう。ユーザー側の行は compact の要約が混ざるので見ない
+  - 索引はセッション開始時と各ターンの終わりに `$.session.messages` から作り直す。compact で履歴から消える定義は
+    `session.compact` の直前に控えて引き継ぐ。前回の索引との差分で引き継ぐと、rewind で取り消した定義まで残る
+  - **ラベルの語そのものにはホバーを付けられない。** 返答の本文は Markdown の 1 部品として描かれ、語ごとに
+    分けられないので、チップを返答の下に足している。カードは本文に重ねずチップの下に差し込む（端末には
+    背景を塗る色が無く、重ねると下の本文が透ける）。hover の `scope` は全サイトで共有されるので、返答ごとに分けている
+  - 置き場の理由と検証の手順は md-diff-preview と同じ（skills フォルダに置き、manifest は `dot_claude-plugin/`）
 - **`hooks/kb-checks.sh` は、kb の `checks/run`（レビューで繰り返す指摘を lint・差分のチェックにしたもの）を
   Edit / Write の後と、`git commit`・`gh pr create` の前に挟む。** 文章のルール（review-insights）は読み飛ばされるので、
   防げるものは書いた直後に機械で止める。知っておくこと:

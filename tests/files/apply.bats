@@ -759,3 +759,14 @@ assert lg['command'] == 'lazygit', lg
         "${REPO_ROOT}/home"
     [ "$status" -ne 0 ]
 }
+
+@test "apply: session-index mod is deployed as a plugin under skills" {
+    MOD="${TESTHOME}/.claude/skills/session-index"
+    # skills フォルダのプラグインとして読み込ませるので、manifest は .claude-plugin/ に要る
+    grep -q '"name": "session-index"' "${MOD}/.claude-plugin/plugin.json"
+    grep -qF './register.tsx' "${MOD}/hooks/hooks.json"
+    [ -f "${MOD}/hooks/register.tsx" ]
+    [ -f "${MOD}/hooks/extract.ts" ]
+    [ -f "${MOD}/types/index.d.ts" ]
+    [ ! -e "${MOD}/claude-plugin" ]
+}
