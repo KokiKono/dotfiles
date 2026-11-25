@@ -123,7 +123,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 148 `brew`, 34 `cask`,
+- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 149 `brew`, 34 `cask`,
   3 `go`, 56 `vscode` (`mas` entries were dropped in c8bb43a; `npm "corepack"` was dropped because
   corepack shims `/opt/homebrew/bin/pnpm` and collides with the `pnpm` formula — see below).
   `chezmoi` and `bats-core` are included. Regenerate with:
@@ -339,6 +339,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     中身が fzf と `$EDITOR` を使う端末アプリなので、ターミナルで開くほうが TUI と同じ実装を使い回せる
   - テストは app のターミナルから流すと `HC_TERMINAL_ID` を引き継いで実物の app を叩くので、
     `tests/test_helper.bash` が外している。app 向けのテストは `herdr-app` と `hc` をスタブして付け直す
+  - **app には外部 mod の [herdr-nvim](https://github.com/ChmaraX/herdr-nvim) を入れている**（`cmd-e` でファイルツリーとタブごとの
+    nvim、`cmd-o` でエージェントが触ったファイルのピッカー、`cmd-shift-e` でツリー上の現在ファイル）。mod と
+    レイアウト `my-main` の書き換えは作者の installer（`install.sh --app`）が行うので、このリポジトリは追跡しない。
+    追跡するのは keys.json の 3 キーと Brewfile の `neovim` だけ。app の Helix は `cmd-shift-e` を譲って `cmd-alt-e` に移した。
+    更新は installer を流し直す（`--uninstall` で外せる）
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、

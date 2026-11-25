@@ -58,7 +58,7 @@
     "ctrl-7": "space.select:7",
     "ctrl-8": "space.select:8",
     "ctrl-9": "space.select:9",
-    "cmd-shift-e": {
+    "cmd-alt-e": {
       "command": "terminal.open",
       "args": {
         "argv": [
@@ -114,7 +114,10 @@
         "place": "tab",
         "name": "skill-create"
       }
-    }
+    },
+    "cmd-e": "mod.open:herdr-nvim",
+    "cmd-o": "herdr-nvim.pick",
+    "cmd-shift-e": "herdr-nvim.reveal"
   },
   "terminal": {
     "cmd-f": "terminal.search",
