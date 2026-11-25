@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 # kokikono.hello-run プラグインの中身。issue を fzf で選んで hello-run に渡す。
-# herdr から popup として起動される（argv は herdr-plugin.toml を参照）。
+# herdr の TUI からは popup として（argv は herdr-plugin.toml を参照）、Herdr.app からは
+# keys.json の terminal.open でタブとして起動される。
 #
 # hello-run は ~/.config/zsh/hello-run.zsh の zsh 関数で、対象 org / リポジトリは
 # ~/.pzshrc（chezmoi 管理外）にある。対話シェルではない ここでは .zshrc が読まれないので、
@@ -28,7 +29,7 @@ die() {
 source "$HELLO_RUN_SOURCE"
 
 typeset -a missing
-for c in gh fzf jq wt git herdr; do
+for c in gh fzf jq wt git; do
   command -v "$c" >/dev/null 2>&1 || missing+=("$c")
 done
 (( ${#missing} )) && die "未インストール: ${missing[*]}"

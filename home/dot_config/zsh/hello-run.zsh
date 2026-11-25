@@ -1,5 +1,6 @@
 # hello-run: GitHub issue から作業環境を一発で用意する（worktree + herdr タブ + claude）。
-# 依存: herdr(HERDR_ENV=1), wt(worktrunk), gh, jq。slug 推定に claude があれば使う（任意）。
+# 依存: herdr の TUI（HERDR_ENV=1）か app（Herdr.app のターミナル）, wt(worktrunk), gh, jq。
+# slug 推定に claude があれば使う（任意）。TUI と app の差は herdr-lib.zsh が吸収する。
 #
 # worktree は wt のデフォルト配置（repo の兄弟 `<repo>.<branch>`）ではなく、issue ごとの
 # セッションディレクトリ配下にまとめる。claude をその親ディレクトリで起動して全 worktree を
@@ -367,18 +368,15 @@ __hr_build_tab() {
     print -r -- "workspace を特定できません（herdr 環境か確認）" >&2
     return 1
   }
-  created=$(herdr tab create --workspace "$ws" --label "$label" \
-              --cwd "$sdir" --no-focus) || return 1
-  tab_id=$(print -r -- "$created" | jq -r '.result.tab.tab_id')
-  main_pane=$(print -r -- "$created" | jq -r '.result.root_pane.pane_id')
-  [[ -n $tab_id && $tab_id != null && -n $main_pane && $main_pane != null ]] || return 1
-  herdr pane rename "$main_pane" main >/dev/null || return 1
+  created=$(__hz_create_tab "$ws" "$label" "$sdir") || return 1
+  tab_id=${created%%$'\t'*}
+  main_pane=${created##*$'\t'}
+  __hz_rename_pane "$main_pane" main || return 1
   prev=$main_pane
   for r in "$@"; do
-    new_pane=$(herdr pane split "$prev" --direction "$direction" --ratio 0.5 \
-                 --cwd "$sdir/$r" --no-focus | jq -r '.result.pane.pane_id') || return 1
-    [[ -n $new_pane && $new_pane != null ]] || return 1
-    herdr pane rename "$new_pane" "$r" >/dev/null
+    new_pane=$(__hz_split_pane "$prev" "$direction" "$sdir/$r") || return 1
+    [[ -n $new_pane ]] || return 1
+    __hz_rename_pane "$new_pane" "$r"
     prev=$new_pane
     direction=down
   done
@@ -386,7 +384,7 @@ __hr_build_tab() {
 }
 
 # herdr のタブ探索と workspace の解決は dev-server と共通なので herdr-lib.zsh にある。
-# 以下の 3 つは呼び出し名を変えないための薄いラッパ（中身は __hz_* を見ること）。
+# 以下の 2 つは呼び出し名を変えないための薄いラッパ（中身は __hz_* を見ること）。
 
 __hr_workspace_id() { __hz_workspace_id "$@" }
 
@@ -396,8 +394,6 @@ __hr_find_tab() {
   emulate -L zsh
   __hz_find_tab "$1" "${HELLO_RUN_ROOT:+$HELLO_RUN_ROOT/.sessions/$1}"
 }
-
-__hr_tab_in_session() { __hz_tab_has_cwd_under "$@" }
 
 # __hr_has_conversation <dir>: <dir> を cwd にした claude の会話記録が残っていれば 0。
 # 記録の置き場は ~/.claude/projects/<dir の英数字以外を - にしたもの>/*.jsonl。
@@ -410,26 +406,14 @@ __hr_has_conversation() {
 }
 
 # __hr_start_agent <label> <pane> <plan:0|1> [<continue:0|1>]
-# `agent start` は「入力可能になるまで」待つので、claude が初回の信頼確認ダイアログ
-# （新しいディレクトリで出る）で止まると起動済みでも非 0 を返す。その場合は agent 検出で
-# 起動成功とみなす。ペインの shell 起動中（agent_pane_busy）は数回リトライ。
-
+# 待ち方と信頼確認ダイアログの扱いは __hz_start_claude（herdr-lib.zsh）を見ること。
 __hr_start_agent() {
   emulate -L zsh
   local label=$1 main_pane=$2 plan=$3 cont=${4:-0}
-  local -a claude_args agent_args
+  local -a claude_args
   (( plan )) && claude_args+=(--permission-mode plan)
   (( cont )) && claude_args+=(--continue)
-  (( ${#claude_args} )) && agent_args=(-- "${claude_args[@]}")
-  integer attempt
-  for (( attempt = 0; attempt < 10; attempt++ )); do
-    herdr agent start "$label" --kind claude --pane "$main_pane" "${agent_args[@]}" >/dev/null 2>&1 \
-      && return 0
-    [[ $(herdr agent get "$main_pane" 2>/dev/null | jq -r '.result.agent.agent // empty') == claude ]] \
-      && return 0
-    sleep 0.5
-  done
-  return 1
+  __hz_start_claude "$label" "$main_pane" "${claude_args[@]}"
 }
 
 # __hr_strip_comments <file>: HTML コメント（<!-- --> の行・ブロック）を落として中身を出す。
@@ -551,13 +535,8 @@ __hr_render_kb_prompt() {
   print -r -- "${body//\{\{kb_readme\}\}/$1}"
 }
 
-# __hr_send_prompt <label> <text>: claude が入力待ち（信頼確認を抜けた状態）になってから送る
-__hr_send_prompt() {
-  emulate -L zsh
-  herdr agent wait "$1" --until idle --timeout "${HELLO_RUN_READY_TIMEOUT:-120000}" >/dev/null 2>&1 \
-    || return 1
-  herdr agent prompt "$1" "$2" >/dev/null 2>&1
-}
+# __hr_send_prompt <label> <pane> <text>: __hz_prompt_agent の別名
+__hr_send_prompt() { __hz_prompt_agent "$@" }
 
 # hello-run <issue-url|number> [--prompt|--no-prompt] [--plan] [--no-focus]
 # hello-run --scratch ["やりたいこと"]
@@ -610,14 +589,15 @@ hello-run() {
     return 1
   fi
 
-  local -a missing need=(herdr wt jq git)
+  local -a missing need=(wt jq git)
   local c
   (( scratch )) || need+=(gh)   # scratch は issue を引かないので gh は要らない
   for c in "${need[@]}"; do
     command -v "$c" >/dev/null 2>&1 || missing+=("$c")
   done
   (( ${#missing} )) && { __hr_err "未インストール: ${missing[*]}"; return 1; }
-  [[ -n ${HERDR_ENV:-} ]] || { __hr_err "herdr 環境ではありません（HERDR_ENV が未設定）"; return 1; }
+  local hz_err
+  hz_err=$(__hz_require 2>&1) || { __hr_err "$hz_err"; return 1; }
 
   local parsed="" repo="" num="" label="" sdir="" task=""
   local tab_id="" tab_ws="" found cur_ws branch=""
@@ -657,12 +637,7 @@ hello-run() {
         branch  "${branch:-?}" \
         session "${sdir/#$HOME/~}" \
         tab     "$tab_id  ($panes)${${tab_ws:#$cur_ws}:+  @$tab_ws}"
-      if (( focus )); then
-        # tab focus だけでは別 workspace のタブに移れないので先に workspace を切り替える
-        [[ -n $tab_ws && $tab_ws != $cur_ws ]] \
-          && herdr workspace focus "$tab_ws" >/dev/null
-        herdr tab focus "$tab_id" >/dev/null
-      fi
+      (( focus )) && __hz_focus_tab "$tab_ws" "$tab_id"
       return 0
     fi
 
@@ -843,7 +818,7 @@ hello-run() {
   fi
 
   # 信頼確認ダイアログを操作できるよう、プロンプト送信より先にタブへ移る
-  (( focus )) && herdr tab focus "$tab_id" >/dev/null
+  (( focus )) && __hz_focus_tab "" "$tab_id"
 
   if [[ ${__HR_UI_STATES[5]} == done && $prompt_mode == yes ]]; then
     local text
@@ -857,7 +832,7 @@ hello-run() {
     [[ -n $kb_readme ]] && text+=" $(__hr_render_kb_prompt "$kb_readme")"
     __hr_ui_begin 5
     __hr_ui_detail "入力待ちになるまで待っています"
-    if __hr_step "$tmpd/prompt" __hr_send_prompt "$label" "$text"; then
+    if __hr_step "$tmpd/prompt" __hr_send_prompt "$label" "$main_pane" "$text"; then
       __hr_ui_detail "${main_pane}  プロンプト送信済み"
       __hr_ui_done
     else

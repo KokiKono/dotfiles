@@ -58,7 +58,7 @@ run_fn() {
 
 @test "hello-run: focuses the owning workspace before the tab" {
     # 別 workspace のタブには tab focus だけでは移れない
-    grep -q 'herdr workspace focus "$tab_ws"' "${HR}"
+    grep -q '__hz_focus_tab "$tab_ws" "$tab_id"' "${HR}"
     grep -q '__hr_find_tab "$label"' "${HR}"
     # 現在の workspace 固定の探索に戻っていないこと
     run grep -- 'tab list --workspace "${HERDR_WORKSPACE_ID}"' "${HR}"
@@ -240,7 +240,7 @@ EOF
     # 生の環境変数を渡すと popup から呼ばれたときに空で落ちる
     run grep -- 'tab create --workspace "${HERDR_WORKSPACE_ID}"' "${HR}"
     [ "$status" -ne 0 ]
-    grep -q 'tab create --workspace "$ws"' "${HR}"
+    grep -q '__hz_create_tab "$ws"' "${HR}"
     grep -q 'ws=$(__hr_workspace_id)' "${HR}"
 }
 
@@ -446,7 +446,7 @@ read_task() {
 
 @test "hello-run: scratch does not require gh" {
     # issue を引かないので gh は要らない。必須にすると gh が無い環境で落ちる
-    grep -q 'need=(herdr wt jq git)' "${HR}"
+    grep -q 'need=(wt jq git)' "${HR}"
     grep -q '(( scratch )) || need+=(gh)' "${HR}"
 }
 

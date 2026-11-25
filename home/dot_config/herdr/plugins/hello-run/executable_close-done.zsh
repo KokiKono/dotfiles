@@ -83,7 +83,7 @@ esac
 
 integer failed=0
 for tab in "${targets[@]}"; do
-  if herdr tab close "$tab" >/dev/null 2>&1; then
+  if __hz_close_tab "$tab" 2>/dev/null; then
     print -r -- "  閉じました: ${label_of[$tab]}"
   else
     print -r -- "  閉じられませんでした: ${label_of[$tab]} ($tab)"

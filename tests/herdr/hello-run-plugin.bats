@@ -121,7 +121,8 @@ EOF
     # あるタブを「無い」と表示してしまう
     LIB="${REPO_ROOT}/${PLUGIN}/lib.zsh"
     grep -q 'lib.zsh' "${ISSUES}"
-    grep -q 'workspace list' "${LIB}"
+    # 全 workspace を回すのは herdr-lib.zsh の __hz_tabs（app でも全 space を返す）
+    grep -q '__hz_tabs' "${LIB}"
     run grep -- 'tab list --workspace "$HERDR_WORKSPACE_ID"' "${LIB}"
     [ "$status" -ne 0 ]
 }
@@ -515,4 +516,18 @@ GH
         HELLO_RUN_ROOT="${ROOT}" zsh "${ISSUES}" --refresh
     [ "$status" -eq 0 ]
     grep -q 'issue view 1' "${GH_LOG}"
+}
+
+@test "keys.json: Herdr.app opens the plugin pickers that exist in the repo" {
+    # TUI の prefix+Shift+H / D / S に当たるキー。指す先のスクリプトを改名したら追従する
+    command -v jq >/dev/null 2>&1 || skip "jq not installed"
+    local keys="${REPO_ROOT}/home/dot_config/herdr-app/keys.json" name script
+    for name in hello-run git-diff skill-create; do
+        script=$(jq -r --arg n "${name}" \
+            '[.global[] | objects | select(.command == "terminal.open") | .args.argv[-1]
+              | select(test("/plugins/" + $n + "/"))] | first // empty' "${keys}")
+        [ -n "${script}" ]
+        [[ "${script}" =~ plugins/${name}/([a-z-]+\.zsh) ]] || false
+        [ -f "${REPO_ROOT}/home/dot_config/herdr/plugins/${name}/executable_${BASH_REMATCH[1]}" ]
+    done
 }

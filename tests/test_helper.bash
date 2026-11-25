@@ -15,3 +15,7 @@ _find_repo_root() {
 
 REPO_ROOT="$(_find_repo_root)"
 export REPO_ROOT
+
+# Herdr.app のターミナルから流すと HC_TERMINAL_ID を引き継ぎ、herdr-lib.zsh が app 向けに
+# 動いて実物の app を叩く。app 向けを試すテストは自分で付け直す。
+unset HC_TERMINAL_ID HC_TERMINAL_SOCKET HC_SCOPE HERDR_BACKEND
