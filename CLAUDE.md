@@ -26,6 +26,7 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
 ├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr の TUI と app の差を吸収する層。hello-run・dev-server・プラグインが source)
 ├── dot_config/herdr-app/keys.json # → ~/.config/herdr-app/keys.json (Herdr.app のキー。プラグインのピッカーをタブで開く)
+├── dot_config/herdr-app/mods/nvim-open/ # → ~/.config/herdr-app/mods/nvim-open/ (端末のパスを Cmd+クリックで herdr-nvim の nvim に開く link handler)
 ├── dot_config/hello-run/prompt{,-scratch}.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート。issue 用と --scratch 用)
 ├── dot_config/hello-run/{prompt-kb,kb-readme}.md # → ~/.config/hello-run/ (kb を繋いだときに足す文と、kb の issue README の雛形)
 ├── dot_config/kb/executable_autosave.sh # → ~/.config/kb/autosave.sh (kb を全部コミットして push。launchd が 10 分ごとに呼ぶ)
@@ -38,6 +39,8 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_codex/, dot_gemini/, private_dot_cursor/  # → 他エージェント CLI の設定
 ├── dot_config/{karabiner,ghostty,wezterm,zed,herdr,private_gh,git}/  # → 各アプリ設定（herdr は config.toml + 自作 plugin）
 ├── dot_config/helix/config.toml   # → ~/.config/helix/config.toml (TUI エディタ。herdr の prefix+Shift+E から開く)
+├── dot_config/nvim/{init.lua,nvim-pack-lock.json} # → ~/.config/nvim/ (Herdr.app の herdr-nvim が起動する nvim。LSP・Tree-sitter・配色・Markdown の自動プレビュー)
+├── dot_default-gems               # → ~/.default-gems (mise が Ruby を入れるときに一緒に入れる gem。ruby-lsp)
 ├── dot_zprofile, dot_zshenv       # → ~/.zprofile (brew shellenv + OrbStack), ~/.zshenv (rustup の PATH)
 ├── Library/Application Support/Code/User/{settings,keybindings}.json  # → VS Code user config
 └── .chezmoiscripts/
@@ -123,7 +126,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
 
 ## Key details when editing
 
-- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 148 `brew`, 34 `cask`,
+- **`Brewfile`** is the source of truth for installed packages: 14 `tap`, 149 `brew`, 34 `cask`,
   3 `go`, 56 `vscode` (`mas` entries were dropped in c8bb43a; `npm "corepack"` was dropped because
   corepack shims `/opt/homebrew/bin/pnpm` and collides with the `pnpm` formula — see below).
   `chezmoi` and `bats-core` are included. Regenerate with:
@@ -339,6 +342,40 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     中身が fzf と `$EDITOR` を使う端末アプリなので、ターミナルで開くほうが TUI と同じ実装を使い回せる
   - テストは app のターミナルから流すと `HC_TERMINAL_ID` を引き継いで実物の app を叩くので、
     `tests/test_helper.bash` が外している。app 向けのテストは `herdr-app` と `hc` をスタブして付け直す
+- **nvim の設定（`home/dot_config/nvim/init.lua`）は Herdr.app の herdr-nvim のためだけにある。** エディタの本命は Helix なので
+  最小限にとどめている。知っておくこと:
+  - **LSP は nvim-lspconfig を Neovim 0.12 組み込みの `vim.pack` で入れる。** 言語サーバーは Helix と同じ Brewfile のもの。
+    初回起動時に GitHub から取ってくる。版は `nvim-pack-lock.json` で固定し、上げたら `chezmoi re-add` する
+  - **`init.lua` は mise の shims を PATH の先頭に足す。** ruby-lsp は shims にしか無く、shims を PATH に足すのは
+    `tools.zsh` の `mise activate zsh`（対話シェル）だけ。Herdr.app はログインシェルの PATH を引き継ぐので、そこから
+    起動した nvim は ruby-lsp を見つけられなかった。shims はプロジェクトの `.ruby-version` で版を選ぶので、Ruby の版が
+    決まっていないディレクトリ（このリポジトリなど）では ruby-lsp は `No version is set` で落ちる
+  - **ruby-lsp は Ruby の版ごとの gem。** worktree の `.ruby-version` が上がると、その版に ruby-lsp が無く
+    `is not provided by the active ruby` で落ちる。`~/.default-gems` に書いてあるので、mise で入れる新しい版には自動で入る。
+    それより前に入れた版には `mise exec ruby@<版> -- gem install ruby-lsp` で入れる。初回はプロジェクトの gem を
+    入れるので、つながるまで数分かかる
+  - **`clipboard = unnamedplus`。** 既定ではヤンクが nvim の中のレジスタに留まり、エージェントのペインへ `cmd-v` で貼れない
+  - **定義へのジャンプは `gd` と Option+クリック。** Cmd+クリックは端末のマウス報告で Cmd を送れず、Herdr.app がリンクを開く
+    操作にも使っている。Ctrl+クリックは macOS が右クリックにする
+  - **`termguicolors` は明示的に有効にする。** herdr-nvim は nvim を headless で起動して後から画面をつなぐので、
+    端末のフルカラー対応を自動では判定できず、16 色で描いていた。配色は Ghostty と同じ Catppuccin
+    （`background` に合わせて Mocha / Latte）。nvim の既定の配色はわざと色数を絞っていて、キーワードなどが地の色になる
+  - **Tree-sitter の色付けは、nvim が同梱するパーサー（c・lua・markdown・vim など）に無い言語だけを nvim-treesitter（`main`）で入れる。**
+    いまは Ruby だけ。パーサーは初回起動時にビルドするので Brewfile の `tree-sitter-cli` が要る。言語を足すときは
+    `install` の一覧と `FileType` の pattern の両方に足す（片方だけでは色が付かない）
+  - **Markdown は開いた時点でプレビューにする。** herdr-nvim が最初からプレビューにするのは画像だけで、その判定はバイナリにあり
+    設定も無い。mod やバイナリを直しても installer の更新で消えるので、nvim の `BufWinEnter` からペインヘッダの Preview
+    ボタンと同じ `herdr-app do herdr-nvim.swap:<tab>:<パス>` を送っている。tab は nvim が受け取る `HERDR_TAB_ID`
+    （`<space>:<tab>`）から取る。`HERDR_NVIM_CURRENT_FILE` のファイル名にも tab が入っているが、切り詰められていて swap が受け付けない
+  - 設定は nvim の起動時に読まれる。既に動いているタブの nvim には、Files で閉じて開き直しても効かない（画面をしまうだけで
+    nvim は止まらない）。タブを閉じるか herdr-nvim を入れ直す
+- **`home/dot_config/herdr-app/mods/nvim-open/` は、端末に出たファイルのパスを Cmd+クリックしたとき、そのタブの herdr-nvim の nvim で
+  開く自作の mod（Herdr.app の link handler）。** 知っておくこと:
+  - 開くのは herdr-nvim が他の mod 向けに用意している `<appHome>/mods/herdr-nvim/bin/herdr-nvim open --tab <tab> <file>:<line>:<col>`。
+    herdr-nvim の mod 本体は installer が管理するので、そこには書かずに別の mod にした
+  - 画像・PDF・動画など nvim で読めないもの、ディレクトリ、解決できないパス（リモートなど）、herdr-nvim の失敗は `"pass"` を返し、
+    今までどおり OS のアプリ（画像は herdr-nvim のプレビュー）に任せる
+  - app はこの mod を初めて見たとき、表示中のレイアウトの `link_handlers` に自動で足す。`my-main` は追跡していないが、新しいマシンでも足される
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
@@ -822,7 +859,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   取り込むほうが安全。
 - **These files are rewritten by the apps themselves**, so `chezmoi status` will show drift over
   time: `.claude/settings.json` (Claude Code writes model/plugin/permission changes), `.config/herdr-app/keys.json` (app が即時に読み直すので、ライブ側を直接直しがち),
-  `.codex/config.toml`, `.gemini/settings.json`, `.config/zed/settings.json`. Resolve with
+  `.codex/config.toml`, `.gemini/settings.json`, `.config/zed/settings.json`, `.config/nvim/nvim-pack-lock.json` (`vim.pack.update()` が書き換える). Resolve with
   `chezmoi re-add <path>` (adopt the live version) rather than `chezmoi apply`. `dot_codex/config.toml`
   intentionally drops codex's `[projects.*]` / `[hooks.state]` blocks — machine-local trust state
   that is meaningless on a new machine (and would leak private repo paths into this PUBLIC repo);
