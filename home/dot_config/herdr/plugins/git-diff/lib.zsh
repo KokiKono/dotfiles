@@ -6,6 +6,11 @@
 
 GD_FAIL_WAIT="${GD_FAIL_WAIT:-1}"
 
+# フォーカス中のペインの cwd は TUI と Herdr.app で取り方が違うので herdr-lib に任せる。
+# プラグインから見た zsh/ の位置は、ソース（home/dot_config/）でも配備先（~/.config/）でも
+# ../../../zsh で同じなので相対で引く。HERDR_LIB はテストが差し替えるためのもの。
+source "${HERDR_LIB:-${0:A:h}/../../../zsh/herdr-lib.zsh}"
+
 # popup はコマンドが終了した瞬間に閉じる。理由を読む時間が無くなるので失敗時だけ待つ。
 gd_die() {
   print -ru2 -- "git-diff: $*"
@@ -16,27 +21,15 @@ gd_die() {
   exit 1
 }
 
-# 作業中のリポジトリ。popup は元のペインとは別プロセスで cwd を引き継がない。
-# herdr はプラグインの pane に HERDR_PLUGIN_CONTEXT_JSON を渡してきて、その中に
-# popup を開いた時点のフォーカス中ペインの cwd が入っているので、まずそれを見る。
-# 無ければ herdr に訊き（popup が開いていても focused は元のペインを指す）、
-# それでも駄目なら $PWD。git リポジトリでないものは順に読み飛ばす。
+# 作業中のリポジトリ。GIT_DIFF_REPO が無ければ、フォーカス中のペインの cwd の候補
+# （__hz_focused_cwds）を順に見て、git リポジトリでないものは読み飛ばす。
 gd_repo_dir() {
   local -a candidates
-  [[ -n ${GIT_DIFF_REPO:-} ]] && candidates+=("$GIT_DIFF_REPO")
-  if [[ -z ${GIT_DIFF_REPO:-} ]] && command -v jq >/dev/null 2>&1; then
-    [[ -n ${HERDR_PLUGIN_CONTEXT_JSON:-} ]] && candidates+=(${(f)"$(
-      print -r -- "$HERDR_PLUGIN_CONTEXT_JSON" \
-        | jq -r '[.focused_pane_cwd, .workspace_cwd] | map(select(. != null and . != "")) | .[]' 2>/dev/null
-    )"})
-    local listed
-    if command -v herdr >/dev/null 2>&1; then
-      listed=$(herdr pane list 2>/dev/null) && candidates+=(${(f)"$(
-        print -r -- "$listed" | jq -r '[.result.panes[]? | select(.focused) | (.foreground_cwd // .cwd)] | .[]' 2>/dev/null
-      )"})
-    fi
+  if [[ -n ${GIT_DIFF_REPO:-} ]]; then
+    candidates=("$GIT_DIFF_REPO" "$PWD")
+  else
+    candidates=(${(f)"$(__hz_focused_cwds)"})
   fi
-  candidates+=("$PWD")
 
   local dir top
   for dir in $candidates; do

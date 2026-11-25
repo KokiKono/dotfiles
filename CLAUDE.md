@@ -24,7 +24,8 @@ home/                              # chezmoi source (rendered into $HOME)
 ├── dot_config/mise/config.toml    # → ~/.config/mise/config.toml (pinned node/python/java)
 ├── dot_config/zsh/{options,aliases,tools}.zsh # → ~/.config/zsh/... (split zshrc: shell opts / aliases / env+mise+wtp+gcloud)
 ├── dot_config/zsh/git-worktree.zsh # → ~/.config/zsh/... (wrm/brm/bd cleanup fns, sourced by dot_zshrc)
-├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr のタブ探索/workspace 解決。hello-run と dev-server が source)
+├── dot_config/zsh/herdr-lib.zsh   # → ~/.config/zsh/... (herdr の TUI と app の差を吸収する層。hello-run・dev-server・プラグインが source)
+├── dot_config/herdr-app/keys.json # → ~/.config/herdr-app/keys.json (Herdr.app のキー。プラグインのピッカーをタブで開く)
 ├── dot_config/hello-run/prompt{,-scratch}.md # → ~/.config/hello-run/ (hello-run が claude に送る初期プロンプトのテンプレート。issue 用と --scratch 用)
 ├── dot_config/hello-run/{prompt-kb,kb-readme}.md # → ~/.config/hello-run/ (kb を繋いだときに足す文と、kb の issue README の雛形)
 ├── dot_config/kb/executable_autosave.sh # → ~/.config/kb/autosave.sh (kb を全部コミットして push。launchd が 10 分ごとに呼ぶ)
@@ -263,7 +264,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     `herdr workspace focus` を挟んでから `tab focus` する（`tab focus` だけでは移れない）。
     これを現在の workspace 固定に戻すと、既にあるのに同じラベルのタブをもう 1 つ作る。
   - **ラベルが一致するだけでタブを「その issue のもの」と決めない。** `__hr_find_tab` は
-    `issue-<N>` ラベルで探したあと、`__hr_tab_in_session` でそのタブのペインが
+    `issue-<N>` ラベルで探したあと、`__hz_tab_has_cwd_under`（herdr-lib）でそのタブのペインが
     `<root>/.sessions/issue-<N>` の下に居ることまで確かめる。issue 番号はリポジトリ間で
     一意ではなく（ピッカーは org 横断で探す）、ラベルは後から付け替えられるので、
     ラベルだけを信じると enter で別の issue のタブへ黙って飛ばされる。ピッカーの `●` も
@@ -317,6 +318,27 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     ファイルだけ。Time Machine の対象に入れるか、bundle を別の場所に書き出すこと。
   - plist は chezmoi が配り、`kb.sh` が `launchctl bootstrap` する。`kb.sh` が plist より先に
     走ると登録をスキップするので、そのときはもう一度 `bash install/macos/kb.sh` を叩く。
+- **herdr は TUI（`herdr`）からデスクトップの app（Herdr.app）へ移行中で、当面は両方で使う。** 自作プラグイン
+  （hello-run / git-diff / skill-create）は両方から動く。知っておくこと:
+  - **TUI と app の差は `home/dot_config/zsh/herdr-lib.zsh` の `__hz_*` だけが持つ。** タブ作成・分割・
+    タブの探索・切り替え・閉じる・claude の起動・プロンプト送信を、TUI では `herdr`、app では
+    `herdr-app do`（ウィンドウの操作）と `hc`（herdr-core。ターミナルの操作）に振り分ける。呼び出し側に
+    `herdr` を直接書かないこと。どちらで動いているかは `__hz_backend` が環境変数で決める
+    （app のターミナルには `HC_TERMINAL_ID`、TUI のペインには `HERDR_ENV`。app の中で TUI を動かすと
+    両方入るので TUI を優先。`HERDR_BACKEND` で明示もできる）。dev-server はまだ TUI 専用
+  - 用語の対応は workspace = space、タブのラベル = タブの名前。app の `pane.split` には cwd の引数が
+    無く割ったペインの cwd を引き継ぐので、argv で `cd` してからシェルに置き換えている。app には
+    `agent start` も無いので、ペインのシェルに `hc send` で `claude` を打ち込み、`hc get` の
+    `status.state` が `idle` になるのを待ってからプロンプトを送る（信頼確認ダイアログの間は状態を
+    報告しないので、起動の判定は前面のプロセス名でも見る）
+  - **app からは `~/.config/herdr-app/keys.json` の `terminal.open` でピッカーをタブとして開く**
+    （`cmd-alt-i` hello-run / `cmd-alt-d` git-diff / `cmd-alt-s` skill-create）。app には TUI の popup に
+    当たるものが無い。`terminal.open` はコマンドが終わってもタブを対話シェルとして残すので、
+    最後に `hc kill "$HC_TERMINAL_ID"` で自分を終わらせてタブを閉じる。cwd は押したペインのもの
+  - app のプラグインの仕組み（`~/.config/herdr-app/mods/` の JavaScript）には載せ替えていない。
+    中身が fzf と `$EDITOR` を使う端末アプリなので、ターミナルで開くほうが TUI と同じ実装を使い回せる
+  - テストは app のターミナルから流すと `HC_TERMINAL_ID` を引き継いで実物の app を叩くので、
+    `tests/test_helper.bash` が外している。app 向けのテストは `herdr-app` と `hc` をスタブして付け直す
 - **`home/dot_config/herdr/plugins/hello-run/`** は自作の herdr プラグイン
   (`kokikono.hello-run`)。`prefix+Shift+H` でどのペインからでも popup が開き、`gh` で取った
   issue を `fzf` で選ぶと `hello-run <url>` が走る。中身は `herdr-plugin.toml`（起動方法の宣言）、
@@ -799,7 +821,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   リポジトリなので、内容に依存しているものは自前スキルとして `home/dot_claude/skills/` に
   取り込むほうが安全。
 - **These files are rewritten by the apps themselves**, so `chezmoi status` will show drift over
-  time: `.claude/settings.json` (Claude Code writes model/plugin/permission changes),
+  time: `.claude/settings.json` (Claude Code writes model/plugin/permission changes), `.config/herdr-app/keys.json` (app が即時に読み直すので、ライブ側を直接直しがち),
   `.codex/config.toml`, `.gemini/settings.json`, `.config/zed/settings.json`. Resolve with
   `chezmoi re-add <path>` (adopt the live version) rather than `chezmoi apply`. `dot_codex/config.toml`
   intentionally drops codex's `[projects.*]` / `[hooks.state]` blocks — machine-local trust state

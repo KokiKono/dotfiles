@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 # kokikono.skill-create の中身。作りたいスキルを書かせ、dotfiles の worktree と
 # herdr のタブを用意して claude を起動し、prompt.md を送る。
-# herdr から popup として起動される（argv は herdr-plugin.toml を参照）。
+# herdr の TUI からは popup として（argv は herdr-plugin.toml を参照）、Herdr.app からは
+# keys.json の terminal.open でタブとして起動される。両者の差は herdr-lib.zsh が吸収する。
 #
 # PR・マージ・chezmoi apply をここで直接やらないのは、スキルの中身が決まるまで
 # スキル名も PR 本文も決まらないため。そこから先は claude に任せる。
@@ -11,7 +12,7 @@ setopt pipe_fail
 source "${0:A:h}/lib.zsh"
 
 typeset -a missing
-for c in git wt gh jq herdr chezmoi claude; do
+for c in git wt gh jq chezmoi claude; do
   command -v "$c" >/dev/null 2>&1 || missing+=("$c")
 done
 (( ${#missing} )) && sc_die "未インストール: ${missing[*]}"
@@ -19,6 +20,8 @@ done
 [[ -r $SKILL_CREATE_HELLO_RUN ]] \
   || sc_die "hello-run.zsh が見つかりません: $SKILL_CREATE_HELLO_RUN（chezmoi apply 済みか確認）"
 source "$SKILL_CREATE_HELLO_RUN"
+typeset hz_err
+hz_err=$(__hz_require 2>&1) || sc_die "$hz_err"
 
 typeset repo base
 repo=$(sc_source_repo) || sc_die "chezmoi のソース（dotfiles リポジトリ）を特定できません"
@@ -52,20 +55,17 @@ print -r -- "worktree: $wtdir"
 # 4. タブ。ペインは 1 枚で足りる（触るのは dotfiles だけ）
 typeset ws created tab_id pane label="skill-${branch#skills/}"
 ws=$(__hz_workspace_id) || sc_die "workspace を特定できません（herdr 環境か確認）"
-created=$(herdr tab create --workspace "$ws" --label "$label" --cwd "$wtdir" --no-focus) \
-  || sc_die "タブの作成に失敗しました"
-tab_id=$(print -r -- "$created" | jq -r '.result.tab.tab_id')
-pane=$(print -r -- "$created" | jq -r '.result.root_pane.pane_id')
-[[ -n $tab_id && $tab_id != null && -n $pane && $pane != null ]] \
-  || sc_die "タブの作成結果を読めません: $created"
+created=$(__hz_create_tab "$ws" "$label" "$wtdir") || sc_die "タブの作成に失敗しました"
+tab_id=${created%%$'\t'*}
+pane=${created##*$'\t'}
 
 # 5. claude を起動し、信頼確認ダイアログを操作できるよう先にタブへ移ってから送る
 print -r -- "claude を起動しています…"
 __hr_start_agent "$label" "$pane" 0 || sc_die "claude の起動に失敗しました（タブは作成済み: $label）"
-herdr tab focus "$tab_id" >/dev/null
+__hz_focus_tab "" "$tab_id"
 
 typeset text
 text=$(sc_render_prompt "$task" "$branch" "$wtdir" "$repo" "$base")
-__hr_send_prompt "$label" "$text" \
+__hr_send_prompt "$label" "$pane" "$text" \
   || sc_die "初期プロンプトを送れませんでした。claude が入力待ちになったら以下を貼ってください:"$'\n'"$text"
 exit 0

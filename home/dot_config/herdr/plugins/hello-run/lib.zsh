@@ -1,7 +1,12 @@
-# issues.zsh と close-done.zsh の共通部分。source して使う。依存: herdr, jq, gh。
+# issues.zsh と close-done.zsh の共通部分。source して使う。依存: herdr か herdr-app, jq, gh。
 #
 # 「どのタブが hello-run のものか」と「そのタブはどの issue のものか」を 2 本で
 # 別々に持つと、一覧の印と x で閉じる対象がずれる。だからここに 1 つだけ置く。
+
+# タブの一覧の取り方は TUI と app で違い、その差は zsh モジュールの herdr-lib.zsh が持つ。
+# プラグインから見た zsh/ の位置は、ソース（home/dot_config/）でも配備先（~/.config/）でも
+# ../../../zsh で同じなので相対で引く。HERDR_LIB はテストが差し替えるためのもの。
+source "${HERDR_LIB:-${0:A:h}/../../../zsh/herdr-lib.zsh}"
 
 # __hrp_session_tabs <root> → "<tab_id>\t<label>" を 1 行ずつ。
 # issue-<N> ラベルのタブを全 workspace から集める（タブは作ったときの workspace に残る）。
@@ -12,19 +17,15 @@ __hrp_session_tabs() {
   emulate -L zsh
   local root=$1 ws tab label cwd
   local -A label_of
-  for ws in ${(f)"$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[]?.workspace_id // empty')"}; do
-    [[ -n $ws ]] || continue
-    while IFS=$'\t' read -r tab label; do
-      [[ -n $tab && $label == issue-<-> ]] && label_of[$tab]=$label
-    done < <(herdr tab list --workspace "$ws" 2>/dev/null \
-              | jq -r '.result.tabs[]? | select(.label != null) | "\(.tab_id)\t\(.label)"' 2>/dev/null)
-  done
+  while IFS=$'\t' read -r ws tab label; do
+    [[ -n $tab && $label == issue-<-> ]] && label_of[$tab]=$label
+  done < <(__hz_tabs)
   (( ${#label_of} )) || return 0
   if [[ -z $root ]]; then
     for tab in ${(ok)label_of}; do print -r -- "$tab"$'\t'"${label_of[$tab]}"; done
     return 0
   fi
-  # pane list は 1 回だけ。タブ数に関係なく herdr への往復は増やさない
+  # ペインの一覧は 1 回だけ取る。タブ数に関係なく herdr（app では herdr-app と hc）への往復は増やさない
   local -A seen
   while IFS=$'\t' read -r tab cwd; do
     label=${label_of[$tab]:-}
@@ -33,7 +34,7 @@ __hrp_session_tabs() {
       seen[$tab]=1
       print -r -- "$tab"$'\t'"$label"
     fi
-  done < <(herdr pane list 2>/dev/null | jq -r '.result.panes[]? | "\(.tab_id)\t\(.cwd // "")"' 2>/dev/null)
+  done < <(__hz_tab_cwds)
 }
 
 # __hrp_issue_of <root> <org> <num> → "<url>\t<repo>\t<title>\t<state>"（state は OPEN / CLOSED）。

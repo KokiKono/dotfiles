@@ -96,12 +96,10 @@ rows=(${(f)"$(<$cache)"})
 # ● が付くと、enter でそこへ飛ばされる。
 source "${0:A:h}/lib.zsh"
 typeset -A has_tab
-if command -v herdr >/dev/null 2>&1; then
-  local tab label
-  while IFS=$'\t' read -r tab label; do
-    [[ -n $label ]] && has_tab[$label]=1
-  done < <(__hrp_session_tabs "${HELLO_RUN_ROOT:-}")
-fi
+local tab label
+while IFS=$'\t' read -r tab label; do
+  [[ -n $label ]] && has_tab[$label]=1
+done < <(__hrp_session_tabs "${HELLO_RUN_ROOT:-}")
 
 # タブが残っているのに一覧に無い issue（クローズ済みや、自分のアサインが外れたもの）も出す。
 # gh の一覧は open かつ自分にアサインのものだけなので、そのままだとタブに戻る道が無くなる。
