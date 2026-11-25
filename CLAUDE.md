@@ -361,8 +361,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     端末のフルカラー対応を自動では判定できず、16 色で描いていた。配色は Ghostty と同じ Catppuccin
     （`background` に合わせて Mocha / Latte）。nvim の既定の配色はわざと色数を絞っていて、キーワードなどが地の色になる
   - **Tree-sitter の色付けは、nvim が同梱するパーサー（c・lua・markdown・vim など）に無い言語だけを nvim-treesitter（`main`）で入れる。**
-    いまは Ruby だけ。パーサーは初回起動時にビルドするので Brewfile の `tree-sitter-cli` が要る。言語を足すときは
-    `install` の一覧と `FileType` の pattern の両方に足す（片方だけでは色が付かない）
+    いまは Ruby だけ。パーサーは初回起動時にビルドするので Brewfile の `tree-sitter-cli` が要る。言語は `ts_langs` にパーサーの名前で足す（`FileType` の pattern は filetype に変換して作る）
   - **Markdown は開いた時点でプレビューにする。** herdr-nvim が最初からプレビューにするのは画像だけで、その判定はバイナリにあり
     設定も無い。mod やバイナリを直しても installer の更新で消えるので、nvim の `BufWinEnter` からペインヘッダの Preview
     ボタンと同じ `herdr-app do herdr-nvim.swap:<tab>:<パス>` を送っている。tab は nvim が受け取る `HERDR_TAB_ID`

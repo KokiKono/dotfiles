@@ -12,7 +12,7 @@ export async function handleLink({ link, source }) {
 
   const target = [path, link.line, link.line && link.column].filter(Boolean).join(":");
   const bin = `${appHome()}/mods/herdr-nvim/bin/herdr-nvim`;
-  // herdr-nvim が無い・失敗したときも "pass" して、今までどおり OS のアプリで開けるようにする。
+  // herdr-nvim が無い・失敗したときも "pass" して、この mod が無いときと同じ開き方に任せる。
   const r = await exec(bin, ["open", "--tab", source.tab, target]).catch(() => null);
   return r?.code === 0 ? "handled" : "pass";
 }

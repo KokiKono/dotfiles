@@ -9,6 +9,7 @@ end
 
 -- コードジャンプ（LSP）。言語サーバーは Helix と同じものを Brewfile で入れてある。
 -- 各サーバーの cmd・filetypes・root_markers を自前で書かずに nvim-lspconfig を使う。
+-- vim.pack.add を 1 回にまとめないのは、どれかの取得に失敗するとそこで init.lua が止まり、LSP まで使えなくなるため。
 vim.pack.add({ "https://github.com/neovim/nvim-lspconfig" })
 vim.lsp.enable({ "ts_ls", "ruby_lsp", "bashls", "jsonls", "yamlls", "cssls", "html", "marksman" })
 
@@ -38,9 +39,11 @@ vim.cmd.colorscheme("catppuccin")
 -- Tree-sitter の色付け。nvim が同梱するパーサーに無い言語だけを nvim-treesitter で入れる
 -- （ビルドに Brewfile の tree-sitter-cli を使う。入っていれば install は何もしない）。
 vim.pack.add({ { src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "main" } })
-require("nvim-treesitter").install({ "ruby" })
+-- パーサーの名前と filetype は一致しないことがある（tsx は typescriptreact、bash は sh）ので、pattern は変換して作る。
+local ts_langs = { "ruby" }
+require("nvim-treesitter").install(ts_langs)
 vim.api.nvim_create_autocmd("FileType", {
-  pattern = { "ruby" },
+  pattern = vim.iter(ts_langs):map(vim.treesitter.language.get_filetypes):flatten():totable(),
   callback = function(args)
     pcall(vim.treesitter.start, args.buf)
   end,
@@ -62,9 +65,7 @@ if vim.env.HERDR_NVIM_HOST == "app" and vim.env.HERDR_TAB_ID then
       if not tab or vim.bo[args.buf].buftype ~= "" or vim.fn.filereadable(file) == 0 then
         return
       end
-      local encoded = file:gsub("[^%w%-_%.!~%*'%(%)]", function(c)
-        return string.format("%%%02X", c:byte())
-      end)
+      local encoded = vim.uri_encode(file, "rfc2396")
       vim.system({ app, "do", "herdr-nvim.swap:" .. tab .. ":" .. encoded, "{}" })
     end,
   })
