@@ -35,6 +35,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -86,6 +87,9 @@ class Worker:
 
 # 流している最中のテストのプロセス。止められたときに、ほかのワーカーのものも含めてまとめて止める
 RUNNING = set()
+# 止めた後に、空いたワーカーが次のテストを始めないようにする。RUNNING への出し入れと同じロックで見る
+STOPPING = threading.Event()
+RUNNING_LOCK = threading.Lock()
 
 
 def cache_path():
@@ -267,11 +271,14 @@ def run_command(command, worker, timeout):
     """(終了コード, 出力) を返す。上限を超えたら終了コードは None。"""
     # テストのコマンドがラッパー越しに子プロセスを作るので、上限を超えたらグループごと止める。
     # コンテナの中で動くテストまでは止められない
-    proc = subprocess.Popen(
-        command, cwd=worker.dir, env=worker.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        errors="replace", start_new_session=True,
-    )
-    RUNNING.add(proc)
+    with RUNNING_LOCK:
+        if STOPPING.is_set():
+            return None, ""
+        proc = subprocess.Popen(
+            command, cwd=worker.dir, env=worker.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            errors="replace", start_new_session=True,
+        )
+        RUNNING.add(proc)
     try:
         output, _ = proc.communicate(timeout=timeout)
         return proc.returncode, output
@@ -282,7 +289,8 @@ def run_command(command, worker, timeout):
         kill_group(proc)
         raise
     finally:
-        RUNNING.discard(proc)
+        with RUNNING_LOCK:
+            RUNNING.discard(proc)
 
 
 def run_tests(config, tests, timeout, worker):
@@ -358,7 +366,7 @@ def make_workers(jobs, config, root):
         done = subprocess.run(copy + [".", str(worker.dir)], capture_output=True, text=True)
         if done.returncode != 0:
             return f"作業ツリーを複製できない: {done.stderr.strip()}"
-        if parallel["setup"]:
+        if parallel.get("setup"):
             returncode, output = run_command(parallel["setup"], worker, BASELINE_TIMEOUT)
             if returncode != 0:
                 return f"ワーカー {worker.number} の setup が失敗した:\n{output.strip()[-2000:]}"
@@ -463,8 +471,9 @@ def main():
         if summary == NO_SUMMARY:
             # 集計の行を拾えないと、検出と「壊れた」を分けられない
             sys.exit("run_mutations: 基準の出力に集計の行が無い。runner か summary_pattern を直す")
-        # 条件式や算術の書き換えは無限ループを作りやすい。固定の長い上限だと 1 件ごとに待たされる
-        timeouts[tests] = config["timeout"] or max(MIN_TIMEOUT, seconds * 3)
+        # 条件式や算術の書き換えは無限ループを作りやすい。固定の長い上限だと 1 件ごとに待たされる。
+        # 並列のときは同じマシンで jobs 本が CPU と DB を取り合い、基準より遅くなるので、その分を見込む
+        timeouts[tests] = config["timeout"] or max(MIN_TIMEOUT, seconds * 3 * jobs)
 
     def write_out(counts=None, **totals):
         if args.out:
@@ -506,9 +515,9 @@ def main():
                                 if isinstance(sources, tuple) and not (hit and hit[2])))
 
     results = [None] * len(plans)
-    # 流すものより多く複製しても setup の時間が増えるだけ。全部キャッシュに当たれば複製しない
+    # 流す変異より多く複製しても setup の時間が増えるだけ。基準は数秒で済むので、基準のためだけには複製しない
     todo = sum(1 for m, hit, sources in plans if not hit and isinstance(sources, tuple))
-    jobs = max(1, min(args.jobs, max(todo, len(groups))))
+    jobs = max(1, min(args.jobs, todo))
     root = Path(tempfile.mkdtemp(prefix=".mutation-check-", dir=Path.cwd().parent)) if jobs > 1 else None
     pool = None
     try:
@@ -518,18 +527,27 @@ def main():
             idle.put(worker)
 
         def on_worker(fn, *fn_args):
+            # ワーカーを返すのは、結果を受け取ったメインのスレッド。元の作業ツリーで流すときに、
+            # メインがキャッシュの鍵を取り直す前に、次の変異がファイルを書き換えないようにする
             worker = idle.get()
             try:
-                return fn(*fn_args, worker)
-            finally:
+                return fn(*fn_args, worker), worker
+            except BaseException:
                 idle.put(worker)
+                raise
+
+        def result_of(run):
+            result, worker = run.result()
+            return result, (lambda: idle.put(worker))
 
         # キャッシュ（sqlite）はスレッドをまたいで使えないので、ワーカーにはテストを流すことだけをさせる
         pool = ThreadPoolExecutor(len(workers))
         runs = [pool.submit(on_worker, run_tests, config, tests, config["timeout"] or BASELINE_TIMEOUT)
                 for tests in groups]
         for tests, run in zip(groups, runs):
-            baseline(tests, run.result())
+            result, release = result_of(run)
+            baseline(tests, result)
+            release()
 
         running = {}
         for i, (mutation, hit, sources) in enumerate(plans):
@@ -544,16 +562,19 @@ def main():
                 running[run] = (i, mutation, mutated, before)
         for run in as_completed(running):
             i, mutation, mutated, before = running[run]
-            status, summary, seconds = run.result()
+            (status, summary, seconds), release = result_of(run)
             # 壊れた・時間切れは環境や定義の不備でも起きるので、次も流す
             if status in CACHED and all(before) and before == (cached("key", config, mutation, mutated),
                                                                cached("fingerprint", mutation["tests"])):
                 cached("store", before[0], status, summary, mutation["label"], before[1])
+            release()
             record(i, mutation, status, summary, seconds)
     finally:
         # 止められたときは、ほかのワーカーが流しているテストも止めてから、書き換えを戻し終えるのを待つ
-        for proc in list(RUNNING):
-            kill_group(proc, wait=False)
+        with RUNNING_LOCK:
+            STOPPING.set()
+            for proc in list(RUNNING):
+                kill_group(proc, wait=False)
         if pool:
             pool.shutdown(wait=True, cancel_futures=True)
         if root:

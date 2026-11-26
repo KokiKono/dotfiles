@@ -488,15 +488,15 @@ copies() {
 
 @test "mutation-check jobs: removes the copies when interrupted" {
     parallel_setup
-    sed -i.bak 's/sleep 1$/sleep 20/' fake-runner
+    sed -i.bak 's/sleep 1$/sleep 20.37/' fake-runner
     python3 "${RUN}" def.json --jobs 2 > /dev/null 2>&1 &
     pid=$!
     for _ in $(seq 50); do [ "$(copies)" = "1" ] && grep -q '^2 ' "$SEEN" 2>/dev/null && break; sleep 0.2; done
     kill -HUP "$pid"
     wait "$pid" || true
     [ "$(copies)" = "0" ]
-    # fake-runner の sleep 20 が残っていれば、止めたワーカーのテストが動き続けている
-    run pgrep -f 'sleep 20'
+    # fake-runner の sleep 20.37 が残っていれば、止めたワーカーのテストが動き続けている
+    run pgrep -f 'sleep 20.37'
     [ "$status" -ne 0 ]
 }
 
