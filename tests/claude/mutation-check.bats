@@ -445,9 +445,8 @@ copies() {
     [ "$(grep -c '^setup ' "$SEEN")" = "2" ]
     [ "$(grep '^setup ' "$SEEN" | cut -d' ' -f2 | sort | tr '\n' ' ')" = "2 3 " ]
     [ "$(grep -v '^setup ' "$SEEN" | cut -d' ' -f1 | sort -u | tr '\n' ' ')" = "2 3 " ]
-    # 同じ番号のワーカーは常に同じ複製で流す
+    # 1 つの番号（= 1 つのテスト DB）が 2 つ以上の複製のディレクトリに現れない
     [ "$(grep -v '^setup ' "$SEEN" | sort -u | cut -d' ' -f1 | uniq -d)" = "" ]
-    # 終わったら複製を消す
     [ "$(copies)" = "0" ]
 }
 
@@ -496,7 +495,7 @@ copies() {
     kill -HUP "$pid"
     wait "$pid" || true
     [ "$(copies)" = "0" ]
-    # 止めたテストのプロセスを残さない
+    # fake-runner の sleep 20 が残っていれば、止めたワーカーのテストが動き続けている
     run pgrep -f 'sleep 20'
     [ "$status" -ne 0 ]
 }

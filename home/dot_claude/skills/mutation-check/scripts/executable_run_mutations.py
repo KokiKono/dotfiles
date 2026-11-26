@@ -499,7 +499,9 @@ def main():
         # 作業ツリーを複製する前に取る。後で取ると、複製してから直された中身を、流していないのに記録してしまう
         before = key, cached("fingerprint", mutation["tests"])
         plans.append((mutation, hit, (original, mutated, before)))
-    # テストを足した後の「検出」の使い回しでも、足したテストが変異を入れないコードで通ることは確かめる
+    # 変異を入れないコードでテストが通るかを確かめる（基準）テストの組。キャッシュの「検出」は、記録した後に
+    # テストへ行を足していても返す（hit[2] が偽）。足した行が変異を入れないコードで落ちるなら、その検出は
+    # 当てにならないので、その組も基準を流す
     groups = list(dict.fromkeys(m["tests"] for m, hit, sources in plans
                                 if isinstance(sources, tuple) and not (hit and hit[2])))
 
