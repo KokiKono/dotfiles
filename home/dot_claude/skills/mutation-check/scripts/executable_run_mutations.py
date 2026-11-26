@@ -25,16 +25,16 @@
 """
 import argparse
 import hashlib
-import queue
-import shutil
-import tempfile
 import json
 import os
+import queue
 import re
+import shutil
 import signal
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -493,23 +493,24 @@ def main():
         except DefinitionError as e:
             plans.append((mutation, None, str(e)))
             continue
-        hit = None
-        if not args.no_cache:
-            key = cached("key", config, mutation, mutated)
-            hit = key and cached("lookup", key, mutation["tests"])
+        key = cached("key", config, mutation, mutated)
+        hit = None if args.no_cache else key and cached("lookup", key, mutation["tests"])
         # 流している間にテストや他の変異対象を直されたら、どの中身で出た結果か分からないので記録しない。
         # 作業ツリーを複製する前に取る。後で取ると、複製してから直された中身を、流していないのに記録してしまう
-        before = cached("key", config, mutation, mutated), cached("fingerprint", mutation["tests"])
+        before = key, cached("fingerprint", mutation["tests"])
         plans.append((mutation, hit, (original, mutated, before)))
     # テストを足した後の「検出」の使い回しでも、足したテストが変異を入れないコードで通ることは確かめる
     groups = list(dict.fromkeys(m["tests"] for m, hit, sources in plans
                                 if isinstance(sources, tuple) and not (hit and hit[2])))
 
     results = [None] * len(plans)
-    root = Path(tempfile.mkdtemp(prefix=".mutation-check-", dir=Path.cwd().parent)) if args.jobs > 1 else None
+    # 流すものより多く複製しても setup の時間が増えるだけ。全部キャッシュに当たれば複製しない
+    todo = sum(1 for m, hit, sources in plans if not hit and isinstance(sources, tuple))
+    jobs = max(1, min(args.jobs, max(todo, len(groups))))
+    root = Path(tempfile.mkdtemp(prefix=".mutation-check-", dir=Path.cwd().parent)) if jobs > 1 else None
     pool = None
     try:
-        workers = make_workers(args.jobs, config, root)
+        workers = make_workers(jobs, config, root)
         idle = queue.Queue()
         for worker in workers:
             idle.put(worker)
@@ -571,6 +572,7 @@ def main():
         write_out(counts, cached=hits)
     else:
         write_out(counts)
+
 
 if __name__ == "__main__":
     main()

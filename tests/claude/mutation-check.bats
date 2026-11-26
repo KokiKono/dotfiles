@@ -467,12 +467,24 @@ copies() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"parallel"* ]] || false
     printf '#!/usr/bin/env bash\necho "no database"\nexit 1\n' > fake-setup
-    definition "[$(mutation k1 'limit = 4' 'limit = 5')]" '{"parallel": {"env": "TEST_ENV_NUMBER", "setup": ["./fake-setup"]}}'
+    definition "[$(mutation k1 'limit = 4' 'limit = 5'), $(mutation s1 'limit = 4' 'limit = 3')]" '{"parallel": {"env": "TEST_ENV_NUMBER", "setup": ["./fake-setup"]}}'
     run python3 "${RUN}" def.json --jobs 2 --out out.json
     [ "$status" -ne 0 ]
     [[ "$output" == *"no database"* ]] || false
     [ ! -e out.json ]
     [ "$(copies)" = "0" ]
+}
+
+@test "mutation-check jobs: does not copy more workers than mutations to run" {
+    parallel_setup
+    # 流す変異が 1 件なら、複製も setup もせずに元の作業ツリーで流す
+    definition "[$(mutation k1 'limit = 4' 'limit = 5')]" '{"parallel": {"env": "TEST_ENV_NUMBER", "setup": ["./fake-setup"]}}'
+    run python3 "${RUN}" def.json --jobs 4
+    [ "$status" -eq 0 ]
+    run grep -c '^setup ' "$SEEN"
+    [ "$output" = "0" ]
+    run grep -c "^none $PWD\$" "$SEEN"
+    [ "$output" = "2" ]
 }
 
 @test "mutation-check jobs: removes the copies when interrupted" {
