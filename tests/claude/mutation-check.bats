@@ -406,6 +406,89 @@ calls() {
     [ "$(calls)" = "0" ]
 }
 
+# 並列の検証用。流すたびに「TEST_ENV_NUMBER の値 作業ディレクトリ」を絶対パスの seen に 1 行足し、
+# 1 秒待つ（並列に流れたかを、全体の時間で確かめるため）
+parallel_setup() {
+    export SEEN="${BATS_TEST_TMPDIR}/seen"
+    cat > fake-runner <<'EOF'
+#!/usr/bin/env bash
+echo "${TEST_ENV_NUMBER:-none} $PWD" >> "$SEEN"
+sleep 1
+if grep -q 'limit = 5' target.txt; then echo "3 examples, 1 failure"; exit 1; fi
+echo "3 examples, 0 failures"
+EOF
+    cat > fake-setup <<'EOF'
+#!/usr/bin/env bash
+echo "setup ${TEST_ENV_NUMBER} $PWD" >> "$SEEN"
+EOF
+    chmod +x fake-setup
+    definition "[$(mutation k1 'limit = 4' 'limit = 5'),$(mutation s1 'keep = true' 'keep = false'),$(mutation k2 'limit = 4' 'limit = 50'),$(mutation s2 'keep = true' 'keep = 1')]" \
+        '{"parallel": {"env": "TEST_ENV_NUMBER", "setup": ["./fake-setup"]}}'
+}
+
+copies() {
+    find "${BATS_TEST_TMPDIR}/.." -maxdepth 1 -name '.mutation-check-*' | wc -l | tr -d ' '
+}
+
+@test "mutation-check jobs: runs in copies with separate env values and gives the same results" {
+    parallel_setup
+    cp target.txt before.txt
+    run python3 "${RUN}" def.json --jobs 2 --out out.json
+    [ "$status" -eq 0 ]
+    # 結果は定義の順に並ぶ
+    [ "$(jq -r '[.results[] | "\(.label)=\(.status)"] | join(",")' out.json)" = "k1=killed,s1=survived,k2=killed,s2=survived" ]
+    # 元の作業ツリーは書き換えず、テストも流さない
+    cmp target.txt before.txt
+    run grep -q " ${BATS_TEST_TMPDIR}\$" "$SEEN"
+    [ "$status" -ne 0 ]
+    # ワーカーは 2 から番号を振り、それぞれ自分の複製で 1 回ずつ setup する
+    [ "$(grep -c '^setup ' "$SEEN")" = "2" ]
+    [ "$(grep '^setup ' "$SEEN" | cut -d' ' -f2 | sort | tr '\n' ' ')" = "2 3 " ]
+    [ "$(grep -v '^setup ' "$SEEN" | cut -d' ' -f1 | sort -u | tr '\n' ' ')" = "2 3 " ]
+    # 同じ番号のワーカーは常に同じ複製で流す
+    [ "$(grep -v '^setup ' "$SEEN" | sort -u | cut -d' ' -f1 | uniq -d)" = "" ]
+    # 終わったら複製を消す
+    [ "$(copies)" = "0" ]
+}
+
+@test "mutation-check jobs: runs mutations at the same time" {
+    parallel_setup
+    start=$(date +%s)
+    run python3 "${RUN}" def.json --jobs 4 --out out.json
+    [ "$status" -eq 0 ]
+    # 直列なら基準 1 回 + 変異 4 件で 5 秒以上かかる
+    [ "$(( $(date +%s) - start ))" -lt 4 ]
+}
+
+@test "mutation-check jobs: needs parallel in the definition and stops when a setup fails" {
+    parallel_setup
+    definition "[$(mutation k1 'limit = 4' 'limit = 5')]"
+    run python3 "${RUN}" def.json --jobs 2
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"parallel"* ]] || false
+    printf '#!/usr/bin/env bash\necho "no database"\nexit 1\n' > fake-setup
+    definition "[$(mutation k1 'limit = 4' 'limit = 5')]" '{"parallel": {"env": "TEST_ENV_NUMBER", "setup": ["./fake-setup"]}}'
+    run python3 "${RUN}" def.json --jobs 2 --out out.json
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no database"* ]] || false
+    [ ! -e out.json ]
+    [ "$(copies)" = "0" ]
+}
+
+@test "mutation-check jobs: removes the copies when interrupted" {
+    parallel_setup
+    sed -i.bak 's/sleep 1$/sleep 20/' fake-runner
+    python3 "${RUN}" def.json --jobs 2 > /dev/null 2>&1 &
+    pid=$!
+    for _ in $(seq 50); do [ "$(copies)" = "1" ] && grep -q '^2 ' "$SEEN" 2>/dev/null && break; sleep 0.2; done
+    kill -HUP "$pid"
+    wait "$pid" || true
+    [ "$(copies)" = "0" ]
+    # 止めたテストのプロセスを残さない
+    run pgrep -f 'sleep 20'
+    [ "$status" -ne 0 ]
+}
+
 # 差分のあるリポジトリを作る。base は最初のコミット
 gen_repo() {
     git init -q repo

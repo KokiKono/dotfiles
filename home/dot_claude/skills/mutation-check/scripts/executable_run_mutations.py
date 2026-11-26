@@ -2,9 +2,13 @@
 """手で選んだ変異（コードの小さな書き換え）を 1 つずつ入れてテストを流し、変異ごとの結果を分ける。
 
 使い方: run_mutations.py <定義.json> [--out 結果.json] [--only ラベルの接頭辞] [--survivors-of 前回の結果.json] [--no-cache]
+                         [--jobs N]
         run_mutations.py --clear-cache
   作業ツリーのルートで実行する（定義の file はそこからの相対パス）。
   定義の書式は references/definition.md にある。
+
+--jobs N（2 以上）は、作業ツリーを N 個複製して変異を同時に流す。元の作業ツリーは書き換えない。
+定義の parallel.env に書いた環境変数に、ワーカーごとに 2, 3, … を入れて渡す（テストの DB などを分けるため）。
 
 定義に tests（変異ごとに流すテストのファイル）があれば、結果をキャッシュする。変異を入れた後のソースと
 テストのファイルが前と同じ変異は流さず、前の結果を返す。置き場は ~/.cache/mutation-check/cache.sqlite3
@@ -21,6 +25,9 @@
 """
 import argparse
 import hashlib
+import queue
+import shutil
+import tempfile
 import json
 import os
 import re
@@ -29,6 +36,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # summary: テストが実行されたときに必ず出る集計の行。出なければ broken とみなす
@@ -67,6 +75,17 @@ CACHED = ("killed", "survived")
 
 class DefinitionError(Exception):
     pass
+
+
+class Worker:
+    """テストを流す場所。dir は作業ツリー（またはその複製）、env は None なら呼び出し元の環境のまま。"""
+
+    def __init__(self, dir, env=None, number=None):
+        self.dir, self.env, self.number = Path(dir), env, number
+
+
+# 流している最中のテストのプロセス。止められたときに、ほかのワーカーのものも含めてまとめて止める
+RUNNING = set()
 
 
 def cache_path():
@@ -216,6 +235,12 @@ def load_definition(path):
     timeout = definition.get("timeout")
     if timeout is not None and not (isinstance(timeout, (int, float)) and not isinstance(timeout, bool) and timeout > 0):
         raise DefinitionError("timeout は 0 より大きい数で書く")
+    parallel = definition.get("parallel")
+    if parallel is not None:
+        setup = parallel.get("setup", []) if isinstance(parallel, dict) else None
+        if not (isinstance(parallel, dict) and isinstance(parallel.get("env"), str) and parallel["env"]
+                and isinstance(setup, list) and all(isinstance(c, str) for c in setup)):
+            raise DefinitionError("parallel は {\"env\": 環境変数の名前, \"setup\": 文字列の配列} で書く")
     seen = set()
     for i, m in enumerate(mutations):
         missing = [k for k in ("label", "file", "old", "new") if not isinstance(m.get(k), str)]
@@ -229,6 +254,7 @@ def load_definition(path):
         return {
             "command": command,
             "timeout": timeout,
+            "parallel": parallel,
             "summary": re.compile(summary, re.M),
             "broken": re.compile(broken, re.M) if broken else None,
             "mutations": mutations,
@@ -237,40 +263,52 @@ def load_definition(path):
         raise DefinitionError(f"正規表現が誤っている: {e}")
 
 
-def run_tests(config, tests, timeout):
-    """(status, 集計の行, 秒) を返す。status は passed / killed / broken / timeout。集計の行が無ければ NO_SUMMARY。"""
-    started = time.monotonic()
+def run_command(command, worker, timeout):
+    """(終了コード, 出力) を返す。上限を超えたら終了コードは None。"""
     # テストのコマンドがラッパー越しに子プロセスを作るので、上限を超えたらグループごと止める。
     # コンテナの中で動くテストまでは止められない
     proc = subprocess.Popen(
-        config["command"] + list(tests), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        command, cwd=worker.dir, env=worker.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         errors="replace", start_new_session=True,
     )
+    RUNNING.add(proc)
     try:
         output, _ = proc.communicate(timeout=timeout)
+        return proc.returncode, output
     except subprocess.TimeoutExpired:
         kill_group(proc)
-        return "timeout", f"{timeout:.0f} 秒を超えた", time.monotonic() - started
+        return None, ""
     except BaseException:
         kill_group(proc)
         raise
+    finally:
+        RUNNING.discard(proc)
+
+
+def run_tests(config, tests, timeout, worker):
+    """(status, 集計の行, 秒) を返す。status は passed / killed / broken / timeout。集計の行が無ければ NO_SUMMARY。"""
+    started = time.monotonic()
+    returncode, output = run_command(config["command"] + list(tests), worker, timeout)
     seconds = time.monotonic() - started
+    if returncode is None:
+        return "timeout", f"{timeout:.0f} 秒を超えた", seconds
     output = ANSI.sub("", output)
     found = config["summary"].search(output)
     summary = found.group(0).strip() if found else NO_SUMMARY
-    if proc.returncode == 0:
+    if returncode == 0:
         return "passed", summary, seconds
     if not found or (config["broken"] and config["broken"].search(output)):
         return "broken", summary, seconds
     return "killed", summary, seconds
 
 
-def kill_group(proc):
+def kill_group(proc, wait=True):
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    proc.wait()
+    if wait:
+        proc.wait()
 
 
 def mutate(mutation):
@@ -296,14 +334,42 @@ def mutate(mutation):
     return original, original[:offset] + new + original[offset + len(old):]
 
 
-def apply_and_run(mutation, original, mutated, config, timeout):
-    path = Path(mutation["file"])
+def apply_and_run(mutation, original, mutated, config, timeout, worker):
+    path = worker.dir / mutation["file"]
     try:
         path.write_bytes(mutated)
-        status, summary, seconds = run_tests(config, mutation["tests"], timeout)
+        status, summary, seconds = run_tests(config, mutation["tests"], timeout, worker)
     finally:
         path.write_bytes(original)
     return ("survived" if status == "passed" else status), summary, seconds
+
+
+def make_workers(jobs, config, root):
+    """jobs 個のワーカーを返す。2 個以上なら root の下に作業ツリーを複製し、parallel.setup を流す。"""
+    if jobs == 1:
+        return [Worker(".")]
+    parallel = config["parallel"]
+    # 番号は parallel_tests に揃えて 2 から振る。1（変数なし）は元の作業ツリーで流すテストが使う
+    workers = [Worker(root / str(n), {**os.environ, parallel["env"]: str(n)}, n) for n in range(2, jobs + 2)]
+    # 複製は中身を共有するので（APFS の clonefile）、作業ツリーが大きくてもディスクをほぼ使わない
+    copy = ["cp", "-c", "-R"] if sys.platform == "darwin" else ["cp", "-R", "--reflink=auto"]
+
+    def prepare(worker):
+        done = subprocess.run(copy + [".", str(worker.dir)], capture_output=True, text=True)
+        if done.returncode != 0:
+            return f"作業ツリーを複製できない: {done.stderr.strip()}"
+        if parallel["setup"]:
+            returncode, output = run_command(parallel["setup"], worker, BASELINE_TIMEOUT)
+            if returncode != 0:
+                return f"ワーカー {worker.number} の setup が失敗した:\n{output.strip()[-2000:]}"
+        return None
+
+    with ThreadPoolExecutor(jobs) as pool:
+        errors = [e for e in pool.map(prepare, workers) if e]
+    if errors:
+        sys.exit("run_mutations: " + errors[0])
+    print(f"ワーカー {jobs} 個を用意した（{parallel['env']}={workers[0].number}〜{workers[-1].number}）", flush=True)
+    return workers
 
 
 def open_cache(mutations):
@@ -342,11 +408,14 @@ def main():
     parser.add_argument("--no-cache", action="store_true",
                         help="キャッシュを引かずに全部流す（結果は記録する）。tests に無いファイルを変えたときに使う")
     parser.add_argument("--clear-cache", action="store_true", help="キャッシュを消して終わる")
+    parser.add_argument("--jobs", type=int, default=1, help="同時に流す数。2 以上は定義に parallel が要る")
     args = parser.parse_args()
     if args.clear_cache:
         return clear_cache()
     if not args.definition:
         parser.error("定義のファイルが要る")
+    if args.jobs < 1:
+        parser.error("--jobs は 1 以上")
 
     try:
         config = load_definition(args.definition)
@@ -363,6 +432,9 @@ def main():
         sys.exit(f"run_mutations: {e}")
     if not mutations:
         sys.exit("run_mutations: 流す変異が無い")
+    if args.jobs > 1 and not config["parallel"]:
+        # ワーカーごとに DB などを分けないと、同じテストのデータを取り合って落ち、それを検出と数えてしまう
+        sys.exit("run_mutations: --jobs を使うには、定義に parallel（ワーカーを分ける環境変数）を書く")
 
     # kill されたときや端末を閉じられたときも finally でファイルを戻せるよう、シグナルを例外に変える
     for number in (signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT):
@@ -383,11 +455,8 @@ def main():
             cache = None
             return None
 
-    def baseline(tests):
-        """変異を入れずに 1 回流し、変異ごとの上限を決める。テストの組ごとに 1 回。"""
-        if tests in timeouts:
-            return
-        status, summary, seconds = run_tests(config, tests, config["timeout"] or BASELINE_TIMEOUT)
+    def baseline(tests, result):
+        status, summary, seconds = result
         print(f"基準{'（' + ' '.join(tests) + '）' if tests else ''}: {summary}（{seconds:.0f} 秒）", flush=True)
         if status != "passed":
             sys.exit("run_mutations: 変異を入れる前にテストが通っていないので止めます")
@@ -399,18 +468,21 @@ def main():
 
     def write_out(counts=None, **totals):
         if args.out:
-            body = {"counts": counts, "results": results, **totals}
+            body = {"counts": counts, "results": [r for r in results if r], **totals}
             Path(args.out).write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n")
 
-    def run(mutation, original, mutated):
-        tests = mutation["tests"]
-        # 流している間にテストや他の変異対象を直されたら、どの中身で出た結果か分からないので記録しない
-        before = cached("key", config, mutation, mutated), cached("fingerprint", tests)
-        status, summary, seconds = apply_and_run(mutation, original, mutated, config, timeouts[tests])
-        # 壊れた・時間切れは環境や定義の不備でも起きるので、次も流す
-        if status in CACHED and all(before) and before == (cached("key", config, mutation, mutated), cached("fingerprint", tests)):
-            cached("store", before[0], status, summary, mutation["label"], before[1])
-        return status, summary, seconds
+    def record(i, mutation, status, summary, seconds, hit=None):
+        result = {
+            "label": mutation["label"], "file": mutation["file"],
+            "status": status, "summary": summary, "seconds": round(seconds, 1),
+        }
+        if hit:
+            result["cached"] = True
+        results[i] = result
+        took = "キャッシュ" if hit else f"{seconds:.0f} 秒"
+        print(f"[{LABELS[status]}] {mutation['label']}: {summary}（{took}）", flush=True)
+        # 途中で止められても、そこまでの結果を --survivors-of に使えるように毎回書く
+        write_out()
 
     # 先に全部の変異をキャッシュに当て、流す必要のあるテストの組の基準をまとめて流す。
     # 変異を流し始めてから別の組の基準が落ちると、そこまでの数十分が無駄になる
@@ -425,31 +497,64 @@ def main():
         if not args.no_cache:
             key = cached("key", config, mutation, mutated)
             hit = key and cached("lookup", key, mutation["tests"])
-        plans.append((mutation, hit, (original, mutated)))
-    for mutation, hit, sources in plans:
-        # テストを足した後の「検出」の使い回しでも、足したテストが変異を入れないコードで通ることは確かめる
-        if isinstance(sources, tuple) and not (hit and hit[2]):
-            baseline(mutation["tests"])
+        # 流している間にテストや他の変異対象を直されたら、どの中身で出た結果か分からないので記録しない。
+        # 作業ツリーを複製する前に取る。後で取ると、複製してから直された中身を、流していないのに記録してしまう
+        before = cached("key", config, mutation, mutated), cached("fingerprint", mutation["tests"])
+        plans.append((mutation, hit, (original, mutated, before)))
+    # テストを足した後の「検出」の使い回しでも、足したテストが変異を入れないコードで通ることは確かめる
+    groups = list(dict.fromkeys(m["tests"] for m, hit, sources in plans
+                                if isinstance(sources, tuple) and not (hit and hit[2])))
 
-    results = []
-    for mutation, hit, sources in plans:
-        if hit:
-            status, summary, seconds = hit[0], hit[1], 0.0
-        elif isinstance(sources, str):
-            status, summary, seconds = "invalid", sources, 0.0
-        else:
-            status, summary, seconds = run(mutation, *sources)
-        result = {
-            "label": mutation["label"], "file": mutation["file"],
-            "status": status, "summary": summary, "seconds": round(seconds, 1),
-        }
-        if hit:
-            result["cached"] = True
-        results.append(result)
-        took = "キャッシュ" if hit else f"{seconds:.0f} 秒"
-        print(f"[{LABELS[status]}] {mutation['label']}: {summary}（{took}）", flush=True)
-        # 途中で止められても、そこまでの結果を --survivors-of に使えるように毎回書く
-        write_out()
+    results = [None] * len(plans)
+    root = Path(tempfile.mkdtemp(prefix=".mutation-check-", dir=Path.cwd().parent)) if args.jobs > 1 else None
+    pool = None
+    try:
+        workers = make_workers(args.jobs, config, root)
+        idle = queue.Queue()
+        for worker in workers:
+            idle.put(worker)
+
+        def on_worker(fn, *fn_args):
+            worker = idle.get()
+            try:
+                return fn(*fn_args, worker)
+            finally:
+                idle.put(worker)
+
+        # キャッシュ（sqlite）はスレッドをまたいで使えないので、ワーカーにはテストを流すことだけをさせる
+        pool = ThreadPoolExecutor(len(workers))
+        runs = [pool.submit(on_worker, run_tests, config, tests, config["timeout"] or BASELINE_TIMEOUT)
+                for tests in groups]
+        for tests, run in zip(groups, runs):
+            baseline(tests, run.result())
+
+        running = {}
+        for i, (mutation, hit, sources) in enumerate(plans):
+            if hit:
+                record(i, mutation, hit[0], hit[1], 0.0, hit)
+            elif isinstance(sources, str):
+                record(i, mutation, "invalid", sources, 0.0)
+            else:
+                original, mutated, before = sources
+                run = pool.submit(on_worker, apply_and_run, mutation, original, mutated, config,
+                                  timeouts[mutation["tests"]])
+                running[run] = (i, mutation, mutated, before)
+        for run in as_completed(running):
+            i, mutation, mutated, before = running[run]
+            status, summary, seconds = run.result()
+            # 壊れた・時間切れは環境や定義の不備でも起きるので、次も流す
+            if status in CACHED and all(before) and before == (cached("key", config, mutation, mutated),
+                                                               cached("fingerprint", mutation["tests"])):
+                cached("store", before[0], status, summary, mutation["label"], before[1])
+            record(i, mutation, status, summary, seconds)
+    finally:
+        # 止められたときは、ほかのワーカーが流しているテストも止めてから、書き換えを戻し終えるのを待つ
+        for proc in list(RUNNING):
+            kill_group(proc, wait=False)
+        if pool:
+            pool.shutdown(wait=True, cancel_futures=True)
+        if root:
+            shutil.rmtree(root, ignore_errors=True)
 
     counts = {s: sum(1 for r in results if r["status"] == s) for s in LABELS}
     # 壊れた変異や時間切れを検出に数えると、テストが実際より強く見えるので分母からも外す
@@ -466,7 +571,6 @@ def main():
         write_out(counts, cached=hits)
     else:
         write_out(counts)
-
 
 if __name__ == "__main__":
     main()
