@@ -339,7 +339,7 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     for s in my-voice optimize-prompt pr-screenshot github-attach codebase-memory \
              learning-code ubiquitous-language dev-server explain-before-shorten takt-order \
              hello-search hello-manual-test hello-issue writing-retro pr-followup report-my-channel \
-             mutation-check comment-check; do
+             mutation-check comment-check multi-review; do
         [ -f "${TESTHOME}/.claude/skills/${s}/SKILL.md" ]
         grep -q "^name: ${s}$" "${TESTHOME}/.claude/skills/${s}/SKILL.md"
         grep -q '^description: ' "${TESTHOME}/.claude/skills/${s}/SKILL.md"
@@ -455,6 +455,12 @@ for manifest in glob.glob(os.path.join(sys.argv[2], '*', 'herdr-plugin.toml')):
     grep -qF '"comment-check"' "${TESTHOME}/.claude/hooks/review-before-pr.sh"
     run grep -rniE 'hello-ai|auto_reserve' "${SKILL}"
     [ "$status" -ne 0 ]
+}
+
+@test "apply: multi-review skill is deployed with its script and the shell alias" {
+    [ -x "${TESTHOME}/.claude/skills/multi-review/scripts/multi-review.sh" ]
+    # ターミナルから呼ぶ alias が配備先のスクリプトを指していること
+    grep -qF '~/.claude/skills/multi-review/scripts/multi-review.sh' "${TESTHOME}/.config/zsh/aliases.zsh"
 }
 
 @test "apply: md-diff-preview mod is deployed as a plugin under skills" {

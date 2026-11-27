@@ -62,6 +62,7 @@ tests/
 ├── claude/mutation-check.bats     # unit tests for the mutation-check skill's run_mutations.py / gen_mutations{.py,_ruby.rb} / kb.sh
 ├── claude/kb-checks.bats          # unit tests for the hook that runs kb's checks after edits and before commits / PRs
 ├── claude/comment-check.bats      # unit tests for the comment-check skill's added_comments.py
+├── claude/multi-review.bats       # unit tests for the multi-review skill's multi-review.sh (CLI をスタブ)
 ├── claude/japanese-reply.bats     # unit tests for the Stop hook that makes Claude rewrite English replies
 ├── claude/writing-retro{,-auto}.bats # unit tests for the writing-retro skill's retro.sh / auto.sh
 ├── claude/review-insights.bats    # unit tests for the review-insights skill's stack.sh / daily.sh
@@ -756,7 +757,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
   `japanese-reply.py`, `herdr-agent-state.sh`, `cbm-*` from codebase-memory-mcp) and `scripts/`
   (`merge-{local,worktree}-permissions.py`, run by the Stop / WorktreeRemove hooks). Only the
   **self-authored** skills are tracked as files (`my-voice`, `optimize-prompt`, `pr-screenshot`,
-  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`; plus the `md-diff-preview` mod under `skills/`). If you add a hook or script referenced from `settings.json`, add it to
+  `github-attach`, `codebase-memory`, `learning-code`, `ubiquitous-language`, `dev-server`, `explain-before-shorten`, `takt-order`, `hello-search`, `hello-manual-test`, `hello-issue`, `writing-retro`, `review-insights`, `pr-followup`, `report-my-channel`, `mutation-check`, `comment-check`, `multi-review`; plus the `md-diff-preview` mod under `skills/`). If you add a hook or script referenced from `settings.json`, add it to
   `home/dot_claude/` too — `apply.bats` asserts every name mentioned in `settings.json` is actually
   deployed. The global instructions are for **any** project, so keep employer/project-specific rules
   out of them — this repo is PUBLIC and `apply.bats` greps them for leaked proper nouns.
@@ -804,6 +805,25 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply KokiKono
     足し方も kb の `checks/README.md` にある
   - `scripts/added_comments.py` が足したコメントを抜き出し、0 件なら subagent を起動しない。構文解析はせず、
     拾いすぎる側に倒している（subagent が読む行が増えるだけなので）。`tests/claude/comment-check.bats` が見る
+- **`home/dot_claude/skills/multi-review/`** は、claude・gemini・grok の CLI に同じ差分を並列でレビューさせ、
+  `claude -p` で 1 つのレポートにまとめるスキル（ターミナルからは alias の `multi-review`）。本体は
+  `scripts/multi-review.sh` 1 本で、スキルはそれを呼んで結果を伝えるだけ。知っておくこと:
+  - **軽さを優先して、レビュアーは 1 周だけ。** 議論させたり互いの指摘を検証させたりはせず、まとめ役も指摘を
+    足し削りしない。1 モデルだけの指摘の当否は、スキルを呼んだセッションがコードを読んで確かめる
+  - レビュアーにはファイルを読ませるが書かせない。claude と grok は `--tools Read,Grep,Glob` で使えるツールそのものを
+    絞る（`--allowedTools` は確認を省くだけで絞らない。grok は `~/.claude/settings.json` の allow も読むので、絞らないと
+    `git commit` などが通る）。claude は `--strict-mcp-config` で MCP も外す。gemini は Antigravity CLI（`agy`、
+    Brewfile の `antigravity-cli`）で、`--settings` で `read_file` と読むだけのコマンドを許す。headless の agy は
+    許していないツールを自動で拒否し、拒否すると何も出力せずに終わる。agy は stdin を読まないので、プロンプトは
+    引数で渡す。まとめ役の claude はツールを持たない
+  - 未追跡のファイルは `--untracked` のときだけ送る（消し忘れのメモや秘密情報を 3 社に送らないため）
+  - 上限（`--timeout`）を超えたレビュアーは perl でプロセスグループごと止める（CLI が抱える子プロセスまで残さないため）。
+    まとめ役にも同じ上限をかける。スクリプト自体が止められたとき（`run_in_background` の停止など）も、trap で各レビュアーを止める
+  - 1 つが落ちても止めず、状態（ok / failed / skipped）をまとめ役に渡してレポートの表に出す。CLI が無いものは
+    skipped。各 CLI のログインは手で済ませる
+  - 結果は `~/.cache/multi-review/<repo>-<時刻>/`（`MULTI_REVIEW_HOME` で変えられる）
+  - **macOS の bash 3.2 は、`$rc（` のように変数の直後に全角文字があると変数名の一部として読む。** 全角文字の
+    前の変数は `${rc}` と波括弧で囲むこと
 - **`home/dot_claude/skills/md-diff-preview/` はスキルではなく Claude Code の mod（hooks モジュールだけのプラグイン）。**
   Write / Edit で Markdown を変えたとき、会話欄の diff の代わりに、整形した本文に削除・追加の帯を付けた差分を描く。
   知っておくこと:
