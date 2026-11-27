@@ -27,6 +27,7 @@ alias prs='gh dash'
 ############
 alias claudecode="AWS_PROFILE=claude claude"
 alias cw='~/git_clone/github.com/progrit/work-log/scripts/claudework.sh'
+alias multi-review="~/.claude/skills/multi-review/scripts/multi-review.sh"
 
 ############
 # hello
